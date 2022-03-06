@@ -13,12 +13,12 @@ However, by using this software you take all responsibility for what happens to 
 
 Consult TerminalSavedOutput.txt for an example session from running this programme.
 
-Why use OCAML? It is appropriate because OCAML is a French language, but also it is about 90% smaller than a typicall equivalent in C++.
+Why use OCAML? It is appropriate because OCAML is a French language, but also it is about 90% smaller than a typical equivalent in C++.
 This initial demo is just 192 lines of code (plus standard libraries). Eventually we might want to migrate to AstroPi if there is sufficient interest.
 
 Prerequisites. I use opam to install necessary libraries. A sufficient but not necessary list of libraries is in prerequisites.txt
 
-How do you connect to Stellina? This programme runs on a workstation. If you have an AppleSilicon ML laptop or similar, Stellinapp can run natively because it is arm code. You will need to connect the Wifi to Stellina or an extender.
+How do you connect to Stellina? This programme runs on a workstation. If you have an AppleSilicon ML laptop or similar, Stellinapp can run natively because it is arm code. You will need to connect the Wifi to Stellina or an extender. I see no reason why it would not work on any machine with Wifi within range of the Stellina. In theory Legacy O/S like Windows should also work, but I do not have access to such machines.
 
 Compiling the program. A Makefile is provided the prerequisites should be installed first. opam will help with this.
 
