@@ -1,0 +1,8 @@
+#print_length 100000;;
+#print_depth 100000;;
+#directory "/Users/jonathan";;
+#directory "/Users/jonathan/.opam/default/lib/yojson";;
+
+open Client_example
+
+let body = get_status json
