@@ -16,7 +16,7 @@
       {contents = {pos = 0.; state = "IDLE"; stopped = false; calib = false}}};
    bootcnt = {contents = 369}; initerr = {contents = `Null};
    board_initerr = {contents = `Null}; debug = {contents = false};
-   ts = {contents = 1646591285228}; elap = {contents = 36326078};
+   ts = {contents = 1646591629163}; elap = {contents = 36670013};
    init = {contents = false}; shut = {contents = false};
    connlst =
     {contents =
@@ -24,12 +24,7 @@
          [("id",
            `String "iOS_Apple_iPad8_6_472AC2D5-B6DE-53DD-A563-BF202DF3203F");
           ("name", `String "Jonathan’s iMac");
-          ("user", `String "jonathan@kimmitt.co.uk")];
-       `Assoc
-         [("id",
-           `String
-             "iOS_Apple_iPhone10_4_D4D0075A-0590-4458-81DE-07E9FF3FF2AB");
-          ("name", `String "iPhone"); ("user", `String "jrrk2")]]};
+          ("user", `String "jonathan@kimmitt.co.uk")]]};
    master_str =
     {contents = "iOS_Apple_iPad8_6_472AC2D5-B6DE-53DD-A563-BF202DF3203F"};
    sett_lst =
@@ -48,15 +43,15 @@
       [("system",
         `Assoc [("size", `Int 1900368); ("available", `Int 1235924)]);
        ("data",
-        `Assoc [("size", `Int 11075340); ("available", `Int 9906064)]);
+        `Assoc [("size", `Int 11075340); ("available", `Int 9906056)]);
        ("usb",
         `Assoc
           [("size", `Int 120147264); ("available", `Int 112719552);
            ("changeCount", `Int 1)])]};
    sens_lst =
     {temp = {contents = 17.4}; tempd = {contents = 0.};
-     humid = {contents = 58.6}; humidd = {contents = 0.};
-     defog = {contents = "OFF"}; dewp = {contents = 8.1}};
+     humid = {contents = 58.5}; humidd = {contents = 0.};
+     defog = {contents = "OFF"}; dewp = {contents = 8.2}};
    crnt = {contents = `Null}; oth_crnt = {contents = []};
    prev_op_lst =
     {contents =
