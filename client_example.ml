@@ -3,7 +3,7 @@ open Cohttp
 open Cohttp_lwt_unix
 open Yojson
 
-let body =
+let body () =
   Client.get (Uri.of_string "http://10.0.0.1:8082/v1/app/status") >>= fun (resp, body) ->
   let code = resp |> Response.status |> Code.code_of_status in
   Printf.printf "Response code: %d\n" code;
@@ -35,7 +35,45 @@ defog: string ref;
 dewp: float ref;
 }
 
-type attr = { 
+type conn = {
+conid: string;
+nam: string;
+user: string;
+}
+
+type settings = {
+telname: string option ref;
+usbftypes: string list ref;
+}
+
+type update = {
+instver: string ref;
+minver: string ref;
+state: string ref;
+}
+
+type store = {
+size: int;
+avail: int;
+chng: int option;
+}
+
+type storage = {
+system: store ref;
+data: store ref;
+usb: store ref;
+}
+
+type op = 
+| Open
+| Park of (string * Yojson.Basic.t) list
+| AutoInit of (string * Yojson.Basic.t) list
+| Observation of (string * Yojson.Basic.t) list
+| SunMode
+| Plan of (string * Yojson.Basic.t) list
+| Storage
+
+type attr = {
 version: string ref;
 api_version: string ref;
 id: string ref;
@@ -48,20 +86,23 @@ ts : int ref;
 elap : int ref;
 init : bool ref;
 shut : bool ref;
-connlst : Yojson.Basic.t list ref;
-master_str : string ref;
-sett_lst : (string * Yojson.Basic.t) list ref;
+connlst : conn list ref;
+master_str : string option ref;
+sett_lst : settings;
 avail : int ref;
-update : (string * Yojson.Basic.t) list ref;
-storage : (string * Yojson.Basic.t) list ref;
+update : update;
+storage : storage;
 sens_lst : sens;
 crnt : Yojson.Basic.t ref;
 oth_crnt : Yojson.Basic.t list ref;
-prev_op_lst : (string * Yojson.Basic.t) list ref;
+prev_op_lst : op list ref;
 planner : (string * Yojson.Basic.t) list ref;
 numfiles : int ref;
 bufpos : int ref;
 bufsiz : int ref;
+lat: float ref;
+long: float ref;
+autofoctemp: float ref;
 }
 
 type status = { success: bool; attr: attr }
@@ -94,6 +135,7 @@ let motors (motor:motor) (arg:string*Yojson.Basic.t) = match arg with
 | _ -> failwith "motors"
 
 let oths = ref None
+let othc = ref None
 
 let sensors' sens = function
 | ("temperature", `Float t) -> sens.temp := t
@@ -108,6 +150,40 @@ let sensors' sens = function
 | ("dewpointDepression", `Float f) -> sens.dewp := f
 | oth -> oths := Some oth; failwith "sensors'"
 
+let connlst' conn = function
+| `Assoc
+      [("id", `String conid);
+       ("name", `String nam);
+       ("user", `String user)] -> conn := {conid; nam; user} :: !conn
+| oth -> othc := Some oth; failwith "connlst'"
+
+let settlst' sett = function
+| ("telescopeName", `Null) -> sett.telname := None
+| ("usbFileTypes", `List (uft:Yojson.Basic.t list)) -> List.iter (function `String str -> sett.usbftypes := str :: !(sett.usbftypes) | _ -> failwith "uft") uft
+| oth -> oths := Some oth; failwith "settlst'"
+
+let update' upd = function
+| ("installedVersion", `String v) -> upd.instver := v
+| ("minimumCompatibleVersion", `String v) -> upd.minver := v
+| ("state", `String v) -> upd.state := v
+| oth -> oths := Some oth; failwith "update'"
+
+let storage' stor = function
+| ("system", `Assoc [("size", `Int size); ("available", `Int avail)]) -> stor.system := {size; avail; chng=None}
+| ("data", `Assoc [("size", `Int size); ("available", `Int avail)]) -> stor.data := {size; avail; chng=None}
+| ("usb", `Assoc [("size", `Int size); ("available", `Int avail); ("changeCount", `Int chng)]) -> stor.usb := {size; avail; chng=Some chng}
+| oth -> oths := Some oth; failwith "storage'"
+
+let op' op = function
+| ("open", `Null) -> op := Open :: !op
+| ("park", `Assoc park) -> op := Park park :: !op
+| ("autoInit", `Assoc init) -> op := AutoInit init :: !op
+| ("observation", `Assoc obs) -> op := Observation obs :: !op
+| ("sunMode", `Null) -> op := SunMode :: !op
+| ("plan", `Assoc plan) -> op := Plan plan :: !op
+| ("storageAcquisition", `Null) -> op := Storage :: !op
+| oth -> oths := Some oth; failwith "op'"
+
 let rslt (attr:attr) (arg:string*Yojson.Basic.t) = match arg with
 |       ("apiVersion", `String str) -> attr.api_version := str
 |       ("version", `String ver) -> attr.version := ver
@@ -120,24 +196,29 @@ let rslt (attr:attr) (arg:string*Yojson.Basic.t) = match arg with
 |       ("elapsedTime", `Int elap) -> attr.elap := elap
 |       ("initialized", `Bool init) -> attr.init := init
 |       ("shuttingDown", `Bool shut) -> attr.shut := shut
-|       ("connectedDevices", `List connlst) -> attr.connlst := connlst
-|       ("masterDeviceId", `String master_str) -> attr.master_str := master_str
-|       ("settings", `Assoc sett_lst) -> attr.sett_lst := sett_lst
+|       ("connectedDevices", `List connlst) -> List.iter (connlst' attr.connlst) connlst
+|       ("masterDeviceId", `Null) -> attr.master_str := None
+|       ("masterDeviceId", `String master_str) -> attr.master_str := Some master_str
+|       ("settings", `Assoc sett_lst) -> List.iter (settlst' attr.sett_lst) sett_lst
 |       ("availableReports", `Int avail) -> attr.avail := avail
-|       ("update", `Assoc update) -> attr.update := update
-|       ("storage", `Assoc storage) -> attr.storage := storage
+|       ("update", `Assoc update) -> List.iter (update' attr.update) update
+|       ("storage", `Assoc storage) -> List.iter (storage' attr.storage) storage
 |       ("battery", `Assoc [("potentialBatteryCandidates", `List batt_lst)]) -> ()
 |       ("sensors", `Assoc sens_lst) -> List.iter (sensors' attr.sens_lst) sens_lst
 |       ("motors", `Assoc motor_lst) -> List.iter (motors attr.motors) motor_lst
 |       ("currentOperation", crnt) -> attr.crnt := crnt
 |       ("otherCurrentOperations", `List oth_crnt_ops) -> attr.oth_crnt := oth_crnt_ops
-|       ("previousOperations", `Assoc prev_op_lst) -> attr.prev_op_lst := prev_op_lst
+|       ("previousOperations", `Assoc prev_op_lst) -> List.iter (op' attr.prev_op_lst) prev_op_lst
 |       ("planner", `Assoc planner) -> attr.planner := planner
 |       ("logs", `Assoc
           [("numFiles", `Int fil); ("bufferPosition", `Int bufpos); ("bufferSize", `Int sz)]) -> attr.numfiles := fil; attr.bufpos := bufpos; attr.bufsiz := sz
+|       ("position", `Assoc [("latitude", `Float lat); ("longitude", `Float long)]) -> attr.lat := lat; attr.long := long
+|       ("autofocusTemperature", `Float autofoctemp) -> attr.autofoctemp := autofoctemp
 | oth -> othrslt := Some oth; failwith "rslt"
 
 let new_motor () = {pos=0.0;state=""; stopped=false; calib=false;}
+
+let new_stor () = ref {size=0; avail=0; chng=None}
 
 let new_attr () = {
 version=ref "";
@@ -152,11 +233,11 @@ elap = ref 0;
 init = ref false;
 shut = ref false;
 connlst = ref [];
-master_str = ref "";
-sett_lst = ref [];
+master_str = ref None;
+sett_lst = {telname=ref None; usbftypes=ref [];};
 avail = ref 0;
-update = ref [];
-storage = ref [];
+update = {instver=ref ""; minver = ref ""; state = ref ""};
+storage = {system=new_stor(); data=new_stor(); usb=new_stor()};
 sens_lst = {temp=ref 0.0; tempd=ref 0.0; humid=ref 0.0; humidd = ref 0.0; defog = ref ""; dewp = ref 0.0};
 crnt = ref `Null;
 oth_crnt = ref [];
@@ -165,7 +246,9 @@ planner = ref [];
 numfiles = ref 0;
 bufpos = ref 0;
 bufsiz = ref 0;
-
+lat = ref 0.0;
+long = ref 0.0;
+autofoctemp = ref 0.0;
 motors={
 az=ref (new_motor());
 alt=ref (new_motor());
@@ -185,8 +268,8 @@ let (get_status:Yojson.Basic.t -> status) = function
 | _ -> failwith "bodyref"
 ;;
 
-let json =
-  let body = Lwt_main.run body in
+let json () =
+  let body = Lwt_main.run (body()) in
   let json = Yojson.Basic.from_string body in
   json
 

@@ -5,4 +5,5 @@
 
 open Client_example
 
-let body = get_status json
+let json = json ();;
+let body = get_status json;;
