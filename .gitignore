@@ -1,3 +1,4 @@
-client_example.cmi
-client_example.cmo
-client_example.top
+*.cmi
+*.cmo
+*.top
+*.json

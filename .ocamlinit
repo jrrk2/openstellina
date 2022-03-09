@@ -3,7 +3,42 @@
 #directory "/Users/jonathan";;
 #directory "/Users/jonathan/.opam/default/lib/yojson";;
 
-open Client_example
+open Replay_session
+open Filtered
 
-let json = json ();;
-let body = get_status json;;
+let autoinit = try int_of_string (Sys.getenv "AUTO_INIT") > 0 with err -> false;;
+let park = try int_of_string (Sys.getenv "PARK") > 0 with err -> false;;
+(* check lat/long and default to Greenwich Royal Observatory *)
+let latitude = try float_of_string (Sys.getenv "LATITUDE") with err -> 51.4777777777777814;;
+let longitude = try float_of_string (Sys.getenv "LONGITUDE") with err -> 0.00138888888888888894;;
+let time_ms = string_of_int (int_of_float (Unix.time() *. 1000.0));;
+let initstr = "{\"latitude\":"^string_of_float(latitude)^",\"longitude\":"^string_of_float(longitude)^",\"time\":"^time_ms^"}";;
+
+let _ = print_endline initstr;;
+
+let ix_park = ref (-1);;
+let _ = List.iteri (fun ix (itm:Request.req) -> match !(itm.uri) with "/v1/general/park" -> ix_park := ix | _ -> ()) filtered;;
+
+let x0 = json3' (List.nth filtered 0);;
+
+let sid,ping_int,ping_tim = match x0 with
+    | `Assoc
+    [("sid", `String sid);
+     ("upgrades", `List [`String "websocket"]); ("pingInterval", `Int ping_int);
+     ("pingTimeout", `Int ping_tim)] -> sid,ping_int,ping_tim
+    | oth -> othsock := Some oth; failwith "json3'";;
+
+let x2 = json4' (List.nth filtered 2) sid;;
+let x3 = json5' (List.nth filtered 3) sid ["id";"name";"EIO";"transport"] "{}";;
+let x4 = json5' (List.nth filtered 4) sid ["id";"name";"EIO";"transport";"t"] "{}";;
+let x7 = json5' (List.nth filtered 7) sid ["id";"name";"EIO";"transport";"t"] "{}";;
+let x10 = json5' (List.nth filtered 10) sid ["id";"name";"EIO";"transport";"t"] "{}";;
+let x12 = json5' (List.nth filtered 12) sid [] "{}";;
+let x14 = json5' (List.nth filtered 14) sid [] "{}";;
+let x16 = json5' (List.nth filtered 16) sid [] "{}";;
+let x16 = json5' (List.nth filtered 18) sid [] "{}";;
+let x20 = json5' (List.nth filtered 20) sid [] "{}";;
+
+let x22 = if autoinit then (json5' (List.nth filtered 22) sid [] initstr) else "";;
+let xpark = if park then (json5' (List.nth filtered !ix_park) sid [] "{}") else "";;
+
