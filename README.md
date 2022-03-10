@@ -11,7 +11,8 @@ This software uses http:// protocol, it should not damage your telescope which i
 However, by using this software you take all responsibility for what happens to your expensive instrument.
 
 Why use OCAML? It is appropriate because OCAML is a French language, but also it is about 90% smaller than a typical equivalent in C++.
-This initial demo is just 192 lines of code (plus standard libraries). Eventually we might want to migrate to AstroPi if there is sufficient interest.
+This initial demo is less than 600 lines of code (plus standard libraries, and the array of captured packets).
+Eventually we might want to migrate to AstroPi if there is sufficient interest.
 
 Prerequisites. I use opam to install necessary libraries. A sufficient but not necessary list of libraries is in prerequisites.txt
 
@@ -21,37 +22,39 @@ Compiling the program. A Makefile is provided, the prerequisites should be insta
 
 Why am I doing this? Because I can, because I like to learn new things, and there are an awful lot of cloudy nights round here.
 
-This programme is pre-alpha, designed to explore the available API, rather than to be used by end users.
+This programme is pre-alpha, designed to document-by-example the available API, rather than to be used by typical end users.
 
-make status -> connects to the Stellina and reads its status
+    make status -> connects to the Stellina and reads its status
 
-make openarm -> connects to the Stellina and opens the arm (for maintenance).
+    make expert -> connects to the Stellina and dumps a number of expert FITs (typically darks taken with the arm closed)
 
-make init -> connects to the Stellina and runs a full auto-init.
+    make openarm -> connects to the Stellina and opens the arm (for maintenance).
 
-make observe -> connects to the successfully initialised Stellina and begins an observation
+    make init -> connects to the Stellina and runs a full auto-init.
 
-make stopobs -> stops the previously started observation
+    make observe -> connects to the successfully initialised Stellina and begins an observation
 
-make park -> connects to the Stellina and parks the arm.
+    make stopobs -> stops the previously started observation
 
-make sleep -> connects to the Stellina and prepares for power off.
+    make park -> connects to the Stellina and parks the arm.
+
+    make sleep -> connects to the Stellina and prepares for power off.
 
 More targets will be added later, I expect this script will be soon superseded by something more user-friendly.
 
-After a target has been run, debug variables may be examined, or exoit the program with end-of-file (typically ctrl-D), or exit(0);;
+After a target has been run, debug variables may be examined, or exit the program with end-of-file (typically ctrl-D), or exit(0);;
 
 environment variables:
 
-LATITUDE (a floating point number) defaults to Greenwich (51.4777777777777814)
-LONGITUDE (a floating point number) defaults to Greenwich (0.00138888888888888894)
+    LATITUDE (a floating point number) defaults to Greenwich (51.4777777777777814)
+    LONGITUDE (a floating point number) defaults to Greenwich (0.00138888888888888894)
 
 The method of setting the environment will differ according to O/S. For example under OSX, if you live in Cambridge
 
-export LATITUDE=52.24510437175544
-export LONGITUDE=0.07952878556283442
+    export LATITUDE=52.24510437175544
+    export LONGITUDE=0.07952878556283442
 
 Internally the Makefile will set these environment variables to control the script:
 
-AUTO_INIT (an integer) > 0 to initiate automatic initialisation
-PARK (an integer) > 0 to retract the arm
+    AUTO_INIT (an integer) > 0 to initiate automatic initialisation
+    PARK (an integer) > 0 to retract the arm
