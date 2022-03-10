@@ -25,9 +25,17 @@ This programme is pre-alpha, designed to explore the available API, rather than 
 
 make status -> connects to the Stellina and reads its status
 
-make park -> connects to the Stellina and parks the arm.
+make openarm -> connects to the Stellina and opens the arm (for maintenance).
 
 make init -> connects to the Stellina and runs a full auto-init.
+
+make observe -> connects to the successfully initialised Stellina and begins an observation
+
+make stopobs -> stops the previously started observation
+
+make park -> connects to the Stellina and parks the arm.
+
+make sleep -> connects to the Stellina and prepares for power off.
 
 More targets will be added later, I expect this script will be soon superseded by something more user-friendly.
 

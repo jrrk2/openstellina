@@ -9,7 +9,7 @@ let options txt (headers:Cohttp.Header.t) =
   Printf.printf "Body of length: %d\n" (String.length body);
   body
 
-let body txt =
+let get' txt =
   Cohttp_lwt_unix.Client.call `GET (Uri.of_string ("http://10.0.0.1:8082/v1/"^txt)) >>= fun (resp, body) ->
   let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
   Printf.printf "Response code: %d\n" code;
@@ -27,8 +27,8 @@ let body2 kind txt headers body =
   Printf.printf "Body of length: %d\n" (String.length body);
   body
 
-let post txt =
-  Cohttp_lwt_unix.Client.call `POST (Uri.of_string ("http://10.0.0.1:8082/v1/"^txt)) >>= fun (resp, body) ->
+let post txt (headers:Cohttp.Header.t) =
+  Cohttp_lwt_unix.Client.call `POST (Uri.of_string ("http://10.0.0.1:8082/v1/"^txt)) ?chunked:(Some false) ?headers:(Some headers) >>= fun (resp, body) ->
   let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
   Printf.printf "Response code: %d\n" code;
   Printf.printf "Headers: %s\n" (resp |> Cohttp_lwt_unix.Response.headers |> Cohttp.Header.to_string);
@@ -293,13 +293,9 @@ let (get_status:Yojson.Basic.t -> status) = function
 ;;
 
 let json () =
-  let body = Lwt_main.run (body "app/status") in
+  let body = Lwt_main.run (get' "app/status") in
   let json = Yojson.Basic.from_string body in
   json
-
-let json2 () =
-  let body = Lwt_main.run (post "/logs/consume{}") in
-  body
 
 let headlst'' = Cohttp.Header.of_list ([
     ("Origin", "http://localhost:8080");
@@ -313,12 +309,19 @@ let headlst'' = Cohttp.Header.of_list ([
     ("Accept-Encoding", "gzip, deflate");
     ])
 
-let opt () =
-(*
-  let headlst = Cohttp.Header.init () in
-  let headlst' = Cohttp.Header.add headlst "" "" in
-*)
-  let body = Lwt_main.run (options "/logs/consume" headlst'') in
+let open_arm () =
+  let body = Lwt_main.run (options "/general/openForMaintenance" headlst'') in
+  let body' = Lwt_main.run (post "/general/openForMaintenance" headlst'') in
+  body
+
+let stop_obs () =
+  let body = Lwt_main.run (options "/general/stopObservation" headlst'') in
+  let body' = Lwt_main.run (post "/general/stopObservation" headlst'') in
+  body
+
+let request_shutdown () =
+  let body = Lwt_main.run (options "/board/requestShutdown" headlst'') in
+  let body = Lwt_main.run (post "/board/requestShutdown" headlst'') in
   body
 
 let othsock = ref None
@@ -423,7 +426,7 @@ let filt4' x = List.rev (List.filter (fun (a,b) -> let used = match a with
 | "Connection" -> true
 | "Origin" -> true
 | "Host" -> true
-| "Content-Length" -> true
+| "Content-Length" -> false
 | "Content-Type" -> true
 | _ -> failwith a in
 (*

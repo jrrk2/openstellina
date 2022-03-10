@@ -6,18 +6,55 @@
 open Replay_session
 open Filtered
 
+let ra = 148.95;;
+let de = 69.683;;
+let rot = 0;;
+let objectId = "\"M82\"";;
+let objectName = "\"Cigar Galaxy\"";;
+let gain = 200;;
+let exposureSec = 10.0;;
+let doStacking = true;;
+let histogramEnabled = true;;
+let histogramLow = -0.75;;
+let histogramMedium=5;;
+let histogramHigh=0;;
+let backgroundEnabled=true;;
+let backgroundPolyorder=4;;
+
 let autoinit = try int_of_string (Sys.getenv "AUTO_INIT") > 0 with err -> false;;
+let openarm = try int_of_string (Sys.getenv "OPEN_ARM") > 0 with err -> false;;
+let observe = try int_of_string (Sys.getenv "OBSERVE") > 0 with err -> false;;
+let stopobs = try int_of_string (Sys.getenv "STOP_OBSERVATION") > 0 with err -> false;;
 let park = try int_of_string (Sys.getenv "PARK") > 0 with err -> false;;
+let shut_down = try int_of_string (Sys.getenv "SHUT_DOWN") > 0 with err -> false;;
 (* check lat/long and default to Greenwich Royal Observatory *)
 let latitude = try float_of_string (Sys.getenv "LATITUDE") with err -> 51.4777777777777814;;
 let longitude = try float_of_string (Sys.getenv "LONGITUDE") with err -> 0.00138888888888888894;;
 let time_ms = string_of_int (int_of_float (Unix.time() *. 1000.0));;
-let initstr = "{\"latitude\":"^string_of_float(latitude)^",\"longitude\":"^string_of_float(longitude)^",\"time\":"^time_ms^"}";;
+let init_str = "{\"latitude\":"^string_of_float(latitude)^",\"longitude\":"^string_of_float(longitude)^",\"time\":"^time_ms^"}";;
+let obs_str = "{\"ra\":"^string_of_float(ra)^
+    ",\"de\":"^string_of_float(de)^
+    ",\"rot\":"^string_of_int(rot)^
+    ",\"objectId\":"^(objectId)^
+    ",\"objectName\":"^(objectName)^
+    ",\"gain\":"^string_of_int(gain)^
+    ",\"exposureMicroSec\":"^string_of_int(int_of_float(exposureSec *. 1000000.))^
+    ",\"doStacking\":"^string_of_bool(doStacking)^
+    ",\"histogramEnabled\":"^string_of_bool(histogramEnabled)^
+    ",\"histogramLow\":"^string_of_float(histogramLow)^
+    ",\"histogramMedium\":"^string_of_int(histogramMedium)^
+    ",\"histogramHigh\":"^string_of_int(histogramHigh)^
+    ",\"backgroundEnabled\":"^string_of_bool(backgroundEnabled)^
+    ",\"backgroundPolyorder\":"^string_of_int(backgroundPolyorder)^
+"}";;
 
-let _ = print_endline initstr;;
+let _ = print_endline init_str;;
+let _ = print_endline obs_str;;
 
 let ix_park = ref (-1);;
 let _ = List.iteri (fun ix (itm:Request.req) -> match !(itm.uri) with "/v1/general/park" -> ix_park := ix | _ -> ()) filtered;;
+
+let filt_obs = List.filter (fun (itm:Request.req) -> match !(itm.uri) with "/v1/general/startObservation" -> true | _ -> false) filtered;;
 
 let x0 = json3' (List.nth filtered 0);;
 
@@ -28,7 +65,7 @@ let sid,ping_int,ping_tim = match x0 with
      ("pingTimeout", `Int ping_tim)] -> sid,ping_int,ping_tim
     | oth -> othsock := Some oth; failwith "json3'";;
 
-let x2 = json4' (List.nth filtered 2) sid;;
+let x2 = json5' (List.nth filtered 2) sid ["id";"name";"EIO";"transport";"t"] ("44:420[\"message\",\"setSystemTime\","^time_ms^"]");;
 let x3 = json5' (List.nth filtered 3) sid ["id";"name";"EIO";"transport"] "{}";;
 let x4 = json5' (List.nth filtered 4) sid ["id";"name";"EIO";"transport";"t"] "{}";;
 let x7 = json5' (List.nth filtered 7) sid ["id";"name";"EIO";"transport";"t"] "{}";;
@@ -36,9 +73,15 @@ let x10 = json5' (List.nth filtered 10) sid ["id";"name";"EIO";"transport";"t"] 
 let x12 = json5' (List.nth filtered 12) sid [] "{}";;
 let x14 = json5' (List.nth filtered 14) sid [] "{}";;
 let x16 = json5' (List.nth filtered 16) sid [] "{}";;
-let x16 = json5' (List.nth filtered 18) sid [] "{}";;
-let x20 = json5' (List.nth filtered 20) sid [] "{}";;
+let x18 = json5' (List.nth filtered 18) sid [] "{}";;
 
-let x22 = if autoinit then (json5' (List.nth filtered 22) sid [] initstr) else "";;
+let x20, x22 = if autoinit then (let a = (json5' (List.nth filtered 20) sid [] "{}") in (a, json5' (List.nth filtered 22) sid [] init_str)) else ("","");;
+let xopen = if openarm then (open_arm ()) else "";;
+let obs = List.nth filt_obs 1;;
+let _ = print_endline (List.hd !(obs.fil.unhandled));;
+obs.fil.unhandled := [obs_str];;
+let xobs = if observe then (let a = json5' (List.nth filt_obs 0) sid [] "{}" in (a, json5' obs sid [] "")) else ("","");;
+let xstop = if stopobs then (stop_obs ()) else "";;
 let xpark = if park then (json5' (List.nth filtered !ix_park) sid [] "{}") else "";;
+let xshut_down = if shut_down then (request_shutdown ()) else "";;
 
