@@ -21,6 +21,8 @@ let histogramHigh=0;;
 let backgroundEnabled=true;;
 let backgroundPolyorder=4;;
 
+let status = try int_of_string (Sys.getenv "STATUS") > 0 with err -> false;;
+let expert = try int_of_string (Sys.getenv "EXPERT_ACQUISITION") > 0 with err -> false;;
 let autoinit = try int_of_string (Sys.getenv "AUTO_INIT") > 0 with err -> false;;
 let openarm = try int_of_string (Sys.getenv "OPEN_ARM") > 0 with err -> false;;
 let observe = try int_of_string (Sys.getenv "OBSERVE") > 0 with err -> false;;
@@ -46,6 +48,17 @@ let obs_str = "{\"ra\":"^string_of_float(ra)^
     ",\"histogramHigh\":"^string_of_int(histogramHigh)^
     ",\"backgroundEnabled\":"^string_of_bool(backgroundEnabled)^
     ",\"backgroundPolyorder\":"^string_of_int(backgroundPolyorder)^
+"}";;
+
+let expert_path = "\"expert-mode/raw-images\"";;
+let expert_overwrite = true;;
+let expert_exposures = 100;;
+
+let expert_params = "{\"path\":"^(expert_path)^
+    ",\"overwrite\":"^string_of_bool(expert_overwrite)^
+    ",\"numExposures\":"^string_of_int(expert_exposures)^
+    ",\"gain\":"^string_of_int(gain)^
+    ",\"exposureMicroSec\":"^string_of_int(int_of_float(exposureSec *. 1000000.))^
 "}";;
 
 let _ = print_endline init_str;;
@@ -77,6 +90,8 @@ let x18 = json5' (List.nth filtered 18) sid [] "{}";;
 
 let x20, x22 = if autoinit then (let a = (json5' (List.nth filtered 20) sid [] "{}") in (a, json5' (List.nth filtered 22) sid [] init_str)) else ("","");;
 let xopen = if openarm then (open_arm ()) else "";;
+let xstatus = if status then (app_status ()) else `Null;;
+let xexpert = if expert then (expert_acquisition expert_params) else "";;
 let obs = List.nth filt_obs 1;;
 let _ = print_endline (List.hd !(obs.fil.unhandled));;
 obs.fil.unhandled := [obs_str];;

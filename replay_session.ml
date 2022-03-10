@@ -27,8 +27,8 @@ let body2 kind txt headers body =
   Printf.printf "Body of length: %d\n" (String.length body);
   body
 
-let post txt (headers:Cohttp.Header.t) =
-  Cohttp_lwt_unix.Client.call `POST (Uri.of_string ("http://10.0.0.1:8082/v1/"^txt)) ?chunked:(Some false) ?headers:(Some headers) >>= fun (resp, body) ->
+let post txt (headers:Cohttp.Header.t) body =
+  Cohttp_lwt_unix.Client.call `POST (Uri.of_string ("http://10.0.0.1:8082/v1/"^txt)) ?chunked:(Some false) ?headers:(Some headers) ?body:body >>= fun (resp, body) ->
   let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
   Printf.printf "Response code: %d\n" code;
   Printf.printf "Headers: %s\n" (resp |> Cohttp_lwt_unix.Response.headers |> Cohttp.Header.to_string);
@@ -292,18 +292,16 @@ let (get_status:Yojson.Basic.t -> status) = function
 | _ -> failwith "bodyref"
 ;;
 
-let json () =
+let app_status () =
   let body = Lwt_main.run (get' "app/status") in
   let json = Yojson.Basic.from_string body in
   json
 
 let headlst'' = Cohttp.Header.of_list ([
+    ("Content-Type", "application/json");
     ("Origin", "http://localhost:8080");
-    ("Access-Control-Request-Method", "POST");
-    ("Content-Length", "0");
-    ("Access-Control-Request-Headers", "content-type");
     ("Connection", "keep-alive");
-    ("Accept", "*/*");
+    ("Accept", "application/json, text/plain, */*");
     ("Referer", "http://localhost:8080/");
     ("Accept-Language", "en-GB,en;q=0.9");
     ("Accept-Encoding", "gzip, deflate");
@@ -311,17 +309,22 @@ let headlst'' = Cohttp.Header.of_list ([
 
 let open_arm () =
   let body = Lwt_main.run (options "/general/openForMaintenance" headlst'') in
-  let body' = Lwt_main.run (post "/general/openForMaintenance" headlst'') in
+  let body' = Lwt_main.run (post "/general/openForMaintenance" headlst'' None) in
   body
 
 let stop_obs () =
   let body = Lwt_main.run (options "/general/stopObservation" headlst'') in
-  let body' = Lwt_main.run (post "/general/stopObservation" headlst'') in
+  let body' = Lwt_main.run (post "/general/stopObservation" headlst'' None) in
   body
 
 let request_shutdown () =
   let body = Lwt_main.run (options "/board/requestShutdown" headlst'') in
-  let body = Lwt_main.run (post "/board/requestShutdown" headlst'') in
+  let body = Lwt_main.run (post "/board/requestShutdown" headlst'' None) in
+  body
+
+let expert_acquisition params =
+  let body = Lwt_main.run (options "/expertMode/startStorageAcquisition" headlst'') in
+  let body = Lwt_main.run (post "/expertMode/startStorageAcquisition" headlst'' (Some (`String params))) in
   body
 
 let othsock = ref None
@@ -354,6 +357,7 @@ let json4 sid =
   let body = Lwt_main.run (body2 `GET ("iOS_Apple_iPad8_6_472AC2D5-B6DE-53DD-A563-BF202DF3203F&name=Jonathan%E2%80%99s%20iMac&EIO=3&transport=websocket&sid="^sid) socklst'' None) in
   body
 
+(*
 let timlst'' = Cohttp.Header.of_list ([
     ("Content-Type", "text/plain;charset=UTF-8");
     ("Origin", "http://localhost:8080");
@@ -361,7 +365,6 @@ let timlst'' = Cohttp.Header.of_list ([
     ("Connection", "keep-alive");
     ("Accept", "*/*");
     ("Referer", "http://localhost:8080/");
-    ("Content-Length", "47");
     ("Accept-Language", "en-GB,en;q=0.9");
     ])
 
@@ -369,6 +372,7 @@ let json5 sid =
   let payload = Some (`String "44:420[\"message\",\"setSystemTime\",1646674164069]") in
   let body = Lwt_main.run (body2 `POST ("iOS_Apple_iPad8_6_472AC2D5-B6DE-53DD-A563-BF202DF3203F&name=Jonathan%E2%80%99s%20iMac&EIO=3&transport=polling&t=Nzb3bV5&sid="^sid) timlst'' payload) in
   body
+*)
 
 let headlst6 = Cohttp.Header.of_list ([
     ("Origin", "http://localhost:8080");
@@ -383,11 +387,13 @@ let json6 sid =
   let body = Lwt_main.run (body2 `GET ("iOS_Apple_iPad8_6_472AC2D5-B6DE-53DD-A563-BF202DF3203F&name=Jonathan%E2%80%99s%20iMac&EIO=3&transport=polling&t=Nzb3bWH&sid="^sid) headlst6 None) in
   body
 
+(*
 let json7 sid =
   let msg = "31:421[\"message\",\"GetStatus\",null]" in
   let payload = Some (`String msg) in
   let body = Lwt_main.run (body2 `POST ("iOS_Apple_iPad8_6_472AC2D5-B6DE-53DD-A563-BF202DF3203F&name=Jonathan%E2%80%99s%20iMac&EIO=3&transport=polling&t=Nzb3bV5&sid="^sid) timlst'' payload) in
   body
+*)
 
 let sess_len = List.length Filtered.filtered;;
 

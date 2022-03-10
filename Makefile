@@ -4,6 +4,9 @@ G = Request.mli filtered.ml replay_session.ml
 status: filtered.top
 	env STATUS=1 OCAMLRUNPARAM=b ./$<
 
+expert: filtered.top
+	env EXPERT_ACQUISITION=1 OCAMLRUNPARAM=b ./$<
+
 openarm: filtered.top
 	env OPEN_ARM=1 OCAMLRUNPARAM=b ./$<
 
