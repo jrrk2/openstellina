@@ -32,7 +32,7 @@ This programme is pre-alpha, designed to document-by-example the available API, 
 
     make init -> connects to the Stellina and runs a full auto-init.
 
-    make observe -> connects to the successfully initialised Stellina and begins an observation
+    make observe OBJECT=101 -> connects to the successfully initialised Stellina and begins an observation based on offline messier catalogue numbers
 
     make stopobs -> stops the previously started observation
 
@@ -58,3 +58,5 @@ Internally the Makefile will set these environment variables to control the scri
 
     AUTO_INIT (an integer) > 0 to initiate automatic initialisation
     PARK (an integer) > 0 to retract the arm
+
+THe Messier catalogue RA/DEC table came from a recent query of SIMBAD

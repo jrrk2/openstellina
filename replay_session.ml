@@ -1,3 +1,4 @@
+open Xml
 open Lwt
 
 let options txt (headers:Cohttp.Header.t) =
@@ -326,6 +327,76 @@ let expert_acquisition params =
   let body = Lwt_main.run (options "/expertMode/startStorageAcquisition" headlst'') in
   let body = Lwt_main.run (post "/expertMode/startStorageAcquisition" headlst'' (Some (`String params))) in
   body
+
+let messier' txt =
+  Cohttp_lwt_unix.Client.call `GET (Uri.of_string ("http://simbad.u-strasbg.fr/simbad/sim-id?output.format=VOTABLE&output.params=main_id,ra,dec&Ident="^txt)) ?chunked:(Some false) >>= fun (resp, body) ->
+  let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
+  Printf.printf "Response code: %d\n" code;
+  Printf.printf "Headers: %s\n" (resp |> Cohttp_lwt_unix.Response.headers |> Cohttp.Header.to_string);
+  body |> Cohttp_lwt.Body.to_string >|= fun body ->
+  Printf.printf "Body of length: %d\n" (String.length body);
+  body
+
+let messier params =
+  let body = Lwt_main.run (messier' params ) in
+  match Xml.parse_string body with
+    | Xml.Element
+   ("VOTABLE",
+    [("xmlns", "http://www.ivoa.net/xml/VOTable/v1.2");
+     ("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+     ("xsi:schemaLocation",
+      "http://www.ivoa.net/xml/VOTable/v1.2 http://www.ivoa.net/xml/VOTable/v1.2");
+     ("version", "1.2")],
+    [Xml.Element
+      ("DEFINITIONS", [],
+       [Xml.Element
+         ("COOSYS",
+          [("ID", "COOSYS"); ("equinox", "2000"); ("epoch", "J2000");
+           ("system", "ICRS")],
+          [])]);
+     Xml.Element
+      ("RESOURCE", [("name", "Simbad query"); ("type", "results")],
+       [Xml.Element
+         ("TABLE", [("ID", "simbad"); ("name", "simbad query")],
+          [Xml.Element
+            ("DESCRIPTION", [], [Xml.PCData "... query string ..."]);
+           Xml.Element
+            ("FIELD",
+             [("ID", "MAIN_ID"); ("name", "MAIN_ID"); ("datatype", "char");
+              ("width", "22"); ("ucd", "meta.id;meta.main");
+              ("arraysize", "*")],
+             [Xml.Element
+               ("DESCRIPTION", [],
+                [Xml.PCData "Main identifier for an object"]);
+              Xml.Element
+               ("LINK",
+                [("value", "${MAIN_ID}");
+                 ("href",
+                  "http://simbad.u-strasbg.fr/simbad/sim-id?Ident=${MAIN_ID}&amp;NbIdent=1")],
+                [])]);
+           Xml.Element
+            ("FIELD",
+             [("ID", "RA"); ("name", "RA"); ("datatype", "char");
+              ("precision", "8"); ("width", "13");
+              ("ucd", "pos.eq.ra;meta.main"); ("arraysize", "13");
+              ("unit", "&quot;h:m:s&quot;")],
+             [Xml.Element ("DESCRIPTION", [], [Xml.PCData "Right ascension"])]);
+           Xml.Element
+            ("FIELD",
+             [("ID", "DEC"); ("name", "DEC"); ("datatype", "char");
+              ("precision", "8"); ("width", "13");
+              ("ucd", "pos.eq.dec;meta.main"); ("arraysize", "13");
+              ("unit", "&quot;d:m:s&quot;")],
+             [Xml.Element ("DESCRIPTION", [], [Xml.PCData "Declination"])]);
+           Xml.Element
+            ("DATA", [],
+             [Xml.Element
+               ("TABLEDATA", [],
+                [Xml.Element
+                  ("TR", [],
+                   [Xml.Element ("TD", [], [Xml.PCData ident]);
+                    Xml.Element ("TD", [], [Xml.PCData ra]);
+                    Xml.Element ("TD", [], [Xml.PCData dec])])])])])])]) -> ident,ra,dec
 
 let othsock = ref None
 
