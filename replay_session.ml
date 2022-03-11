@@ -313,6 +313,11 @@ let open_arm () =
   let body' = Lwt_main.run (post "/general/openForMaintenance" headlst'' None) in
   body
 
+let refocus () =
+  let body = Lwt_main.run (options "/general/adjustObservationFocus" headlst'') in
+  let body' = Lwt_main.run (post "/general/adjustObservationFocus" headlst'' None) in
+  body
+
 let stop_obs () =
   let body = Lwt_main.run (options "/general/stopObservation" headlst'') in
   let body' = Lwt_main.run (post "/general/stopObservation" headlst'' None) in
@@ -328,7 +333,25 @@ let expert_acquisition params =
   let body = Lwt_main.run (post "/expertMode/startStorageAcquisition" headlst'' (Some (`String params))) in
   body
 
-let messier' txt =
+(*
+
+*)
+
+
+let horizons' txt =
+  Cohttp_lwt_unix.Client.call `GET (Uri.of_string ("https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND='499'&OBJ_DATA='YES'&MAKE_EPHEM='YES'&EPHEM_TYPE='OBSERVER'&CENTER='500@399'&START_TIME='2006-01-01'&STOP_TIME='2006-01-20'&STEP_SIZE='1%20d'&QUANTITIES='1,9,20,23,24,29'")) ?chunked:(Some false) >>= fun (resp, body) ->
+  let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
+  Printf.printf "Response code: %d\n" code;
+  Printf.printf "Headers: %s\n" (resp |> Cohttp_lwt_unix.Response.headers |> Cohttp.Header.to_string);
+  body |> Cohttp_lwt.Body.to_string >|= fun body ->
+  Printf.printf "Body of length: %d\n" (String.length body);
+  body
+
+let horizons params =
+  let body = Lwt_main.run (horizons' params ) in
+  body
+
+let simbad' txt =
   Cohttp_lwt_unix.Client.call `GET (Uri.of_string ("http://simbad.u-strasbg.fr/simbad/sim-id?output.format=VOTABLE&output.params=main_id,ra,dec&Ident="^txt)) ?chunked:(Some false) >>= fun (resp, body) ->
   let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
   Printf.printf "Response code: %d\n" code;
@@ -337,8 +360,10 @@ let messier' txt =
   Printf.printf "Body of length: %d\n" (String.length body);
   body
 
-let messier params =
-  let body = Lwt_main.run (messier' params ) in
+let othxml = ref None
+
+let simbad params =
+  let body = Lwt_main.run (simbad' params ) in
   match Xml.parse_string body with
     | Xml.Element
    ("VOTABLE",
@@ -397,6 +422,7 @@ let messier params =
                    [Xml.Element ("TD", [], [Xml.PCData ident]);
                     Xml.Element ("TD", [], [Xml.PCData ra]);
                     Xml.Element ("TD", [], [Xml.PCData dec])])])])])])]) -> ident,ra,dec
+| oth -> othxml := Some oth; failwith "simbad XML error"
 
 let othsock = ref None
 

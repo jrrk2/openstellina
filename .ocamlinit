@@ -7,11 +7,16 @@
 open Replay_session
 open Filtered
 
+(*
+let eph = horizons();;
+*)
+
 let status = try int_of_string (Sys.getenv "STATUS") > 0 with err -> false;;
 let expert = try int_of_string (Sys.getenv "EXPERT_ACQUISITION") > 0 with err -> false;;
 let autoinit = try int_of_string (Sys.getenv "AUTO_INIT") > 0 with err -> false;;
 let openarm = try int_of_string (Sys.getenv "OPEN_ARM") > 0 with err -> false;;
 let observe = try int_of_string (Sys.getenv "OBSERVE") with err -> 0;;
+let refocus = try int_of_string (Sys.getenv "REFOCUS") > 0 with err -> false;;
 let stopobs = try int_of_string (Sys.getenv "STOP_OBSERVATION") > 0 with err -> false;;
 let park = try int_of_string (Sys.getenv "PARK") > 0 with err -> false;;
 let shut_down = try int_of_string (Sys.getenv "SHUT_DOWN") > 0 with err -> false;;
@@ -40,6 +45,8 @@ let _ = List.iteri (fun ix (itm:Request.req) -> match !(itm.uri) with "/v1/gener
 
 let filt_obs = List.filter (fun (itm:Request.req) -> match !(itm.uri) with "/v1/general/startObservation" -> true | _ -> false) filtered;;
 
+let filt_focus = List.filter (fun (itm:Request.req) -> match !(itm.uri) with "/v1/general/adjustObservationFocus" -> true | _ -> false) filtered;;
+
 let x0 = json3' (List.nth filtered 0);;
 
 let sid,ping_int,ping_tim = match x0 with
@@ -60,6 +67,7 @@ let x16 = json5' (List.nth filtered 16) sid [] "{}";;
 let x18 = json5' (List.nth filtered 18) sid [] "{}";;
 
 let x20, x22 = if autoinit then (let a = (json5' (List.nth filtered 20) sid [] "{}") in (a, json5' (List.nth filtered 22) sid [] init_str)) else ("","");;
+let xfocus = if refocus then (let a = (json5' (List.nth filt_focus 0) sid [] "{}") in (a, json5' (List.nth filt_focus 1) sid [] init_str)) else ("","");;
 let xopen = if openarm then (open_arm ()) else "";;
 let xstatus = if status then (app_status ()) else `Null;;
 let xexpert = if expert then (expert_acquisition expert_params) else "";;
@@ -114,5 +122,5 @@ let xpark = if park then (json5' (List.nth filtered !ix_park) sid [] "{}") else 
 let xshut_down = if shut_down then (request_shutdown ()) else "";;
 
 (*
-let mess_ra_dec = Array.init 110 (fun ix -> messier ("M"^string_of_int (ix+1)));;
+let mess_ra_dec = Array.init 110 (fun ix -> simbad ("M"^string_of_int (ix+1)));;
 *)

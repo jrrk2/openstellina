@@ -17,6 +17,9 @@ init: filtered.top
 observe: filtered.top
 	env OBSERVE=$(OBJECT) OCAMLRUNPARAM=b ./$<
 
+refocus: filtered.top
+	env REFOCUS=1 OCAMLRUNPARAM=b ./$<
+
 stopobs: filtered.top
 	env STOP_OBSERVATION=1 OCAMLRUNPARAM=b ./$<
 
