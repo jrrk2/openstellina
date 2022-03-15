@@ -1,4 +1,7 @@
 OBJECT ?= 0
+CATALOGUE ?= Uranus
+RAHMS ?= "02 37 49.04"
+DECDMS ?= "+15 00 33.5"
 F = Request.mli stellinapp_session_full.ml cnv_session.ml
 G = Request.mli filtered.ml replay_session.ml messier_catalogue.ml
 
@@ -16,6 +19,9 @@ init: filtered.top
 
 observe: filtered.top
 	env OBSERVE=$(OBJECT) OCAMLRUNPARAM=b ./$<
+
+custom: filtered.top
+	env OBSERVE="-1" CATALOGUE="$(CATALOGUE)" RAHMS=$(RAHMS) DECDMS=$(DECDMS) OCAMLRUNPARAM=b ./$<
 
 refocus: filtered.top
 	env REFOCUS=1 OCAMLRUNPARAM=b ./$<

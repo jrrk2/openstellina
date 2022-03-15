@@ -7,6 +7,7 @@
 open Replay_session
 open Filtered
 
+
 (*
 let eph = horizons();;
 *)
@@ -24,18 +25,21 @@ let shut_down = try int_of_string (Sys.getenv "SHUT_DOWN") > 0 with err -> false
 let latitude = try float_of_string (Sys.getenv "LATITUDE") with err -> 51.4777777777777814;;
 let longitude = try float_of_string (Sys.getenv "LONGITUDE") with err -> 0.00138888888888888894;;
 let time_ms = string_of_int (int_of_float (Unix.time() *. 1000.0));;
+(List.nth filtered 2).fil.unhandled := ["44:420[\"message\",\"setSystemTime\","^time_ms^"]"];;
 let init_str = "{\"latitude\":"^string_of_float(latitude)^",\"longitude\":"^string_of_float(longitude)^",\"time\":"^time_ms^"}";;
 
 let expert_path = "\"expert-mode/raw-images\"";;
+let expert_flipped = "\"both\"";;
 let expert_overwrite = true;;
 let expert_exposures = 100;;
 let expert_gain = 200;;
-let expert_exposureSec = 10.0;;
+let expert_exposureSec = 30.0;;
 let expert_params = "{\"path\":"^(expert_path)^
     ",\"overwrite\":"^string_of_bool(expert_overwrite)^
     ",\"numExposures\":"^string_of_int(expert_exposures)^
     ",\"gain\":"^string_of_int(expert_gain)^
     ",\"exposureMicroSec\":"^string_of_int(int_of_float(expert_exposureSec *. 1000000.))^
+    ",\"flipped\":"^(expert_flipped)^
 "}";;
 
 let _ = print_endline init_str;;
@@ -75,8 +79,7 @@ let xexpert = if expert then (expert_acquisition expert_params) else "";;
 let cnv_ra fmt = Scanf.sscanf fmt "%f %f %f" (fun a b c -> a *. 15.0 +. b /. 4.0 +. c /. 240.0)
 let cnv_dec fmt = try Scanf.sscanf fmt "%f %f %f" (fun a b c -> a +. b /. 60.0 +. c /. 3600.0) with err -> Scanf.sscanf fmt "%f %f" (fun a b -> a +. b /. 60.0)
 
-let find_messier_obj observe =
-    let cat,rahms,decdms = Messier_catalogue.messier_array.(observe-1) in
+let find_obj cat rahms decdms =
     print_endline ("**** Fetching object "^cat^" at RA:"^rahms^", DEC:"^decdms^" ****");
     let ra = cnv_ra rahms in
     let de = cnv_dec decdms in
@@ -84,7 +87,7 @@ let find_messier_obj observe =
     let objectId = "\""^cat^"\"" in
     let objectName = "\""^cat^"\"" in
     let gain = 200 in
-    let exposureSec = 10.0 in
+    let exposureSec = 30.0 in
     let doStacking = true in
     let histogramEnabled = true in
     let histogramLow = -0.75 in
@@ -108,9 +111,20 @@ let find_messier_obj observe =
         ",\"backgroundPolyorder\":"^string_of_int(backgroundPolyorder)^
     "}";;
 
-let xobs = if observe > 0 then
+let find_messier_obj observe =
+    let cat,rahms,decdms = Messier_catalogue.messier_array.(observe-1) in
+    find_obj cat rahms decdms
+
+let find_custom_obj () = try
+    let cat = Sys.getenv "CATALOGUE" in
+    let rahms = Sys.getenv "RAHMS" in
+    let decdms = Sys.getenv "DECDMS" in
+    find_obj cat rahms decdms
+    with err -> "custom object error"
+
+let xobs = if observe <> 0 then
     begin
-    let obs_str = find_messier_obj observe in
+    let obs_str = if observe > 0 then find_messier_obj observe else find_custom_obj () in
     let _ = print_endline obs_str in
     let obs = List.nth filt_obs 1 in
     obs.fil.unhandled := [obs_str];
