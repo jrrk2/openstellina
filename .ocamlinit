@@ -19,6 +19,7 @@ let openarm = try int_of_string (Sys.getenv "OPEN_ARM") > 0 with err -> false;;
 let observe = try int_of_string (Sys.getenv "OBSERVE") with err -> 0;;
 let refocus = try int_of_string (Sys.getenv "REFOCUS") > 0 with err -> false;;
 let stopobs = try int_of_string (Sys.getenv "STOP_OBSERVATION") > 0 with err -> false;;
+let stopexpert = try int_of_string (Sys.getenv "STOP_EXPERT") > 0 with err -> false;;
 let park = try int_of_string (Sys.getenv "PARK") > 0 with err -> false;;
 let shut_down = try int_of_string (Sys.getenv "SHUT_DOWN") > 0 with err -> false;;
 (* check lat/long and default to Greenwich Royal Observatory *)
@@ -29,17 +30,17 @@ let time_ms = string_of_int (int_of_float (Unix.time() *. 1000.0));;
 let init_str = "{\"latitude\":"^string_of_float(latitude)^",\"longitude\":"^string_of_float(longitude)^",\"time\":"^time_ms^"}";;
 
 let expert_path = "\"expert-mode/raw-images\"";;
-let expert_flipped = "\"both\"";;
+let expert_flip = "\"BOTH\"";;
 let expert_overwrite = true;;
 let expert_exposures = 100;;
 let expert_gain = 200;;
-let expert_exposureSec = 30.0;;
+let expert_exposureSec = 60.0;;
 let expert_params = "{\"path\":"^(expert_path)^
     ",\"overwrite\":"^string_of_bool(expert_overwrite)^
     ",\"numExposures\":"^string_of_int(expert_exposures)^
     ",\"gain\":"^string_of_int(expert_gain)^
     ",\"exposureMicroSec\":"^string_of_int(int_of_float(expert_exposureSec *. 1000000.))^
-    ",\"flipped\":"^(expert_flipped)^
+    ",\"flip\":"^(expert_flip)^
 "}";;
 
 let _ = print_endline init_str;;
@@ -87,7 +88,7 @@ let find_obj cat rahms decdms =
     let objectId = "\""^cat^"\"" in
     let objectName = "\""^cat^"\"" in
     let gain = 200 in
-    let exposureSec = 30.0 in
+    let exposureSec = try float_of_string (Sys.getenv "EXPOSURE") with err -> 30.0 in
     let doStacking = true in
     let histogramEnabled = true in
     let histogramLow = -0.75 in
@@ -132,6 +133,7 @@ let xobs = if observe <> 0 then
     (a, json5' obs sid [] "")
     end else ("","")
 let xstop = if stopobs then (stop_obs ()) else "";;
+let xstopexpert = if stopexpert then (stop_expert ()) else "";;
 let xpark = if park then (json5' (List.nth filtered !ix_park) sid [] "{}") else "";;
 let xshut_down = if shut_down then (request_shutdown ()) else "";;
 

@@ -323,6 +323,11 @@ let stop_obs () =
   let body' = Lwt_main.run (post "/general/stopObservation" headlst'' None) in
   body
 
+let stop_expert () =
+  let body = Lwt_main.run (options "/expertMode/stopStorageAcquisition" headlst'') in
+  let body' = Lwt_main.run (post "/expertMode/stopStorageAcquisition" headlst'' None) in
+  body
+
 let request_shutdown () =
   let body = Lwt_main.run (options "/board/requestShutdown" headlst'') in
   let body = Lwt_main.run (post "/board/requestShutdown" headlst'' None) in
