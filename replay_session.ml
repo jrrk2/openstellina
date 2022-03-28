@@ -1,17 +1,9 @@
 open Xml
 open Lwt
+open Filtered
 
 let options txt (headers:Cohttp.Header.t) =
-  Cohttp_lwt_unix.Client.call `OPTIONS (Uri.of_string ("http://10.0.0.1:8082/v1/"^txt)) ?chunked:(Some false) ?headers:(Some headers) >>= fun (resp, body) ->
-  let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
-  Printf.printf "Response code: %d\n" code;
-  Printf.printf "Headers: %s\n" (resp |> Cohttp_lwt_unix.Response.headers |> Cohttp.Header.to_string);
-  body |> Cohttp_lwt.Body.to_string >|= fun body ->
-  Printf.printf "Body of length: %d\n" (String.length body);
-  body
-
-let get' txt =
-  Cohttp_lwt_unix.Client.call `GET (Uri.of_string ("http://10.0.0.1:8082/v1/"^txt)) >>= fun (resp, body) ->
+  Cohttp_lwt_unix.Client.call `OPTIONS (Uri.of_string ("http://"^ipaddr^":8082/v1/"^txt)) ?chunked:(Some false) ?headers:(Some headers) >>= fun (resp, body) ->
   let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
   Printf.printf "Response code: %d\n" code;
   Printf.printf "Headers: %s\n" (resp |> Cohttp_lwt_unix.Response.headers |> Cohttp.Header.to_string);
@@ -20,7 +12,7 @@ let get' txt =
   body
 
 let body2 kind txt headers body =
-  Cohttp_lwt_unix.Client.call kind (Uri.of_string ("http://10.0.0.1:8083/socket.io/?id="^txt)) ?chunked:(Some false) ?headers:(Some headers) ?body:body >>= fun (resp, body) ->
+  Cohttp_lwt_unix.Client.call kind (Uri.of_string ("http://"^ipaddr^":8083/socket.io/?id="^txt)) ?chunked:(Some false) ?headers:(Some headers) ?body:body >>= fun (resp, body) ->
   let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
   Printf.printf "Response code: %d\n" code;
   Printf.printf "Headers: %s\n" (resp |> Cohttp_lwt_unix.Response.headers |> Cohttp.Header.to_string);
@@ -29,7 +21,7 @@ let body2 kind txt headers body =
   body
 
 let post txt (headers:Cohttp.Header.t) body =
-  Cohttp_lwt_unix.Client.call `POST (Uri.of_string ("http://10.0.0.1:8082/v1/"^txt)) ?chunked:(Some false) ?headers:(Some headers) ?body:body >>= fun (resp, body) ->
+  Cohttp_lwt_unix.Client.call `POST (Uri.of_string ("http://"^ipaddr^":8082/v1/"^txt)) ?chunked:(Some false) ?headers:(Some headers) ?body:body >>= fun (resp, body) ->
   let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
   Printf.printf "Response code: %d\n" code;
   Printf.printf "Headers: %s\n" (resp |> Cohttp_lwt_unix.Response.headers |> Cohttp.Header.to_string);
@@ -293,10 +285,20 @@ let (get_status:Yojson.Basic.t -> status) = function
 | _ -> failwith "bodyref"
 ;;
 
+let status'' = ref Sleep
+
 let app_status () =
-  let body = Lwt_main.run (get' "app/status") in
-  let json = Yojson.Basic.from_string body in
-  json
+  let txt = "http://"^ipaddr^":8082/v1/app/status" in
+  print_endline txt;
+  Cohttp_lwt_unix.Client.call `GET (Uri.of_string txt) >>= fun (resp, body) ->
+  let code = resp |> Cohttp_lwt_unix.Response.status |> Cohttp.Code.code_of_status in
+  Printf.printf "Response code: %d\n" code;
+  Printf.printf "Headers: %s\n" (resp |> Cohttp_lwt_unix.Response.headers |> Cohttp.Header.to_string);
+  body |> Cohttp_lwt.Body.to_string >|= fun body ->
+  Printf.printf "Body of length: %d\n" (String.length body);
+  Yojson.Basic.from_string body
+
+let app_status' () = status'' := Lwt.state (app_status ()); print_endline "Status"
 
 let headlst'' = Cohttp.Header.of_list ([
     ("Content-Type", "application/json");
@@ -492,7 +494,7 @@ let json7 sid =
   body
 *)
 
-let sess_len = List.length Filtered.filtered;;
+let sess_len = List.length filtered;;
 
 let tran_meth = function
 | "GET" -> `GET
@@ -542,7 +544,7 @@ let split = List.map (fun itm -> let ix = String.index itm ':' in (String.sub it
 let json3' (itm:Request.req) =
   let meth = tran_meth !(itm.http_method) in
   let headlst = Cohttp.Header.of_list (filt4' (split !(itm.line))) in
-  let body = Lwt_main.run (body2' meth ("10.0.0.1:8083/socket.io/?" ^ !(itm.query)) headlst None) in
+  let body = Lwt_main.run (body2' meth (""^ipaddr^":8083/socket.io/?" ^ !(itm.query)) headlst None) in
   let json' = Yojson.Basic.from_string  ( String.sub body 4 (String.length body - 8)) in
   json'
 
@@ -578,4 +580,19 @@ let json5' (itm:Request.req) sid amper json' =
   json'
 *)
   if String.length body > 0 && body.[0] = '{' then print_endline body;
+  body
+
+let json6' (itm:Request.req) sid amper json' =
+  let meth = tran_meth !(itm.http_method) in
+  let split' = split !(itm.line) in
+  let headlst = Cohttp.Header.of_list (filt4' split') in
+  let qsplit = List.map (fun itm -> let ix = String.index itm '=' in (String.sub itm 0 ix, itm)) !(itm.qtree) in
+  let query =  List.assoc "Host" split' ^ pth itm ^ (if amper <> [] then assoc' qsplit amper ^ "&sid=" ^ sid else "") in
+  print_endline ("QUERY: "^ !(itm.http_method) ^" "^query);
+  let payload = match meth with `POST -> let lst' = !(itm.fil.unhandled) in Some (if lst' <> [] then (`String (List.hd lst')) else `String json') | `GET -> None | `OPTIONS -> None in
+  let body = (body2' meth query headlst (payload)) in
+(*
+  let json' = Yojson.Basic.from_string  ( String.sub body 4 (String.length body - 8)) in
+  json'
+*)
   body
