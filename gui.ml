@@ -35,7 +35,7 @@ let statush = Hashtbl.create 32767
 let status_line = Array.init 6 (fun ix -> GEdit.entry ())
 
 let cnv' body =
-  let trim = int_of_string (String.sub body 0 (String.index body ':')) in
+  let trim = try int_of_string (String.sub body 0 (String.index body ':')) with err -> String.length body in
   let lftidx1 = if String.contains body '{' then String.index body '{' else String.length body in
   let lftidx2 = if String.contains body '[' then String.index body '[' else String.length body in
   let lftidx = min lftidx1 lftidx2 in
@@ -43,14 +43,16 @@ let cnv' body =
   let rghtidx1 = if String.contains body '}' then String.rindex body '}' else 0 in
   let rghtidx2 = if String.contains body ']' then String.rindex body ']' else 0 in
   let rghtidx = max rghtidx1 rghtidx2 in
-  let body = String.sub body 0 (rghtidx + 1) in
+  let body = if rghtidx+1 < String.length body then String.sub body 0 (rghtidx + 1) else body in
   body
 
 let cnv body =
+  let body = cnv' body in
   let len = String.length body in
   let max = try int_of_string (Sys.getenv "MAX_DEBUG") with err -> 0 in
-  if max > 0 then print_endline ("cnv:" ^ (if len < max then body else String.sub body 0 max));
-  try Yojson.Basic.from_string (cnv' body) with err -> `String body
+  if max > 0  && body <> "{\"success\":true,\"result\":{\"message\":\"buffer is empty\"}}" then
+    print_endline ("cnv:" ^ (if len < max then body else String.sub body 0 max));
+  try Yojson.Basic.from_string body with err -> `String body
 
 let session = function
 | `Assoc
@@ -350,11 +352,11 @@ let update_status' kw stat =
     | Some x -> stat#set_text (Yojson.Basic.to_string x)
 
 let update_status () =
-  update_status' "motors@AZ@state" status_line.(0);
-  update_status' "motors@ALT@state" status_line.(1);
-  update_status' "motors@MAP@state" status_line.(2);
-  update_status' "motors@MAP@position" status_line.(3);
-  update_status' "currentOperation@type" status_line.(4);
+  update_status' "success" status_line.(0);
+  update_status' "error@name" status_line.(1);
+  update_status' "update@state" status_line.(2);
+  update_status' "message" status_line.(3);
+  update_status' "result@message" status_line.(4);
   update_status' "previousOperations@observation@capture@images@url" status_line.(5);
   ()
 
@@ -574,6 +576,8 @@ let gui () =
           let data = combo#model#get ~row ~column in
           List.iteri (fun ix itm -> if itm = data && !catsel = 0 then
           let (cat,rahms,decdms) = Messier_catalogue.messier_array.(ix) in
+          obj_id := cat;
+          obj_nam := cat;
           !entry_ra#set_text rahms;
           !entry_dec#set_text decdms) cat);
   combo#set_active 50 ;
@@ -634,8 +638,8 @@ let gui () =
  "AZ Status";
  "ALT Status";
  "Focus Status";
- "Focus pos";
- "Focus cal";
+ "Message";
+ "Message2";
  "JPEG"
 |] in
 
@@ -643,7 +647,7 @@ let gui () =
   let frame_stat = GBin.frame ~label: lbls.(i)
             ~packing:(boxs#pack ~expand:false ~fill:false ~padding:0) () in
 
-  status_line.(i) <- GEdit.entry ~max_length: 12 ~packing: frame_stat#add ();
+  status_line.(i) <- GEdit.entry ~max_length: 20 ~packing: frame_stat#add ();
   status_line.(i)#set_editable false;
   done;
 
