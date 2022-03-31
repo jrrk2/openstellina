@@ -3,7 +3,7 @@ E = example.ml
 F = Request.mli stellinapp_session_full.ml cnv_session.ml
 G = Request.mli filtered.ml replay_session.ml messier_catalogue.ml server.ml
 T = filtered.ml messier_catalogue.ml replay_session.ml server.ml graph.ml test.ml
-U = base_locations.ml messier_catalogue.ml gui.ml
+U = base_locations.ml messier_catalogue.ml msgs.ml hidemsg.ml trans.ml gui.ml
 
 status: filtered.top
 	env STATUS=1 OCAMLRUNPARAM=b ./$<
