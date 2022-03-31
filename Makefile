@@ -4,6 +4,7 @@ F = Request.mli stellinapp_session_full.ml cnv_session.ml
 G = Request.mli filtered.ml replay_session.ml messier_catalogue.ml server.ml
 T = filtered.ml messier_catalogue.ml replay_session.ml server.ml graph.ml test.ml
 U = base_locations.ml messier_catalogue.ml msgs.ml hidemsg.ml trans.ml gui.ml
+S = test.ml
 
 status: filtered.top
 	env STATUS=1 OCAMLRUNPARAM=b ./$<
@@ -58,3 +59,6 @@ gui: $U
 
 gui.opt: $U
 	ocamlfind ocamlopt -g -linkpkg -thread -package lablgtk2,lwt_glib,yojson,cohttp-lwt-unix,zeit,ppx_let,quests,ppx_yojson,lwt $U -o $@
+
+server: $S
+	ocamlfind ocamlc -g -linkpkg -thread -package lablgtk2,lwt_glib,yojson,cohttp-lwt-unix,zeit,ppx_let,quests,ppx_yojson,lwt $S -o $@

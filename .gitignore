@@ -10,6 +10,7 @@
 graphtest
 gui
 gui.opt
+server
 simple
 *.py
 RaDec2AzEl.m
