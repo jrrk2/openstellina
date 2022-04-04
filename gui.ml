@@ -8,7 +8,6 @@ http://159.65.87.230/sim2/http/v1/app/status
 
 open GMain
 open GdkKeysyms
-open Graph
 open Lwt
 
 type session = {sid:string; ping_int: int; ping_tim: int }
