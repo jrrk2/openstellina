@@ -6,13 +6,11 @@ http://159.65.87.230/sim2/http/v1/app/status
 
 *)
 
-open GMain
-open GdkKeysyms
 open Lwt
 
 type session = {sid:string; ping_int: int; ping_tim: int }
 
-let server = (try Sys.getenv "STELLINA_IP" with err -> "10.0.0.1")^":"
+let server = (try Sys.getenv "STELLINA_IP" with _ -> "10.0.0.1")^":"
 let pth2' = "8082"
 let pth3' = "8083"
 let start = ref 0
@@ -66,7 +64,7 @@ let button4 = GButton.button ~label:"Stop Observation" ~packing:boxu#add ()
 (* Button5 *)
 let button5 = GButton.button ~label:"Observe" ~packing:boxh#add ()
 
-let boxe = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: boxh#add ()
+let _= GPack.vbox ~spacing:2 ~border_width: 10 ~packing: boxh#add ()
 let frame_ra = GBin.frame ~label: "Right ascension" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
 
 let entry_ra = GEdit.entry ~max_length: 20 ~packing: frame_ra#add ()
@@ -93,7 +91,7 @@ let rbutton3 = GButton.radio_button ~group:rbutton1#group ~label:"both" ~active:
 let frame_darkcnt = GBin.frame ~label: "Dark Frame Count" ~packing:(box3#pack ~expand:true ~fill:true ~padding:2) ()
 let entry_darkcnt = GEdit.entry ~max_length: 20 ~packing: frame_darkcnt#add ()
 
-let separator = GMisc.separator `HORIZONTAL ~packing: vbox#pack ()
+let _ = GMisc.separator `HORIZONTAL ~packing: vbox#pack ()
 
 (* Button2 *)
 let dbutton2 = GButton.button ~label:"Generate darks" ~packing:box3#add ()
@@ -124,7 +122,7 @@ let frame_lat = GBin.frame ~label: "Latitude" ~packing:(llbox#pack ~expand:true 
 let entry_lat = GEdit.entry ~max_length: 20 ~packing: frame_lat#add ()
 let frame_long = GBin.frame ~label: "Longitude" ~packing:(llbox#pack ~expand:true (* ~fill:false ~padding:0 *) ) ()
 let entry_long = GEdit.entry ~max_length: 20 ~packing: frame_long#add ()
-let boxs = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vbox#add ()
+let _ = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vbox#add ()
 let status_win (box':GPack.box array) lbls =
   Array.init (Array.length lbls) (fun ix ->
   let lmax = 30 in
@@ -161,7 +159,7 @@ let frame_jpeg = GBin.frame ~label: "JPEG file" ~packing:(vbox#pack ~expand:fals
 let status_jpeg = GEdit.entry ~max_length: 80 ~packing: frame_jpeg#add ()
 
 let cnv' body =
-  let trim = try int_of_string (String.sub body 0 (String.index body ':')) with err -> String.length body in
+  let trim = try int_of_string (String.sub body 0 (String.index body ':')) with _ -> String.length body in
   let lftidx1 = if String.contains body '{' then String.index body '{' else String.length body in
   let lftidx2 = if String.contains body '[' then String.index body '[' else String.length body in
   let lftidx = min lftidx1 lftidx2 in
@@ -176,7 +174,6 @@ let logfile = open_out "json.log"
 
 let cnv body' =
   let body = cnv' body' in
-  let len = String.length body in
   try if body <> "" then Yojson.Basic.from_string body else `String ""
   with err -> output_string logfile ("Exception: "^Printexc.to_string_default err^"\n"^body'^"\n"^body^"\n"); flush logfile ; `String body
 
@@ -187,7 +184,6 @@ let session = function
      ("pingTimeout", `Int ping_tim)] -> { sid; ping_int; ping_tim }
 | oth -> failwith ("session: "^Yojson.Basic.to_string oth)
 
-let show = Quests.Response.show
 let id = "OpenStellina"
 let name = "Jonathans iMac"
 let polling = "polling"
@@ -208,20 +204,20 @@ let rec errchklst' user (arg:string*Yojson.Basic.t) = match arg with
 | (kw', `Null) -> Hashtbl.replace statush (if user then kw' else "!"^kw') "empty"
 | (kw', `Float f) -> Hashtbl.replace statush (if user then kw' else "!"^kw') (string_of_float f)
 | (kw', `Int i) -> Hashtbl.replace statush (if user then kw' else "!"^kw') (string_of_int i)
-
+(*
 and errchklst user = function
 | `Assoc errlst -> List.iter (errchklst' user) errlst
 | oth -> failwith "errchklst"
-
+*)
 let errchk' user (arg:Yojson.Basic.t) = errchklst' user ("R", arg)
 
-let get' ix params headers pth f =
+let get' _ params headers pth f =
   Quests.get ("http://"^server^""^pth)
     ~params:(params)
     ~headers:(headers)
   >|= ( fun arg -> hdrs := Cohttp.Header.to_list (Quests.Response.headers arg); Quests.Response.content arg) >|= f
 
-let post' user ix params headers pth form =
+let post' user _ params headers pth form =
   Quests.post ("http://"^server^""^pth)
     ~params:(params)
     ~headers:(headers)
@@ -325,7 +321,7 @@ let xgain = ref 200
 let gain_int = ref 200
 let expos_flt = ref 10.0
 let cnv_ra fmt = if check#active then print_endline fmt; Scanf.sscanf fmt "%f %f %f" (fun a b c -> a *. 15.0 +. b /. 4.0 +. c /. 240.0)
-let cnv_dec fmt = if check#active then print_endline fmt; try Scanf.sscanf fmt "%f %f %f" (fun a b c -> a +. b /. 60.0 +. c /. 3600.0) with err -> Scanf.sscanf fmt "%f %f" (fun a b -> a +. b /. 60.0)
+let cnv_dec fmt = if check#active then print_endline fmt; try Scanf.sscanf fmt "%f %f %f" (fun a b c -> a +. b /. 60.0 +. c /. 3600.0) with _ -> Scanf.sscanf fmt "%f %f" (fun a b -> a +. b /. 60.0)
 
 let init' ix =
     let pth = pth2'^"/v1//general/startAutoInit" in
@@ -440,18 +436,19 @@ let taskarray =
          ("openarm", openarm');
          ("", status');
        |]
-
+(*
 let stoptask = Array.length taskarray - 1
 
 let err ix errmsg =
     if !ix <> stoptask then print_endline ("terminating at step "^string_of_int !ix^" due to error "^errmsg);
     ix := stoptask
-
+*)
+(*
 let jpegadd s =
  if check#active then print_endline ("jpegadd: "^s);
  if Hashtbl.mem jpegh s then () else Hashtbl.add jpegh s (ref false);
  status_jpeg#set_text s
-
+*)
 let quit' = ref false
 
 let sm_jump lbl' = Array.iteri (fun ix (lbl, _) -> if lbl=lbl' then (start := ix; if check#active then print_endline (string_of_int (ix+1)^": "^lbl'))) taskarray
@@ -477,13 +474,13 @@ let usleep t = ignore (Unix.select [] [] [] t)
 
 let rec iter_a ix a =
   match a.(!ix) with
-  | ("post8'", x) -> ix := Array.length a - 1; iter_a ix a
+  | ("post8'", _) -> ix := Array.length a - 1; iter_a ix a
   | ("", x) ->
     if !quit' then
         Lwt.return_unit
     else
         begin
-        Hashtbl.iter (fun k x -> if !x then () else sm_jump "fetch") jpegh;
+        Hashtbl.iter (fun _ x -> if !x then () else sm_jump "fetch") jpegh;
         update_status ();
         usleep 0.1;
         let waiting = false in
@@ -494,16 +491,16 @@ let rec iter_a ix a =
     let f = fun f -> let cnt = string_of_int !ix in print_endline (cnt^": "^lbl); f !ix in
     Lwt.apply f x >>= fun () ->
     iter_a ix a
-
-let font = Printexc.print Pango.Font.from_string "Sans 12"
 (*
+let font = Printexc.print Pango.Font.from_string "Sans 12"
+
 let color = ref (`RGB (0, 65535, 0)) 
 *)
 
 let app_quit' () = quit' := true
-
+(*
 let button_pressed drawingarea ev = true
-
+*)
 let catsel = ref 0
 
 let cnv_latlong latlong = 
@@ -512,6 +509,7 @@ let cnv_latlong latlong =
     | 'E' -> float_of_string (String.sub latlong 0 (String.length latlong - 1))
     | 'W' -> -. float_of_string (String.sub latlong 0 (String.length latlong - 1))
     | 'S' -> -. float_of_string (String.sub latlong 0 (String.length latlong - 1))
+    | _ -> failwith "cnv_latlong"
 
 let app_status' () =
  let fd = open_out "logfile.txt" in
@@ -523,7 +521,7 @@ let gui () =
   ignore @@ factory_fil#add_item "Quit" ~callback: app_quit';
   ignore @@ factory_stell#add_item "Status" ~callback: app_status';
 (* Quit when the window is closed. *)
-  ignore (window#connect#destroy app_quit');
+  ignore (window#connect#destroy ~callback: app_quit');
   ignore (button1#connect#clicked ~callback: (fun () -> sm_jump "openarm"));
   ignore (button2#connect#clicked ~callback: (fun () -> sm_jump "init"));
   ignore (button3#connect#clicked ~callback: (fun () -> sm_jump "park"));
@@ -538,8 +536,7 @@ let gui () =
   entry_darkcnt#set_text "100";
   ignore (dbutton2#connect#clicked ~callback: (fun () -> sm_jump "darks"));
 
-  combobox#connect#changed
-    (fun () ->
+  let cb = fun () ->
       match combobox#active_iter with
       | None -> ()
       | Some row -> 
@@ -548,15 +545,17 @@ let gui () =
           match !catsel with 
            | 0 -> entry_ra#set_editable false; entry_dec#set_editable false
            | 1 -> entry_ra#set_editable true; entry_dec#set_editable true
-           | 2 -> entry_ra#set_editable false; entry_dec#set_editable false);
+           | 2 -> entry_ra#set_editable false; entry_dec#set_editable false
+           | _ -> () in
+  ignore (combobox#connect#changed ~callback: cb);
   catsel := 0;
   combobox#set_active !catsel ;
 
-  let cat = List.mapi (fun ix (cat,rahms,decdms) -> let cat' = string_of_int (ix+1) in "M"^cat'^(if cat' <> String.trim(String.sub cat 1 (String.length cat -1)) then " ("^cat^")" else "") ) (Array.to_list Messier_catalogue.messier_array) in
+  let cat = List.mapi (fun ix (cat,_,_) -> let cat' = string_of_int (ix+1) in "M"^cat'^(if cat' <> String.trim(String.sub cat 1 (String.length cat -1)) then " ("^cat^")" else "") ) (Array.to_list Messier_catalogue.messier_array) in
   let (combo, (_, column)) = 
     GEdit.combo_box_text ~packing:cbox#pack 
       ~strings:cat () in
-  combo#connect#changed
+  ignore (combo#connect#changed ~callback:
     (fun () ->
       match combo#active_iter with
       | None -> ()
@@ -567,19 +566,19 @@ let gui () =
           obj_id := cat;
           obj_nam := cat;
           entry_ra#set_text rahms;
-          entry_dec#set_text decdms) cat);
+          entry_dec#set_text decdms) cat));
   combo#set_active 50 ;
 
   tz'#set_text tzcity;
   tz'#set_editable false;
 
 
-  let cities' = List.sort compare (List.filter (fun (a,b,c,d,e,f,g,h,i,j,k,l) -> j=tzcity && (match d with | "L" | "I" | "A" | "O" -> false | _ -> true)) Base_locations.base_locations) in
+  let cities' = List.sort compare (List.filter (fun (_,_,_,d,_,_,_,_,_,j,_,_) -> j=tzcity && (match d with | "L" | "I" | "A" | "O" -> false | _ -> true)) Base_locations.base_locations) in
   let latitude,longitude = try float_of_string (Sys.getenv "LATITUDE"), 
-    float_of_string (Sys.getenv "LONGITUDE") with err ->  51.477777, 0.001388 in
+    float_of_string (Sys.getenv "LONGITUDE") with _ ->  51.477777, 0.001388 in
   let prev = ref 1000.0 in
   let deflt = ref 0 in
-  let cities = List.mapi (fun ix (a,b,c,d,e,f,g,h,i,j,k,l) ->
+  let cities = List.mapi (fun ix (a,b,_,_,_,f,g,_,_,_,_,_) ->
      let f' = cnv_latlong f in
      let g' = cnv_latlong g in
      let nearest = sqrt((latitude -. f') *. (latitude -. f') +. ((longitude -. g') *. (longitude -. g'))) in
@@ -590,7 +589,7 @@ let gui () =
   let loc_jump lbl' = List.iteri (fun ix loc -> if loc=lbl' then
     begin
     deflt := ix;
-    let (a,b,c,d,e,f,g,h,i,j,k,l) = List.nth cities' ix in
+    let (_,_,_,_,_,f,g,_,_,_,_,_) = List.nth cities' ix in
     let f' = cnv_latlong f in
     let g' = cnv_latlong g in
     let lat' = string_of_float f' in
@@ -599,8 +598,8 @@ let gui () =
     entry_long#set_text long';
     if check#active then print_endline (string_of_int ix^": "^lat'^", "^long')
     end) cities in
-  combo#entry#connect#changed 
-    (fun () -> loc_jump combo#entry#text) ;
+  ignore (combo#entry#connect#changed ~callback:
+    (fun () -> loc_jump combo#entry#text)) ;
   combo#set_active !deflt;
   status_jpeg#set_editable false;
 
@@ -679,10 +678,10 @@ let rec handle_connection ix buf ic oc () =
 let accept_connection conn =
     if check#active then print_endline "accept_conn";
     let ix = ref 0 in
-    let buf = Array.init 256 (fun ix -> 0) in
+    let buf = Array.init 256 (fun _ -> 0) in
     let fd, _ = conn in
-    let ic = Lwt_io.of_fd Lwt_io.Input fd in
-    let oc = Lwt_io.of_fd Lwt_io.Output fd in
+    let ic = Lwt_io.of_fd ~mode:Lwt_io.Input fd in
+    let oc = Lwt_io.of_fd ~mode:Lwt_io.Output fd in
     Lwt.on_failure (handle_connection ix buf ic oc ()) (fun e -> Logs.err (fun m -> m "%s" (Printexc.to_string e) ));
     Logs_lwt.info (fun m -> m "New connection") >>= return
  
@@ -705,9 +704,9 @@ let create_server sock =
 
 let tasks =
   gui();
-  let sock, rslt = create_socket () in
+  let sock, _ = create_socket () in
   let serve = create_server sock in
-  serve();
+  let _ = serve() in
   iter_a start taskarray
 
 let run () =

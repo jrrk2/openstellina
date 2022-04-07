@@ -188,5 +188,5 @@ let remove' = List.filter (function
 | "R[1]@update@minimumCompatibleVersion" -> false
 | "R[1]@update@state" -> false
 | "R[1]@version" -> false
-| oth -> false
+| _ -> false
 )
