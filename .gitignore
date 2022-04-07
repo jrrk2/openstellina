@@ -4,7 +4,6 @@
 *.cmx
 *.cmxa
 *.top
-*.json
 *.jpeg
 *.o
 graphtest

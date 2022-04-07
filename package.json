@@ -1,0 +1,64 @@
+{
+  "dependencies": {
+    "esy": "1.0.0",
+    "esy-freetype2": "^2.9.1008",
+    "esy-angle-prebuilt": "1.0.0",
+    "esy-sdl2": "^2.0.14000",
+    "pkg-config": "esy-packages/pkg-config",
+    "@opam/ocamlfind": "^1.9.3",
+    "@opam/conf-pkg-config": "2",
+    "@opam/lwt": "^5.5.0",
+    "@opam/lwt_glib": "^1.1.1",
+    "@opam/yojson": "^1.7.0",
+    "@opam/zeit": "^0.1.0",
+    "@opam/quests": "^0.1.3",
+    "@opam/ppx_let": "v0.14.0",
+    "@opam/ppx_yojson": "1.2.0",
+    "@opam/cohttp-lwt-unix": "^5.0.0",
+    "@opam/lablgtk": "^2.18.12"
+  },
+  "name": "openstellina",
+  "description": "Stellina open-source telescope remote control",
+  "version": "1.0.0",
+  "main": "index.js",
+  "devDependencies": {
+    "ocaml": "^4.13.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jrrk2/openstellina.git"
+  },
+  "keywords": [
+    "Stellina",
+    "exposure",
+    "GUI"
+  ],
+  "author": "Jonathan Kimmitt",
+  "license": "Apache-2.0",
+  "esy": {
+     "buildEnv": {
+      "PKG_CONFIG_PATH": "/opt/homebrew/lib/pkgconfig:/opt/X11/lib/pkgconfig:$PKG_CONFIG_PATH"
+    },
+    "exportedEnv": {
+      "PKG_CONFIG_PATH": {
+        "val": "/opt/homebrew/lib/pkgconfig:/opt/X11/lib/pkgconfig:$PKG_CONFIG_PATH",
+        "scope": "global"
+      }
+    },
+    "build": "ocamlfind ocamlopt -g -linkpkg -thread -package lablgtk2,lwt_glib,yojson,cohttp-lwt-unix,zeit,ppx_let,quests,ppx_yojson,lwt base_locations.ml messier_catalogue.ml msgs.ml hidemsg.ml trans.ml gui.ml -o #{self.name}",
+    "release": {
+      "bin": "hello",
+      "includePackages": [
+        "root",
+        "@opam/camomile"
+      ]
+    }
+  },
+  "bugs": {
+    "url": "https://github.com/jrrk2/openstellina/issues"
+  },
+  "homepage": "https://github.com/jrrk2/openstellina#readme"
+}
