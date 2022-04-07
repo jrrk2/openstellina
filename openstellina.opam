@@ -38,3 +38,7 @@ build: [
   ]
 ]
 dev-repo: "git+https://github.com/jrrk2/openstellina.git"
+url {
+  src: "https://github.com/jrrk2/openstellina/archive/refs/heads/main.zip"
+}
+version: "0.0.1"
