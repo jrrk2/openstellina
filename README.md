@@ -19,15 +19,15 @@ Prerequisites. I use opam to install necessary libraries.
 On Debian, the following instructions would suffice, On Mac OSX the homebrew equivalents would be used:
 
     sudo apt install libexpat1-dev libglib2.0-dev libgmp-dev libgtk2.0-dev libssl-dev zlib1g-dev opam
-
+    ulimit -s 16384
     opam init
-    opam pin add opam pin add https://github.com/jrrk2/openstellina/archive/refs/tags/opam-publish-openstellina.0.0.1.zip
+    opam pin add https://github.com/jrrk2/openstellina/archive/refs/tags/opam-publish-openstellina.0.0.1.zip
 
 How do you connect to Stellina? This programme runs on any workstation that supports OPAM (Linux, OSX, Windows, Raspberry-PI).
 
 The build procedure on Windows is a work-in-progress. It may be that the npm esy toolchain can be used, this is still being investigated.
 
-Compiling the program: opam does this if all the stages above succeed.
+Compiling the program: opam does this and adds the openstellina executable to the path, if all the stages above succeed.
 
 Why am I doing this? Because I can, because I like to learn new things, and there are an awful lot of cloudy nights round here.
 
