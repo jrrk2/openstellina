@@ -11,52 +11,40 @@ This software uses http:// protocol, it should not damage your telescope which i
 However, by using this software you take all responsibility for what happens to your expensive instrument.
 
 Why use OCAML? It is appropriate because OCAML is a French language, but also it is about 90% smaller than a typical equivalent in C++.
-This initial demo is less than 600 lines of code (plus standard libraries, and the array of captured packets).
-Eventually we might want to migrate to AstroPi if there is sufficient interest.
+This initial demo is around 1200 lines of code (plus standard libraries, and list of 26000 observatory locations).
+The Messier catalogue RA/DEC table came from a recent query of SIMBAD
 
-Prerequisites. I use opam to install necessary libraries. A sufficient but not necessary list of libraries is in prerequisites.txt
+Prerequisites. I use opam to install necessary libraries.
 
-How do you connect to Stellina? This programme runs on any workstation that supports OCAML (Linux, OSX, Windows, Raspberry-PI).
+On Debian, the following instructions would suffice, On Mac OSX the homebrew equivalents would be used:
 
-Compiling the program. A Makefile is provided, the prerequisites should be installed first. opam will help with this.
+    sudo apt install libexpat1-dev libglib2.0-dev libgmp-dev libgtk2.0-dev libssl-dev zlib1g-dev opam
+
+    opam init
+    opam pin add opam pin add https://github.com/jrrk2/openstellina/archive/refs/tags/opam-publish-openstellina.0.0.1.zip
+
+How do you connect to Stellina? This programme runs on any workstation that supports OPAM (Linux, OSX, Windows, Raspberry-PI).
+
+The build procedure on Windows is a work-in-progress. It may be that the npm esy toolchain can be used, this is still being investigated.
+
+Compiling the program: opam does this if all the stages above succeed.
 
 Why am I doing this? Because I can, because I like to learn new things, and there are an awful lot of cloudy nights round here.
 
-This programme is pre-alpha, designed to document-by-example the available API, rather than to be used by typical end users.
-
-    make status -> connects to the Stellina and reads its status
-
-    make expert -> connects to the Stellina and dumps a number of expert FITs (typically darks taken with the arm closed)
-
-    make openarm -> connects to the Stellina and opens the arm (for maintenance).
-
-    make init -> connects to the Stellina and runs a full auto-init.
-
-    make observe OBJECT=101 -> connects to the successfully initialised Stellina and begins an observation based on offline messier catalogue numbers
-
-    make stopobs -> stops the previously started observation
-
-    make park -> connects to the Stellina and parks the arm.
-
-    make sleep -> connects to the Stellina and prepares for power off.
-
-More targets will be added later, I expect this script will be soon superseded by something more user-friendly.
-
-After a target has been run, debug variables may be examined, or exit the program with end-of-file (typically ctrl-D), or exit(0);;
+This programme is version 0.0.1, designed to pipeclean the development process, rather than to be used by non-software expert users.
 
 environment variables:
 
     LATITUDE (a floating point number) defaults to Greenwich (51.4777777777777814)
     LONGITUDE (a floating point number) defaults to Greenwich (0.00138888888888888894)
+    STELLINA_IP (a dotted decimal IP address) defaults to 10.0.0.1 for a real Stellina
 
 The method of setting the environment will differ according to O/S. For example under OSX, if you live in Cambridge
 
     export LATITUDE=52.24510437175544
     export LONGITUDE=0.07952878556283442
 
-Internally the Makefile will set these environment variables to control the script:
+If you don't specify a latitude and longitude the GUI will offer a lengthy list of observatory locations for your timezone, read from /etc/localtime.
+If you don't happen to have a Stellina handy there are online simulators available (public ones seem to be broken at the moment)
 
-    AUTO_INIT (an integer) > 0 to initiate automatic initialisation
-    PARK (an integer) > 0 to retract the arm
-
-THe Messier catalogue RA/DEC table came from a recent query of SIMBAD
+You can use the node command to set up a java-script server to test this application. The method of doing that is outside the scope of this document.
