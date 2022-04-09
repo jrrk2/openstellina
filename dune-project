@@ -11,15 +11,14 @@
 
 (maintainers "Jonathan Kimmitt")
 
-(license Apache-2)
+(license Apache-2.0)
 
-(documentation https://url/to/documentation)
+(documentation https://github.com/jrrk2/openstellina.git)
 
 (package
  (name openstellina)
- (synopsis "A short synopsis")
- (description "A longer description")
- (depends ocaml dune lablgtk2 lwt_glib yojson cohttp-lwt-unix zeit ppx_let quests ppx_yojson lwt)
- (tags
-  (topics "to describe" your project)))
-
+ (synopsis "A http client for Stellina smart telescope by Vaonis")
+ (description "Mobile Stellina App does not provide access to telescope exposures > 20s (lights or darks). This software bypasses the App and talks to the telescope directly")
+ (depends ocaml dune lablgtk lwt_glib yojson cohttp-lwt-unix zeit ppx_let quests ppx_yojson lwt)
+ (tags (Vaonis Stellina long-exposure GUI)))
+ 
