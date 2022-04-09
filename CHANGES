@@ -1,3 +1,12 @@
+## opam-publish-openstellina.0.0.3 (2022-04-09)
+### Added
+- Update meta files for dune release
+
 ## opam-publish-openstellina.0.0.2 (2022-04-09)
 ### Added
 - decreased stack usage
+
+## opam-publish-openstellina.0.0.1 (2022-04-07)
+### Added
+- First attempt to publish in opam
+
