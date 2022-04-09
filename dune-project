@@ -1,6 +1,7 @@
 (lang dune 3.0)
 
 (name openstellina)
+(version 2bf56f3-dirty)
 
 (generate_opam_files true)
 
