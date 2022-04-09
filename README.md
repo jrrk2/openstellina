@@ -35,9 +35,10 @@ This programme is version 0.0.1, designed to pipeclean the development process, 
 
 environment variables:
 
+    TIME_ZONE (a Continent/City string) defaults to Europe/London if /etc/localtime is not readable
     LATITUDE (a floating point number) defaults to Greenwich (51.4777777777777814)
     LONGITUDE (a floating point number) defaults to Greenwich (0.00138888888888888894)
-    STELLINA_IP (a dotted decimal IP address) defaults to 10.0.0.1 for a real Stellina
+    STELLINA_IP (a dotted decimal IP address) defaults to 10.0.0.1 corresponding to a real Stellina
 
 The method of setting the environment will differ according to O/S. For example under OSX, if you live in Cambridge
 

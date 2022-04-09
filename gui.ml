@@ -23,7 +23,8 @@ let pth3' = "socket"
 let start = ref 0
 *)
 
-let timezone = List.rev (String.split_on_char '/' (Unix.readlink "/etc/localtime"))
+let timezone = List.rev (String.split_on_char '/' (try Unix.readlink "/etc/localtime" with _ -> "/var/db/timezone/zoneinfo/Europe/London"))
+let tzcity = try Sys.getenv "TIME_ZONE" with _ -> List.hd (List.tl timezone)  ^ "/" ^ List.hd timezone
 
 let session' = ref {sid=""; ping_int=0; ping_tim=0}
 let statush = Hashtbl.create 32767
@@ -107,7 +108,6 @@ let options =
 let combobox,(_,column) = GEdit.combo_box_text ~strings:options ~packing:tbox#pack ()
 let tmp2 = GBin.frame ~label:"Target (alias), RA, DEC" ~packing:vbox#pack ()
 let cbox = GPack.vbox ~border_width:5 ~packing:tmp2#add ()
-let tzcity = List.hd (List.tl timezone)  ^ "/" ^ List.hd timezone
 let obox = GPack.hbox ~border_width:10 ~packing:vbox#add ()
 let vbox' = GPack.vbox ~border_width:10 ~packing:obox#add ()
 let obs = "Observatory location"
@@ -502,7 +502,7 @@ let app_quit' () = quit' := true
 let button_pressed drawingarea ev = true
 *)
 let catsel = ref 0
-
+(*
 let cnv_latlong latlong = 
   match latlong.[String.length latlong - 1] with
     | 'N' -> float_of_string (String.sub latlong 0 (String.length latlong - 1))
@@ -510,7 +510,7 @@ let cnv_latlong latlong =
     | 'W' -> -. float_of_string (String.sub latlong 0 (String.length latlong - 1))
     | 'S' -> -. float_of_string (String.sub latlong 0 (String.length latlong - 1))
     | _ -> failwith "cnv_latlong"
-
+*)
 let app_status' () =
  let fd = open_out "logfile.txt" in
  Hashtbl.iter (fun k x -> output_string fd (k^": "^x^"\n")) statush;
@@ -573,14 +573,12 @@ let gui () =
   tz'#set_editable false;
 
 
-  let cities' = List.sort compare (List.filter (fun (_,_,_,d,_,_,_,_,_,j,_,_) -> j=tzcity && (match d with | "L" | "I" | "A" | "O" -> false | _ -> true)) Base_locations.base_locations) in
+  let cities' = Hashtbl.find Base_locations.loch tzcity in
   let latitude,longitude = try float_of_string (Sys.getenv "LATITUDE"), 
     float_of_string (Sys.getenv "LONGITUDE") with _ ->  51.477777, 0.001388 in
   let prev = ref 1000.0 in
   let deflt = ref 0 in
-  let cities = List.mapi (fun ix (a,b,_,_,_,f,g,_,_,_,_,_) ->
-     let f' = cnv_latlong f in
-     let g' = cnv_latlong g in
+  let cities = List.mapi (fun ix (a,b,f',g') ->
      let nearest = sqrt((latitude -. f') *. (latitude -. f') +. ((longitude -. g') *. (longitude -. g'))) in
      if nearest < !prev then ( prev := nearest; deflt := ix );
      a^", "^b) cities' in
@@ -589,9 +587,7 @@ let gui () =
   let loc_jump lbl' = List.iteri (fun ix loc -> if loc=lbl' then
     begin
     deflt := ix;
-    let (_,_,_,_,_,f,g,_,_,_,_,_) = List.nth cities' ix in
-    let f' = cnv_latlong f in
-    let g' = cnv_latlong g in
+    let (_,_,f',g') = List.nth cities' ix in
     let lat' = string_of_float f' in
     let long' = string_of_float g' in
     entry_lat#set_text lat';
