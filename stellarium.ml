@@ -30,35 +30,14 @@ let get' proto server params headers pth f hdrs =
     ~headers:(headers)
   >|= ( fun arg -> hdrs := Cohttp.Header.to_list (Quests.Response.headers arg); Quests.Response.content arg) >|= f
 
-let split = List.map (fun itm -> let ix = String.index itm ':' in (String.sub itm 0 ix, String.sub itm (ix+2) (String.length itm - ix - 4)))
-
-let hms_of_float x' =
-    let neg = x' < 0.0 in
-    let x = if neg then x' +. 360.0 else x' in
-    let x15 = x /. 15.0 in
-    let h = floor (x15) in
-    let m' = (x15 -. h) *. 60.0 in
-    let m = floor (m') in
-    let s = (m' -. m) *. 60.0 in
-    Printf.sprintf "%d %d %d" (int_of_float h) (int_of_float m) (int_of_float s)
-
-let dms_of_float x' =
-    let neg = x' < 0.0 in
-    let x = if neg then -. x' else x' in
-    let d = floor (x) in
-    let m' = (x -. d) *. 60.0 in
-    let m = floor (m') in
-    let s = (m' -. m) *. 60.0 in
-    Printf.sprintf "%c%d %d %d" (if neg then '-' else '+') (int_of_float d) (int_of_float m) (int_of_float s)
-
 let rec descend' attr = function
-| ("raJ2000", `Float f) -> attr.ra <- f; attr.ra_hms <- hms_of_float f
-| ("decJ2000", `Float f) -> attr.dec <- f; attr.dec_dms <- dms_of_float f
-| ("altitude", `Float f) -> attr.alt <- f; attr.alt_dms <- dms_of_float f
-| ("azimuth", `Float f) -> attr.az <- f; attr.az_dms <- dms_of_float f
-| ("rise-dhr", `Float f) -> attr.rise <- f; attr.rise_hms <- dms_of_float f
-| ("transit-dhr", `Float f) -> attr.transit <- f; attr.transit_hms <- dms_of_float f
-| ("set-dhr", `Float f) -> attr.set <- f; attr.set_hms <- dms_of_float f
+| ("raJ2000", `Float f) -> attr.ra <- f; attr.ra_hms <- Utils.hms_of_float f
+| ("decJ2000", `Float f) -> attr.dec <- f; attr.dec_dms <- Utils.dms_of_float f
+| ("altitude", `Float f) -> attr.alt <- f; attr.alt_dms <- Utils.dms_of_float f
+| ("azimuth", `Float f) -> attr.az <- f; attr.az_dms <- Utils.dms_of_float f
+| ("rise-dhr", `Float f) -> attr.rise <- f; attr.rise_hms <- Utils.dms_of_float f
+| ("transit-dhr", `Float f) -> attr.transit <- f; attr.transit_hms <- Utils.dms_of_float f
+| ("set-dhr", `Float f) -> attr.set <- f; attr.set_hms <- Utils.dms_of_float f
 | ("rise", `String _) -> ()
 | ("set", `String _) -> ()
 | (str, `Bool b) -> output_string logfile (str^": "^string_of_bool b^"\n")
@@ -87,7 +66,7 @@ let debug attr =
     flush stdout
 
 let stellarium' attr cb =
-    let headers = split 
+    let headers = Utils.split 
    ["Content-Type: application/json";
     "Accept: application/json"] in
     let server =  "127.0.0.1:8090" in

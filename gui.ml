@@ -196,7 +196,6 @@ let eio = "3"
 let t' = "NzboPSr"
 let params' = [ ("id", id); ("name", name); ("EIO", eio); ("transport", polling); ("t", t') ]
 let headers = [ ("Content-Type", "text/plain; charset=utf-8") ]
-let split = List.map (fun itm -> let ix = String.index itm ':' in (String.sub itm 0 ix, String.sub itm (ix+2) (String.length itm - ix - 4)))
 let pth = pth3'^"/socket.io/"
 let cookie = ref []
 let hdrs = ref []
@@ -240,7 +239,7 @@ let post2' ix =
 
 let get3' ix =
     let params = ("sid", (!session').sid) :: [ ("id", id); ("name", name); ("EIO", eio); ("transport", "websocket") ] in
-    let headers = split ["Upgrade: websocket"; "Connection: Upgrade";
+    let headers = Utils.split ["Upgrade: websocket"; "Connection: Upgrade";
       "User-Agent: Mozilla/5.0 (iPad; CPU OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
       "Origin: http://localhost:8080";
       "Accept-Encoding: gzip, deflate"; "Cache-Control: no-cache";
@@ -252,7 +251,7 @@ let get3' ix =
 
 let get4' ix =
     let params = (("sid", (!session').sid) :: params') in
-    let headers = split ["Accept-Encoding: gzip, deflate";
+    let headers = Utils.split ["Accept-Encoding: gzip, deflate";
       "Referer: http://localhost:8080/";
       "Accept-Language: en-GB,en;q=0.9";
       "User-Agent: Mozilla/5.0 (iPad; CPU OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
@@ -262,7 +261,7 @@ let get4' ix =
 
 let post5' ix =
     let params = (("sid", (!session').sid) :: params') in
-    let headers = !cookie @ split [
+    let headers = !cookie @ Utils.split [
       "Access-Control-Allow-Origin: http://localhost:8080";
       "Access-Control-Allow-Credentials: true";
       "Content-Encoding: gzip"] in
@@ -270,7 +269,7 @@ let post5' ix =
 
 let get6' ix =
     let params = (("sid", (!session').sid) :: params') in
-    let headers = split ["Accept-Encoding: gzip, deflate";
+    let headers = Utils.split ["Accept-Encoding: gzip, deflate";
       "Referer: http://localhost:8080/";
       "Accept-Language: en-GB,en;q=0.9";
       "User-Agent: Mozilla/5.0 (iPad; CPU OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
@@ -279,7 +278,7 @@ let get6' ix =
 
 let status' ix =
     let params = [] in
-    let headers = split 
+    let headers = Utils.split 
    ["Content-Type: application/json";
     "Origin: http://localhost:8080";
     "Accept-Encoding: gzip, deflate";
@@ -292,7 +291,7 @@ let status' ix =
 (*
 let post8' ix =
     let params = [] in
-    let headers = split 
+    let headers = Utils.split 
    ["Content-Type: application/json";
     "Origin: http://localhost:8080";
     "Accept-Encoding: gzip, deflate";
@@ -307,7 +306,7 @@ let post8' ix =
 
 let post9' ix =
     let params = [] in
-    let headers = split 
+    let headers = Utils.split 
    ["Content-Type: application/json";
     "Origin: http://localhost:8080";
     "Accept-Encoding: gzip, deflate";
@@ -402,7 +401,7 @@ let fetch' ix =
     let jpeg = fst !jhash in
     if check#active then print_endline ("Fetching: "^ jpeg);
     let pth = pth2'^"/"^jpeg in
-    let headers = split ["Accept-Encoding: gzip, deflate";
+    let headers = Utils.split ["Accept-Encoding: gzip, deflate";
       "Referer: http://localhost:8080/";
       "Accept-Language: en-GB,en;q=0.9";
       "User-Agent: Mozilla/5.0 (iPad; CPU OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
@@ -622,30 +621,13 @@ let gui () =
   (* Show the window. *)
   window#show ()
 
-let hms_of_float x =
-    let x15 = x /. 15.0 in
-    let h = floor (x15) in
-    let m' = (x15 -. h) *. 60.0 in
-    let m = floor (m') in
-    let s = (m' -. m) *. 60.0 in
-    Printf.sprintf "%d %d %d" (int_of_float h) (int_of_float m) (int_of_float s)
-
-let dms_of_float x' =
-    let neg = x' < 0.0 in
-    let x = if neg then -. x' else x' in
-    let d = floor (x) in
-    let m' = (x -. d) *. 60.0 in
-    let m = floor (m') in
-    let s = (m' -. m) *. 60.0 in
-    Printf.sprintf "%c%d %d %d" (if neg then '-' else '+') (int_of_float d) (int_of_float m) (int_of_float s)
-
 let goto_received ra_int dec_int =
         let scal = 180. /. float_of_int(1 lsl 31) in
         let ra = float_of_int ra_int *. scal in
         let dec' = float_of_int dec_int *. scal in
         let dec = if dec' > 180.0 then dec' -. 360.0 else dec' in
-        let rahms = hms_of_float ra in
-        let decdms = dms_of_float dec in
+        let rahms = Utils.hms_of_float ra in
+        let decdms = Utils.dms_of_float dec in
         print_endline ("ra="^rahms^", dec="^decdms);
         catsel := 2;
         combobox#set_active !catsel ;
