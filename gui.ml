@@ -67,11 +67,16 @@ let button5 = GButton.button ~label:"Observe" ~packing:boxh#add ()
 
 let _= GPack.vbox ~spacing:2 ~border_width: 10 ~packing: boxh#add ()
 let frame_ra = GBin.frame ~label: "Right ascension" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
-
 let entry_ra = GEdit.entry ~max_length: 20 ~packing: frame_ra#add ()
 
 let frame_dec = GBin.frame ~label: "Declination" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
 let entry_dec = GEdit.entry ~max_length: 20 ~packing: frame_dec#add ()
+
+let alt_dec = GBin.frame ~label: "Altitude" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
+let entry_alt = GEdit.entry ~max_length: 20 ~packing: alt_dec#add ()
+
+let az_dec = GBin.frame ~label: "Azimuth" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
+let entry_az = GEdit.entry ~max_length: 20 ~packing: az_dec#add ()
 
 (* Button6 *)
 let button6 = GButton.button ~label:"Refocus" ~packing:boxh#add ()
@@ -379,6 +384,15 @@ let park' ix =
     let pth = pth2'^"/v1//general/park" in
     post' true ix [] [] pth (Quests.Request.Raw "{}")
 
+let sattr = ref (Stellarium.attr "")
+
+let stellarium' _ =
+    let debug (attr:Stellarium.attr) =
+      entry_alt#set_text attr.alt_dms;
+      entry_az#set_text attr.az_dms in
+    let f = (fun s -> Stellarium.descend !sattr (Yojson.Basic.from_string s); debug !sattr) in
+    Stellarium.stellarium' !sattr f
+
 let jpegh = Hashtbl.create 127
 
 let fetch' ix =
@@ -434,6 +448,8 @@ let taskarray =
          ("fetch", fetch');
          ("", status');
          ("openarm", openarm');
+         ("", status');
+         ("stellarium", stellarium');
          ("", status');
        |]
 (*
@@ -566,7 +582,11 @@ let gui () =
           obj_id := cat;
           obj_nam := cat;
           entry_ra#set_text rahms;
-          entry_dec#set_text decdms) cat));
+          entry_dec#set_text decdms;
+          entry_alt#set_text "";
+          entry_az#set_text "";
+          sattr := Stellarium.attr cat;
+          sm_jump "stellarium") cat));
   combo#set_active 50 ;
 
   tz'#set_text tzcity;
