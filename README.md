@@ -49,3 +49,8 @@ If you don't specify a latitude and longitude the GUI will offer a lengthy list 
 If you don't happen to have a Stellina handy there are online simulators available (public ones seem to be broken at the moment)
 
 You can use the node command to set up a java-script server to test this application. The method of doing that is outside the scope of this document.
+
+Stop Press:
+
+This application only supports Stellina Firmware up to V1.30. The latest version V2.5 uses a strong authentication model which this App does not support.
+
