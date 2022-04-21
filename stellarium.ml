@@ -1,8 +1,3 @@
-(*
-open Xml
-*)
-open Lwt
-
 type attr =
   {
     mutable target: string;
@@ -20,15 +15,10 @@ type attr =
     mutable rise_hms: string;
     mutable transit_hms: string;
     mutable set_hms: string;
+    mutable vis_mag: float;
   }
 
-let logfile = open_out "logfile.txt"
-
-let get' proto server params headers pth f hdrs =
-  Quests.get (proto^server^pth)
-    ~params:(params)
-    ~headers:(headers)
-  >|= ( fun arg -> hdrs := Cohttp.Header.to_list (Quests.Response.headers arg); Quests.Response.content arg) >|= f
+let logfile = open_out "stellarium_logfile.txt"
 
 let rec descend' attr = function
 | ("raJ2000", `Float f) -> attr.ra <- f; attr.ra_hms <- Utils.hms_of_float f
@@ -38,15 +28,16 @@ let rec descend' attr = function
 | ("rise-dhr", `Float f) -> attr.rise <- f; attr.rise_hms <- Utils.dms_of_float f
 | ("transit-dhr", `Float f) -> attr.transit <- f; attr.transit_hms <- Utils.dms_of_float f
 | ("set-dhr", `Float f) -> attr.set <- f; attr.set_hms <- Utils.dms_of_float f
+| ("vmag", `Float f) -> attr.vis_mag <- f
 | ("rise", `String _) -> ()
 | ("set", `String _) -> ()
-| (str, `Bool b) -> output_string logfile (str^": "^string_of_bool b^"\n")
-| (str, `Float f) -> output_string logfile (str^": "^string_of_float f^"\n")
-| (str, `Int n) -> output_string logfile (str^": "^string_of_int n^"\n")
-| (str, `List lst) -> output_string logfile (str^":\n"); List.iter (descend attr) lst
-| (str, `Null) -> output_string logfile (str^": Null\n")
-| (str, `String s) -> output_string logfile (str^": \""^s^"\"\n")
-| (str, `Assoc lst) -> output_string logfile (str^":\n"); List.iter (descend' attr) lst
+| (str, `Bool b) -> output_string logfile (str^": "^string_of_bool b^"\n"); flush logfile
+| (str, `Float f) -> output_string logfile (str^": "^string_of_float f^"\n"); flush logfile
+| (str, `Int n) -> output_string logfile (str^": "^string_of_int n^"\n"); flush logfile
+| (str, `List lst) -> output_string logfile (str^":\n"); List.iter (descend attr) lst; flush logfile
+| (str, `Null) -> output_string logfile (str^": Null\n"); flush logfile
+| (str, `String s) -> output_string logfile (str^": \""^s^"\"\n"); flush logfile
+| (str, `Assoc lst) -> output_string logfile (str^":\n"); List.iter (descend' attr) lst; flush logfile
 
 and descend attr = function
 | `Assoc lst -> List.iter (descend' attr) lst
@@ -73,7 +64,7 @@ let stellarium' attr cb =
     let pth = "/api/objects/info" in
     let req = [("name", attr.target); ("format", "json")] in
     let hdrs = ref [] in
-    get' "http://" server req headers pth cb hdrs
+    Utils.get' "http://" server req headers pth cb hdrs
 
 (* only for testing *)
 let stellarium attr =
@@ -84,4 +75,4 @@ let stellarium attr =
 let attr nam = {target=nam;
 ra=0.; dec=0.; ra_hms=""; dec_dms="";
 alt=0.; az=0.; alt_dms=""; az_dms="";
-rise=0.; transit=0.; set=0.; rise_hms=""; transit_hms=""; set_hms=""; }
+rise=0.; transit=0.; set=0.; rise_hms=""; transit_hms=""; set_hms=""; vis_mag=0.0 }

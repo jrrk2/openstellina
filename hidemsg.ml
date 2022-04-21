@@ -188,5 +188,24 @@ let remove' = List.filter (function
 | "R[1]@update@minimumCompatibleVersion" -> false
 | "R[1]@update@state" -> false
 | "R[1]@version" -> false
+| "R@result@ALT@flags@STANDSTILL" -> true
+| "R@result@AZ@flags@STANDSTILL" -> true
+| "R@result@DER@flags@STANDSTILL" -> true
+| "R@result@STEL@flags@STANDSTILL" -> true
+| "R@result@MAP@flags@STANDSTILL" -> true
+| "R@result@DER@angle" -> true
+| "R@result@ALT@angle" -> true
+| "R@result@MAP@angle" -> true
+| "R@result@AZ@angle" -> true
+| "R[0]@status@previousOperations@observation@capture@images[0]@url" -> true
+| "R[0]@status@previousOperations@observation@capture@images[1]@url" -> true
+| "R[0]@status@previousOperations@plan@targets[0]@attempts[0]@lastImage@url" -> true
+| "R[0]@status@previousOperations@plan@targets[1]@attempts[1]@lastImage@url" -> true
+| "R[0]@status@previousOperations@plan@targets[1]@attempts[4]@lastImage@url" -> true
+| "R[1]@previousOperations@observation@capture@images[0]@url" -> true
+| "R[1]@previousOperations@observation@capture@images[1]@url" -> true
+| "R[1]@previousOperations@plan@targets[0]@attempts[0]@lastImage@url" -> true
+| "R[1]@previousOperations@plan@targets[1]@attempts[1]@lastImage@url" -> true
+| "R[1]@previousOperations@plan@targets[1]@attempts[4]@lastImage@url" -> true
 | _ -> false
 )
