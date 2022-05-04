@@ -50,6 +50,9 @@ let box2 = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: vbox#add ()
 let boxu = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: box2#add ()
 let boxh = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: box2#add ()
 
+(* Button0 *)
+let button0 = GButton.button ~label:"Connect WiFi" ~packing:boxu#add ()
+
 (* Button1 *)
 let button1 = GButton.button ~label:"Open Arm" ~packing:boxu#add ()
 
@@ -84,10 +87,21 @@ let entry_az = GEdit.entry ~max_length: 20 ~packing: frame_az#add ()
 let frame_mag = GBin.frame ~label: "Visual magnitude" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
 let entry_mag = GEdit.entry ~max_length: 10 ~packing: frame_mag#add ()
 
+let frame_exp = GBin.frame ~label: "Exposure (us)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
+let entry_exp = GEdit.entry ~max_length: 10 ~packing: frame_exp#add ()
+
+let frame_gain = GBin.frame ~label: "Gain (dB)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
+let entry_gain = GEdit.entry ~max_length: 10 ~packing: frame_gain#add ()
+
 (* Range1 *)
 let fram_rng = GBin.frame ~label: "Exposure" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
-let adj = GData.adjustment ~lower:0.1 ~upper:70.0 ~step_incr:1. ~page_incr:10. ~value:10. ()
-let rng = GRange.scale `HORIZONTAL ~adjustment:adj ~draw_value:true ~packing:fram_rng#add ()
+let expadj = GData.adjustment ~lower:26.0 ~upper:69.0 ~step_incr:0.01 ~page_incr:0.1 ()
+let rng = GRange.scale `HORIZONTAL ~adjustment:expadj ~draw_value:false ~packing:fram_rng#add ()
+
+(* Gain *)
+let fram_gain = GBin.frame ~label: "Gain" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
+let gainadj = GData.adjustment ~lower:0.0 ~upper:49.0 ~step_incr:0.1 ~page_incr:1.0 ()
+let gain = GRange.scale `HORIZONTAL ~adjustment:gainadj ~draw_value:false ~packing:fram_gain#add ()
 
 let framx = GBin.frame ~label: "Dark frames" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
 
@@ -102,7 +116,7 @@ let entry_darkcnt = GEdit.entry ~max_length: 20 ~packing: frame_darkcnt#add ()
 
 let _ = GMisc.separator `HORIZONTAL ~packing: vbox#pack ()
 
-(* Button2 *)
+(* Dark Button2 *)
 let dbutton2 = GButton.button ~label:"Generate darks" ~packing:box3#add ()
 let obox = GPack.hbox ~border_width:10 ~packing:vbox#add ()
 let vbox' = GPack.vbox ~border_width:10 ~packing:obox#add ()
@@ -123,11 +137,33 @@ let frame_long = GBin.frame ~label: "Observatory Longitude" ~packing:(llbox#pack
 let entry_long = GEdit.entry ~max_length: 20 ~packing: frame_long#add ()
 let bbox = GPack.hbox ~border_width:5 ~packing:llbox#add ()
 (* Button7 *)
-let button7 = GButton.button ~label:"Motor Status" ~packing:bbox#add ()
+let button7 = GButton.button ~label:"Motor Go" ~packing:bbox#add ()
 (* Button8 *)
-let button8 = GButton.button ~label:"Dump Status" ~packing:bbox#add ()
+let button8 = GButton.button ~label:"Single Focus" ~packing:bbox#add ()
 (* Button9 *)
-let button9 = GButton.button ~label:"Spare" ~packing:bbox#add ()
+let button9 = GButton.button ~label:"Auto Focus" ~packing:bbox#add ()
+(* ButtonA *)
+let buttonA = GButton.button ~label:"Single Shot" ~packing:bbox#add ()
+(* ButtonB *)
+let buttonB = GButton.button ~label:"Single Astrometry" ~packing:bbox#add ()
+(* ButtonC *)
+let buttonC = GButton.button ~label:"Track On" ~packing:bbox#add ()
+(* ButtonD *)
+let buttonD = GButton.button ~label:"Track Off" ~packing:bbox#add ()
+
+let framprog = GBin.frame ~label: "Observation program" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
+let boxprog = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: framprog#add ()
+(* Button12 *)
+let button12 = GButton.button ~label:"Write Mosaic Program" ~packing:boxprog#add ()
+(* Button13 *)
+let button13 = GButton.button ~label:"Run Mosaic Program" ~packing:boxprog#add ()
+(* Button14 *)
+let button14 = GButton.button ~label:"Add Target to Observation Program" ~packing:boxprog#add ()
+(* Button15 *)
+let button15 = GButton.button ~label:"Start Observation Program" ~packing:boxprog#add ()
+(* Button16 *)
+let button16 = GButton.button ~label:"Abort All" ~packing:boxprog#add ()
+
 let _ = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vbox#add ()
 let status_win (box':GPack.box array) lbls =
   Array.init (Array.length lbls) (fun ix ->
@@ -191,12 +227,11 @@ let session = function
      ("pingTimeout", `Int ping_tim)] -> { sid; ping_int; ping_tim }
 | oth -> failwith ("session: "^Yojson.Basic.to_string oth)
 
-let id = "OpenStellina"
 let name = "Jonathans iMac"
 let polling = "polling"
 let eio = "3"
 let t' = "NzboPSr"
-let params' = [ ("id", id); ("name", name); ("EIO", eio); ("transport", polling); ("t", t') ]
+let params' = [ ("id", "OpenStellina"); ("name", name); ("EIO", eio); ("transport", polling); ("t", t') ]
 let headers = [ ("Content-Type", "text/plain; charset=utf-8") ]
 let pth = pth3'^"/socket.io/"
 let cookie = ref []
@@ -229,7 +264,7 @@ let post2' () =
     Utils.post' proto server params headers pth (Quests.Request.Raw ("44:420[\"message\",\"setSystemTime\","^time_ms_str^"]")) f
 
 let get3' () =
-    let params = ("sid", (!session').sid) :: [ ("id", id); ("name", name); ("EIO", eio); ("transport", "websocket") ] in
+    let params = ("sid", (!session').sid) :: [ ("id", "OpenStellina"); ("name", name); ("EIO", eio); ("transport", "websocket") ] in
     let headers = Utils.split ["Upgrade: websocket"; "Connection: Upgrade";
       "User-Agent: Mozilla/5.0 (iPad; CPU OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
       "Origin: http://localhost:8080";
@@ -283,13 +318,30 @@ let status' () =
 
 let obj_id = ref ""
 let obj_nam = ref ""
+let mos_id  = ref ""
 let xflip = ref "BOTH"
 let xgain = ref 200
-
+let sattr = ref (Stellarium.attr "")
+let jpegh = Hashtbl.create 127
 let gain_int = ref 200
-let expos_flt = ref 10.0
-let cnv_ra fmt = if check#active then print_endline fmt; Scanf.sscanf fmt "%f %f %f" (fun a b c -> a *. 15.0 +. b /. 4.0 +. c /. 240.0)
-let cnv_dec fmt = if check#active then print_endline fmt; try Scanf.sscanf fmt "%f %f %f" (fun a b c -> a +. b /. 60.0 +. c /. 3600.0) with _ -> Scanf.sscanf fmt "%f %f" (fun a b -> a +. b /. 60.0)
+let expos_us = ref 1000000
+let (prog_entries:Yojson.t list ref) = ref []
+
+let jpegadd s =
+ let len = String.length s in
+ let root = "/files/" in
+ let rlen = String.length root in
+ if len > rlen && String.sub s 0 rlen = root then
+    begin
+    if Hashtbl.mem jpegh s then () else
+        begin
+        if check#active then print_endline ("jpegadd: "^s);
+(* *)
+        Hashtbl.add jpegh s (ref false);
+(* *)
+        end;
+    status_jpeg#set_text s;
+    end
 
 let init' () =
     let cmd = if fake then "debug_fakeAutoInit" else "startAutoInit" in
@@ -305,15 +357,15 @@ let init' () =
 let observe' () =
     let cmd = if fake then "motors/pointTarget" else "general/startObservation" in
     let pth = pth2'^"/v1//"^cmd in
-    let ra_flt = cnv_ra entry_ra#text in
-    let dec_flt = cnv_dec entry_dec#text in
+    let ra_flt = Utils.cnv_ra entry_ra#text in
+    let dec_flt = Utils.cnv_dec entry_dec#text in
     if check#active then print_endline (string_of_float ra_flt^" "^string_of_float dec_flt);
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("ra", `Float ra_flt); ("de", `Float dec_flt); ("isJ2000", `Bool true);
      ("rot", `Int 0); ("objectId", `String !obj_id);
      ("objectName", `String !obj_nam); ("gain", `Int !gain_int);
-     ("exposureMicroSec", `Int (int_of_float (floor (!expos_flt *. 1000000.0)))); ("doStacking", `Bool true);
+     ("exposureMicroSec", `Int (!expos_us)); ("doStacking", `Bool true);
      ("histogramEnabled", `Bool true); ("histogramLow", `Float (-0.75));
      ("histogramMedium", `Int 5); ("histogramHigh", `Int 0);
      ("backgroundEnabled", `Bool true); ("backgroundPolyorder", `Int 4)])) f
@@ -327,7 +379,7 @@ let darks' () =
      ("overwrite", `Bool true);
      ("numExposures", `Int (int_of_string (entry_darkcnt#text)));
      ("gain", `Int !xgain);
-     ("exposureMicroSec", `Int (int_of_float (floor (!expos_flt *. 1000000.0))));
+     ("exposureMicroSec", `Int (!expos_us));
      ("flip", `String !xflip)])) f
 
 let focus' () =
@@ -336,8 +388,7 @@ let focus' () =
     Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") f
 
 let stopobs' () =
-    let cmd = if fake then "app/abortAllOperations" else "general/stopObservation" in
-    let pth = pth2'^"/v1//"^cmd in
+    let pth = pth2'^"/v1//general/stopObservation" in
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") f
 
@@ -354,17 +405,146 @@ let openarm' () =
       "Accept: */*"; "Connection: keep-alive"] in
     Utils.post' proto server [] headers pth (Quests.Request.Raw "{}") f
 
-let readstatus () =
+let motorstatus () =
     let pth = pth2'^"/v1//debug/motors/readAllStatusRegisters" in
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") f
+
+let motorgo () =
+    let pth = pth2'^"/v1//motors/goAbsolute" in
+    let f = (fun s -> errchk' true (cnv s)) in
+    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [("ALT", `Float (!sattr.alt));
+     ("AZ", `Float (!sattr.az))] )) f
+
+let track () =
+    let pth = pth2'^"/v1//motors/track" in
+    let f = (fun s -> errchk' true (cnv s)) in
+    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [("ALT", `Bool true);
+     ("AZ", `Bool true)] )) f
+
+let trackoff () =
+    let pth = pth2'^"/v1//motors/track" in
+    let f = (fun s -> errchk' true (cnv s)) in
+    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [("ALT", `Bool false);
+     ("AZ", `Bool false)] )) f
+
+let singlefocus () =
+    let pth = pth2'^"/v1//focus/singleFocus" in
+    let f = (fun s -> errchk' true (cnv s)) in
+    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [("algorithm", `String "DCT");
+     ] )) f
+
+let autofocus () =
+    let pth = pth2'^"/v1//focus/startAutoFocus" in
+    let f = (fun s -> errchk' true (cnv s)) in
+    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [("algorithm", `String "DCT");
+     ] )) f
 
 let park' () =
     let pth = pth2'^"/v1//general/park" in
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") f
 
-let sattr = ref (Stellarium.attr "")
+let singleshot () =
+    let pth = pth2'^"/v1//camera/singleAcquisition" in
+    let f = (fun s -> errchk' true (cnv s)) in
+    jpegadd "/files/temp/acquisition/IMG_0001.fits";
+    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [("type", `String "FITS"); (* or JPEG *)
+     ("wbr", `Int 50);
+     ("wbb", `Int 60);
+     ("flip", `Bool false);
+     ("gain", `Int !gain_int);
+     ("binningType", `String "SOFT");
+     ("binning", `Int 1);
+     ("exposureMicroSec", `Int (!expos_us));
+     ("requestStats", `Bool false);
+     ("enableMoonStats", `Bool false)] )) f
+
+let astrometry () =
+    let pth = pth2'^"/v1//astrometry/singleAstrometry" in
+    let f = (fun s -> errchk' true (cnv s)) in
+    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [("type", `String "JPEG");
+     ("binning", `Int 2);
+     ("gain", `Int !gain_int);
+     ("exposureMicroSec", `Int (!expos_us));
+     ("convertToDate", `Bool false)] )) f
+
+let mosaic () =
+    mos_id := "mo"^string_of_int (int_of_float (Unix.time()) mod 1000000);
+    let pth = pth2'^"/v1//automator/writeMosaicProgram" in
+    let f = (fun s -> errchk' true (cnv s)) in
+    let ra_flt = Utils.cnv_ra entry_ra#text in
+    let dec_flt = Utils.cnv_dec entry_dec#text in
+    let params = `Assoc [
+      ("doStacking", `Bool true);
+      ("gain", `Int !gain_int);
+      ("histogramEnabled", `Bool true);
+      ("histogramLow", `Int (-1));
+      ("histogramMedium", `Int 5);
+      ("histogramHigh", `Int 0);
+      ("backgroundEnabled", `Bool true);
+      ("exposureMicroSec", `Int (!expos_us));
+      ("objectId", `String !mos_id)] in
+    print_endline !mos_id;
+    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [("programName", `String !mos_id);
+     ("ra", `Float ra_flt);
+     ("de", `Float dec_flt);
+     ("settingsFrom", `String (!sattr.target));
+     ("gridWidth", `Int 3);
+     ("gridHeight", `Int 3);
+     ("numImages", `Int 3);
+     ("numPasses", `Int 3);
+     ("widthMinOverlap", `Float 0.1);
+     ("heightMinOverlap", `Float 0.1);
+     ("widthPassOffset", `Float 0.1);
+     ("heightPassOffset", `Float 0.1);
+     ("observationParams", params)] )) f
+
+let startprog () =
+    let pth = pth2'^"/v1//automator/startObservationProgram" in
+    let time_ms = int_of_float (Unix.time() *. 1000.0) in
+    let lat_flt = float_of_string entry_lat#text in
+    let long_flt = float_of_string entry_long#text in
+    let f = (fun s -> errchk' true (cnv s)) in
+    let lst = List.rev !prog_entries in
+    prog_entries := [];
+    print_endline ("Entries in program: "^string_of_int (List.length lst));
+    List.iteri (fun ix (itm:Yojson.t) -> print_endline ("observation["^string_of_int ix^"]: "^Yojson.to_string itm)) lst;
+    let (prog':Yojson.t) = `Assoc
+        [("skipAutoInit", `Bool false);
+         ("latitude", `Float lat_flt);
+         ("longitude", `Float long_flt);
+         ("startTime", `Int time_ms);
+         ("observations", `List lst)] in
+    print_endline !mos_id;
+    Utils.post' proto server [] [] pth (Quests.Request.Json prog') f
+
+let obsprog () =
+    let pth = pth2'^"/v1//automator/runObservationProgram" in
+    let time_ms = int_of_float (Unix.time() *. 1000.0) in
+    let lat_flt = float_of_string entry_lat#text in
+    let long_flt = float_of_string entry_long#text in
+    let f = (fun s -> errchk' true (cnv s)) in
+    print_endline !mos_id;
+    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [("programName", `String !mos_id);
+     ("skipAutoInit", `Bool false);
+     ("latitude", `Float lat_flt);
+     ("longitude", `Float long_flt);
+     ("startTime", `Int time_ms)] )) f
+
+let abortall () =
+    let pth = pth2'^"/v1//app/abortAllOperations" in
+    let f = (fun s -> errchk' true (cnv s)) in
+    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") f
 
 let stellarium' () =
     let debug (attr:Stellarium.attr) =
@@ -376,8 +556,6 @@ let stellarium' () =
       targ_status#set_text (attr.target ^ ": found") in
     let f = (fun s -> match s.[0] with '{' -> Stellarium.descend !sattr (Yojson.Basic.from_string s); debug !sattr | _ -> targ_status#set_text s ) in
     Stellarium.stellarium' !sattr f
-
-let jpegh = Hashtbl.create 127
 
 let fetch' () =
     let jhash = ref ("",ref false) in
@@ -401,7 +579,8 @@ let fetch' () =
 
 let taskarray =
        [|
-         ("get1", get1');
+         ("", status');
+         ("connect", get1');
          ("post2", post2');
          ("get3", get3');
          ("get4", get4');
@@ -419,9 +598,30 @@ let taskarray =
          ("", status');
          ("park", park');
          ("", status');
-         ("darks", darks');
+         ("motorgo", motorgo);
+         ("motorstatus", motorstatus);
          ("", status');
-         ("readstatus", readstatus);
+         ("singlefocus", singlefocus);
+         ("", status');
+         ("autofocus", autofocus);
+         ("", status');
+         ("singleshot", singleshot);
+         ("", status');
+         ("astrometry", astrometry);
+         ("", status');
+         ("track", track);
+         ("", status');
+         ("trackoff", trackoff);
+         ("", status');
+         ("mosaic", mosaic);
+         ("", status');
+         ("obsprog", obsprog);
+         ("", status');
+         ("startprog", startprog);
+         ("", status');
+         ("abortall", abortall);
+         ("", status');
+         ("darks", darks');
          ("", status');
          ("fetch", fetch');
          ("", status');
@@ -438,26 +638,16 @@ let err ix errmsg =
     ix := stoptask
 *)
 
-let jpegadd s =
- let len = String.length s in
- let root = "/files/captures/" in
- let rlen = String.length root in
- if len > rlen && String.sub s 0 rlen = root then
-    begin
-    if Hashtbl.mem jpegh s then () else
-        begin
-        if check#active then print_endline ("jpegadd: "^s);
-        Hashtbl.add jpegh s (ref false);
-        end;
-    status_jpeg#set_text s;
-    end
-
 let quit' = ref false
 
 let sm_jump lbl' = 
   let target = ref (-1) in
   Array.iteri (fun ix (lbl, _) -> if lbl=lbl' then (target := ix; if check#active then print_endline (string_of_int (ix+1)^": "^lbl'))) taskarray;
-  if !target <> -1 then Queue.add !target start
+  if !target <> -1 then
+    begin
+    Queue.add !target start;
+    print_endline (fst taskarray.(!target))
+    end
 
 let search () = 
     let s = targ_entry#text in
@@ -494,7 +684,7 @@ let rec iter_a ix a =
         begin
         Hashtbl.iter (fun _ x -> if !x then () else sm_jump "fetch") jpegh;
         update_status ();
-        usleep 1.0;
+        usleep 0.1;
         let waiting = false in
         Lwt_engine.iter waiting;
         Lwt.apply (fun f -> f ()) x >>= fun () -> iter_a ix a
@@ -514,29 +704,60 @@ let app_status' () =
  Hashtbl.iter (fun k x -> output_string fd (k^": "^x^"\n")) statush;
  close_out fd
 
-let gui () = 
+let exposlidefunc _ v = expos_us := int_of_float (floor (1.3 ** v)); entry_exp#set_text (string_of_int !expos_us)
+let gainslidefunc _ v = gain_int := int_of_float (floor (v *. 10.0)); entry_gain#set_text (Printf.sprintf "%4.1f" (float_of_int !gain_int /. 10.0))
 
+let add_prog_entry () =
+    let ra_flt = Utils.cnv_ra entry_ra#text in
+    let dec_flt = Utils.cnv_dec entry_dec#text in
+    print_endline ("add_prog_entry: "^string_of_float ra_flt^" "^string_of_float dec_flt);
+    let obs = `Assoc
+         [("duration", `Int 2);
+          ("params",
+           `Assoc
+             [("objectId", `String "M42"); ("ra", `Float ra_flt);
+              ("de", `Float dec_flt); ("rot", `Int 0); ("gain", `Int !gain_int);
+              ("histogramEnabled", `Bool true); ("histogramLow", `Int (-1));
+              ("histogramMedium", `Int 5); ("histogramHigh", `Int 0);
+              ("backgroundEnabled", `Bool true);
+              ("exposureMicroSec", `Int !expos_us);
+              ("doStacking", `Bool true);
+              ("debayerInterpolation", `String "VNG")])] in
+    prog_entries := obs :: !prog_entries
+
+let gui () = 
   ignore @@ factory_fil#add_item "Quit" ~callback: app_quit';
   ignore @@ factory_stell#add_item "Status" ~callback: app_status';
 (* Quit when the window is closed. *)
   ignore (window#connect#destroy ~callback: app_quit');
+  ignore (button0#connect#clicked ~callback: (fun () -> sm_jump "connect"));
   ignore (button1#connect#clicked ~callback: (fun () -> sm_jump "openarm"));
   ignore (button2#connect#clicked ~callback: (fun () -> sm_jump "init"));
   ignore (button3#connect#clicked ~callback: (fun () -> sm_jump "observe"));
   ignore (button4#connect#clicked ~callback: (fun () -> sm_jump "focus"));
   ignore (button5#connect#clicked ~callback: (fun () -> sm_jump "stopobs"));
   ignore (button6#connect#clicked ~callback: (fun () -> sm_jump "park"));
-  ignore (button7#connect#clicked ~callback: (fun () -> sm_jump "readstatus"));
-  ignore (button8#connect#clicked ~callback: (fun () -> app_status' ()));
-  ignore (button9#connect#clicked ~callback: (fun () -> print_endline "function TBD"));
-  ignore (rng#connect#change_value ~callback:(fun _ v -> expos_flt := v));
-  ignore (rng#set_digits 2); (*decimal digits*)
+  ignore (button7#connect#clicked ~callback: (fun () -> sm_jump "motorgo"));
+  ignore (button8#connect#clicked ~callback: (fun () -> sm_jump "singlefocus"));
+  ignore (button9#connect#clicked ~callback: (fun () -> sm_jump "autofocus"));
+  ignore (buttonA#connect#clicked ~callback: (fun () -> sm_jump "singleshot"));
+  ignore (buttonB#connect#clicked ~callback: (fun () -> sm_jump "astrometry"));
+  ignore (buttonC#connect#clicked ~callback: (fun () -> sm_jump "trackon"));
+  ignore (buttonD#connect#clicked ~callback: (fun () -> sm_jump "trackoff"));
+  ignore (button12#connect#clicked ~callback: (fun () -> sm_jump "mosaic"));
+  ignore (button13#connect#clicked ~callback: (fun () -> sm_jump "obsprog"));
+  ignore (button14#connect#clicked ~callback: (fun () -> add_prog_entry() ));
+  ignore (button15#connect#clicked ~callback: (fun () -> sm_jump "startprog"));
+  ignore (button16#connect#clicked ~callback: (fun () -> sm_jump "abortall"));
   ignore (rbutton1#connect#clicked ~callback:(fun () -> xflip := "FLIP"));
   ignore (rbutton2#connect#clicked ~callback:(fun () -> xflip := "NO_FLIP"));
   ignore (rbutton3#connect#clicked ~callback:(fun () -> xflip := "BOTH"));
+  ignore (rng#connect#change_value ~callback:exposlidefunc);
+  ignore (gain#connect#change_value ~callback:gainslidefunc);
+  exposlidefunc () 47.5;
+  gainslidefunc () 20.0;
   entry_darkcnt#set_text "100";
   ignore (dbutton2#connect#clicked ~callback: (fun () -> sm_jump "darks"));
-
   tz'#set_text tzcity;
   tz'#set_editable false;
 
@@ -662,6 +883,6 @@ let tasks =
   iter_a (ref 0) taskarray
 
 let run () =
-  Lwt_main.run tasks
+  try Lwt_main.run tasks with _ -> print_endline "error"
 
 let _ = run()
