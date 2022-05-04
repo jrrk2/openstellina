@@ -33,7 +33,7 @@ let statush = Hashtbl.create 32767
 let _ = GMain.init ()
 (* Install Lwt<->Glib integration. *)
 let _ = Lwt_glib.install ()
-let window = GWindow.window ~width:1000 ~height:1000 ~title:"Openstellina GUI demo" ()
+let window = GWindow.window ~width:1000 ~height:1000 ~title:"Openstellina GUI by Dr Jonathan Kimmitt" ()
 let vbox = GPack.vbox ~packing:window#add ()
 (* Menu bar *)
 let menubar = GMenu.menu_bar ~packing:vbox#pack ()
@@ -47,8 +47,12 @@ let factory_fil = new GMenu.factory file_menu ~accel_group
 let factory_stell = new GMenu.factory stell_menu ~accel_group
 
 let box2 = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: vbox#add ()
-let boxu = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: box2#add ()
-let boxh = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: box2#add ()
+let frame_eaa = GBin.frame ~label: "Electronically assisted astronomy functions" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
+
+let boxu = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: frame_eaa#add ()
+let frame_target = GBin.frame ~label: "Target object settings" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
+let boxt = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: frame_target#add ()
+let boxh = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
 
 (* Button0 *)
 let button0 = GButton.button ~label:"Connect WiFi" ~packing:boxu#add ()
@@ -94,14 +98,21 @@ let frame_gain = GBin.frame ~label: "Gain (dB)" ~packing:(boxh#pack ~expand:true
 let entry_gain = GEdit.entry ~max_length: 10 ~packing: frame_gain#add ()
 
 (* Range1 *)
-let fram_rng = GBin.frame ~label: "Exposure" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
+let fram_rng = GBin.frame ~label: "Exposure" ~packing:(boxt#pack ~expand:true ~fill:true ~padding:2) ()
 let expadj = GData.adjustment ~lower:26.0 ~upper:69.0 ~step_incr:0.01 ~page_incr:0.1 ()
 let rng = GRange.scale `HORIZONTAL ~adjustment:expadj ~draw_value:false ~packing:fram_rng#add ()
 
 (* Gain *)
-let fram_gain = GBin.frame ~label: "Gain" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
+let fram_gain = GBin.frame ~label: "Gain" ~packing:(boxt#pack ~expand:true ~fill:true ~padding:2) ()
 let gainadj = GData.adjustment ~lower:0.0 ~upper:49.0 ~step_incr:0.1 ~page_incr:1.0 ()
 let gain = GRange.scale `HORIZONTAL ~adjustment:gainadj ~draw_value:false ~packing:fram_gain#add ()
+
+(* check if verbose *)
+let check = GButton.check_button ~label: "Verbose" ~active: false ~packing: boxt#add ()
+
+let framprog = GBin.frame ~label: "Observation program" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
+
+let frame_observatory = GBin.frame ~label: "Observatory settings" ~packing:(box2#pack ~expand:true ~fill:true ~padding:0) ()
 
 let framx = GBin.frame ~label: "Dark frames" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
 
@@ -118,22 +129,22 @@ let _ = GMisc.separator `HORIZONTAL ~packing: vbox#pack ()
 
 (* Dark Button2 *)
 let dbutton2 = GButton.button ~label:"Generate darks" ~packing:box3#add ()
-let obox = GPack.hbox ~border_width:10 ~packing:vbox#add ()
+
+let obox = GPack.hbox ~border_width:10 ~packing:frame_observatory#add ()
 let vbox' = GPack.vbox ~border_width:10 ~packing:obox#add ()
-let frame_obs = GBin.frame ~label:"Observatory location" ~packing:vbox'#pack ()
+let frame_obs = GBin.frame ~label:"location" ~packing:vbox'#pack ()
 let obox' = GPack.vbox ~border_width:5 ~packing:frame_obs#add ()
 let frame_tz = GBin.frame ~label:"TimeZone (from O/S)" ~packing:vbox'#pack ()
 let tz' = GEdit.entry ~max_length: 30 ~packing: frame_tz#add ()
-let check = GButton.check_button ~label: "Verbose" ~active: false ~packing: vbox'#add ()
 let sbox = GPack.hbox ~border_width:5 ~packing:vbox'#add ()
 let frame_entry = GBin.frame ~label:"Target Search" ~packing:sbox#pack ()
 let targ_entry = GEdit.entry ~max_length: 30 ~packing: frame_entry#add ()
 let frame_status = GBin.frame ~label:"Target Result" ~packing:sbox#pack ()
 let targ_status = GEdit.entry ~max_length: 30 ~packing: frame_status#add ()
 let llbox = GPack.vbox ~spacing:1 ~border_width: 10 ~packing: obox#add ()
-let frame_lat = GBin.frame ~label: "Observatory Latitude" ~packing:(llbox#pack ~expand:true (* ~fill:false ~padding:0 *) ) ()
+let frame_lat = GBin.frame ~label: "Latitude" ~packing:(llbox#pack ~expand:true (* ~fill:false ~padding:0 *) ) ()
 let entry_lat = GEdit.entry ~max_length: 20 ~packing: frame_lat#add ()
-let frame_long = GBin.frame ~label: "Observatory Longitude" ~packing:(llbox#pack ~expand:true (* ~fill:false ~padding:0 *) ) ()
+let frame_long = GBin.frame ~label: "Longitude" ~packing:(llbox#pack ~expand:true (* ~fill:false ~padding:0 *) ) ()
 let entry_long = GEdit.entry ~max_length: 20 ~packing: frame_long#add ()
 let bbox = GPack.hbox ~border_width:5 ~packing:llbox#add ()
 (* Button7 *)
@@ -151,8 +162,9 @@ let buttonC = GButton.button ~label:"Track On" ~packing:bbox#add ()
 (* ButtonD *)
 let buttonD = GButton.button ~label:"Track Off" ~packing:bbox#add ()
 
-let framprog = GBin.frame ~label: "Observation program" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
-let boxprog = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: framprog#add ()
+let vboxprog = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: framprog#add ()
+let boxprog = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vboxprog#add ()
+let eboxprog = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vboxprog#add ()
 (* Button12 *)
 let button12 = GButton.button ~label:"Write Mosaic Program" ~packing:boxprog#add ()
 (* Button13 *)
@@ -163,6 +175,23 @@ let button14 = GButton.button ~label:"Add Target to Observation Program" ~packin
 let button15 = GButton.button ~label:"Start Observation Program" ~packing:boxprog#add ()
 (* Button16 *)
 let button16 = GButton.button ~label:"Abort All" ~packing:boxprog#add ()
+(* program parameters *)
+let frame_gridw = GBin.frame ~label: "Grid width" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_gridw = GEdit.entry ~max_length: 18 ~packing: frame_gridw#add ()
+let frame_gridh = GBin.frame ~label: "Grid height" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_gridh = GEdit.entry ~max_length: 18 ~packing: frame_gridh#add ()
+let frame_numi = GBin.frame ~label: "Num images" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_numi = GEdit.entry ~max_length: 18 ~packing: frame_numi#add ()
+let frame_nump = GBin.frame ~label: "Num passes" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_nump = GEdit.entry ~max_length: 18 ~packing: frame_nump#add ()
+let frame_wminov = GBin.frame ~label: "Width min overlap" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_wminov = GEdit.entry ~max_length: 18 ~packing: frame_wminov#add ()
+let frame_hminov = GBin.frame ~label: "Height min overlap" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_hminov = GEdit.entry ~max_length: 18 ~packing: frame_hminov#add ()
+let frame_wpassof = GBin.frame ~label: "Width pass offset" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_wpassof = GEdit.entry ~max_length: 18 ~packing: frame_wpassof#add ()
+let frame_hpassof = GBin.frame ~label: "Height pass offset" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_hpassof = GEdit.entry ~max_length: 18 ~packing: frame_hpassof#add ()
 
 let _ = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vbox#add ()
 let status_win (box':GPack.box array) lbls =
@@ -191,7 +220,7 @@ let lbls = [|
 status_win (Array.init (Array.length lbls) (fun ix -> boxs)) lbls
 *)
 
-let visible_extra = Array.of_list (Hidemsg.remove' Msgs.msgs)
+let visible_extra = Array.of_list (List.sort compare (Hidemsg.remove' Msgs.msgs))
 let crntbox () = GPack.hbox ~spacing:1 ~border_width: 5 ~packing: vbox#add ()
 let crnt' = ref (crntbox())
 let boxa = Array.init (Array.length visible_extra) (fun ix -> let rslt = !crnt' in if ix mod 5 = 4 then crnt' := crntbox(); rslt)
@@ -236,11 +265,17 @@ let headers = [ ("Content-Type", "text/plain; charset=utf-8") ]
 let pth = pth3'^"/socket.io/"
 let cookie = ref []
 let hdrs = ref []
+let misclst = ref []
 
 let rec errchklst' user (arg:string*Yojson.Basic.t) = match arg with
 | (kw', `List errlst) -> let errlst' = List.mapi (fun ix (itm) -> (kw'^"["^string_of_int ix^"]", itm)) errlst in List.iter (errchklst' user) errlst'
 | (kw', `Assoc lst) -> let lst' = List.map (fun (kw,itm) -> (kw' ^ "@" ^ kw, itm)) lst in List.iter (errchklst' user) lst'
-| (kw', `String s) -> Hashtbl.replace statush (if user then kw' else "!"^kw') s
+| (kw', `String s) -> Hashtbl.replace statush (if user then kw' else "!"^kw') s;
+  (match s with
+    | "" -> ()
+    | "buffer is empty" -> ()
+    | _ -> if s.[0] = '{' then List.iter (fun s -> try  if s <> "" then misclst := (kw', Yojson.Basic.from_string s) :: !misclst with _ -> print_endline ("errchklst':"^s)) (String.split_on_char '\n' s)
+    )
 | (kw', `Bool b) -> Hashtbl.replace statush (if user then kw' else "!"^kw') (string_of_bool b)
 | (kw', `Null) -> Hashtbl.replace statush (if user then kw' else "!"^kw') "empty"
 | (kw', `Float f) -> Hashtbl.replace statush (if user then kw' else "!"^kw') (string_of_float f)
@@ -253,15 +288,24 @@ and errchklst user = function
 let errchk' user (arg:Yojson.Basic.t) = errchklst' user ("R", arg)
 let proto = "http://"
 
+let cnv' iter = fun s -> let lst = fun s ->
+    let l = String.split_on_char '\n' s in
+    if check#active then List.iter (fun s ->
+                   if s <> "{\"success\":true,\"result\":{\"message\":\"buffer is empty\"}}" then 
+                     print_endline s) l;
+    l in
+    List.iter iter (lst s)
+
 let get1' () =
-    Utils.get' proto server params' headers pth (fun s -> session' := session (cnv s)) hdrs
+    let iter = fun s -> session' := session (cnv s) in
+    Utils.get' proto server params' headers pth (cnv' iter) hdrs
 
 let post2' () =
     cookie := List.filter (function ("Content-Length", _) -> false | _ -> true) !hdrs;
     let params = (("sid", (!session').sid) :: params') in
     let time_ms_str = string_of_int (int_of_float (Unix.time() *. 1000.0)) in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server params headers pth (Quests.Request.Raw ("44:420[\"message\",\"setSystemTime\","^time_ms_str^"]")) f
+    Utils.post' proto server params headers pth (Quests.Request.Raw ("44:420[\"message\",\"setSystemTime\","^time_ms_str^"]")) (cnv' f)
 
 let get3' () =
     let params = ("sid", (!session').sid) :: [ ("id", "OpenStellina"); ("name", name); ("EIO", eio); ("transport", "websocket") ] in
@@ -273,7 +317,8 @@ let get3' () =
       "Accept-Language: en-GB,en;q=0.9"; "Sec-WebSocket-Version: 13";
       "Sec-WebSocket-Key: U3EsKacH/DvIMkbPXUr92Q=="; "Accept: */*";
       "Pragma: no-cache" (*; "Host: "^ipaddr^":8083" *) ] in
-    Utils.get' proto server params headers pth (fun s -> errchk' true (cnv s)) hdrs
+    let f = (fun s -> errchk' true (cnv s)) in
+    Utils.get' proto server params headers pth (cnv' f) hdrs
 
 let get4' () =
     let params = (("sid", (!session').sid) :: params') in
@@ -283,7 +328,8 @@ let get4' () =
       "User-Agent: Mozilla/5.0 (iPad; CPU OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
       "Accept: application/json";
       "Connection: keep-alive"] in
-    Utils.get' proto server params headers pth (fun s -> errchk' true (cnv s)) hdrs
+    let f = (fun s -> errchk' true (cnv s)) in
+    Utils.get' proto server params headers pth (cnv' f) hdrs
 
 let post5' () =
     let params = (("sid", (!session').sid) :: params') in
@@ -292,7 +338,7 @@ let post5' () =
       "Access-Control-Allow-Credentials: true";
       "Content-Encoding: gzip"] in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server params headers pth (Quests.Request.Raw ("31:421[\"message\",\"getStatus\",null]")) f
+    Utils.post' proto server params headers pth (Quests.Request.Raw ("31:421[\"message\",\"getStatus\",null]")) (cnv' f)
 
 let get6' () =
     let params = (("sid", (!session').sid) :: params') in
@@ -301,7 +347,8 @@ let get6' () =
       "Accept-Language: en-GB,en;q=0.9";
       "User-Agent: Mozilla/5.0 (iPad; CPU OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
       "Accept: */*"; "Connection: keep-alive"] in
-    Utils.get' proto server params headers pth (fun s -> errchk' true (cnv s)) hdrs
+    let f = (fun s -> errchk' true (cnv s)) in
+    Utils.get' proto server params headers pth (cnv' f) hdrs
 
 let status' () =
     let params = [] in
@@ -314,7 +361,7 @@ let status' () =
     "Accept-Language: en-GB,en;q=0.9"] in
     let pth = pth2'^"/v1//logs/consume" in
     let f = (fun s -> errchk' false (cnv s)) in
-    Utils.post' proto server params headers pth (Quests.Request.Raw ("{}")) f
+    Utils.post' proto server params headers pth (Quests.Request.Raw ("{}")) (cnv' f)
 
 let obj_id = ref ""
 let obj_nam = ref ""
@@ -352,7 +399,7 @@ let init' () =
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("latitude", `Float lat_flt);
-     ("longitude", `Float long_flt); ("time", `Int time_ms)] )) f
+     ("longitude", `Float long_flt); ("time", `Int time_ms)] )) (cnv' f)
 
 let observe' () =
     let cmd = if fake then "motors/pointTarget" else "general/startObservation" in
@@ -368,7 +415,7 @@ let observe' () =
      ("exposureMicroSec", `Int (!expos_us)); ("doStacking", `Bool true);
      ("histogramEnabled", `Bool true); ("histogramLow", `Float (-0.75));
      ("histogramMedium", `Int 5); ("histogramHigh", `Int 0);
-     ("backgroundEnabled", `Bool true); ("backgroundPolyorder", `Int 4)])) f
+     ("backgroundEnabled", `Bool true); ("backgroundPolyorder", `Int 4)])) (cnv' f)
 
 let darks' () =
     let pth = pth2'^"/v1//expertMode/startStorageAcquisition" in
@@ -380,17 +427,17 @@ let darks' () =
      ("numExposures", `Int (int_of_string (entry_darkcnt#text)));
      ("gain", `Int !xgain);
      ("exposureMicroSec", `Int (!expos_us));
-     ("flip", `String !xflip)])) f
+     ("flip", `String !xflip)])) (cnv' f)
 
 let focus' () =
     let pth = pth2'^"/v1//general/adjustObservationFocus" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") f
+    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
 let stopobs' () =
     let pth = pth2'^"/v1//general/stopObservation" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") f
+    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
 (*
 let status'' () =
@@ -403,52 +450,52 @@ let openarm' () =
     let f = (fun s -> errchk' true (cnv s)) in
     let headers = Utils.split [
       "Accept: */*"; "Connection: keep-alive"] in
-    Utils.post' proto server [] headers pth (Quests.Request.Raw "{}") f
+    Utils.post' proto server [] headers pth (Quests.Request.Raw "{}") (cnv' f)
 
 let motorstatus () =
     let pth = pth2'^"/v1//debug/motors/readAllStatusRegisters" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") f
+    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
 let motorgo () =
     let pth = pth2'^"/v1//motors/goAbsolute" in
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("ALT", `Float (!sattr.alt));
-     ("AZ", `Float (!sattr.az))] )) f
+     ("AZ", `Float (!sattr.az))] )) (cnv' f)
 
 let track () =
     let pth = pth2'^"/v1//motors/track" in
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("ALT", `Bool true);
-     ("AZ", `Bool true)] )) f
+     ("AZ", `Bool true)] )) (cnv' f)
 
 let trackoff () =
     let pth = pth2'^"/v1//motors/track" in
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("ALT", `Bool false);
-     ("AZ", `Bool false)] )) f
+     ("AZ", `Bool false)] )) (cnv' f)
 
 let singlefocus () =
     let pth = pth2'^"/v1//focus/singleFocus" in
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("algorithm", `String "DCT");
-     ] )) f
+     ] )) (cnv' f)
 
 let autofocus () =
     let pth = pth2'^"/v1//focus/startAutoFocus" in
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("algorithm", `String "DCT");
-     ] )) f
+     ] )) (cnv' f)
 
 let park' () =
     let pth = pth2'^"/v1//general/park" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") f
+    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
 let singleshot () =
     let pth = pth2'^"/v1//camera/singleAcquisition" in
@@ -464,7 +511,7 @@ let singleshot () =
      ("binning", `Int 1);
      ("exposureMicroSec", `Int (!expos_us));
      ("requestStats", `Bool false);
-     ("enableMoonStats", `Bool false)] )) f
+     ("enableMoonStats", `Bool false)] )) (cnv' f)
 
 let astrometry () =
     let pth = pth2'^"/v1//astrometry/singleAstrometry" in
@@ -474,7 +521,7 @@ let astrometry () =
      ("binning", `Int 2);
      ("gain", `Int !gain_int);
      ("exposureMicroSec", `Int (!expos_us));
-     ("convertToDate", `Bool false)] )) f
+     ("convertToDate", `Bool false)] )) (cnv' f)
 
 let mosaic () =
     mos_id := "mo"^string_of_int (int_of_float (Unix.time()) mod 1000000);
@@ -491,22 +538,21 @@ let mosaic () =
       ("histogramHigh", `Int 0);
       ("backgroundEnabled", `Bool true);
       ("exposureMicroSec", `Int (!expos_us));
-      ("objectId", `String !mos_id)] in
-    print_endline !mos_id;
+      ("objectId", `String (!sattr.target))] in
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("programName", `String !mos_id);
      ("ra", `Float ra_flt);
      ("de", `Float dec_flt);
      ("settingsFrom", `String (!sattr.target));
-     ("gridWidth", `Int 3);
-     ("gridHeight", `Int 3);
-     ("numImages", `Int 3);
-     ("numPasses", `Int 3);
-     ("widthMinOverlap", `Float 0.1);
-     ("heightMinOverlap", `Float 0.1);
-     ("widthPassOffset", `Float 0.1);
-     ("heightPassOffset", `Float 0.1);
-     ("observationParams", params)] )) f
+     ("gridWidth", `Int (int_of_string (entry_gridw#text)));
+     ("gridHeight", `Int (int_of_string (entry_gridh#text)));
+     ("numImages", `Int (int_of_string (entry_numi#text)));
+     ("numPasses", `Int (int_of_string (entry_nump#text)));
+     ("widthMinOverlap", `Float (float_of_string (entry_wminov#text)));
+     ("heightMinOverlap", `Float (float_of_string (entry_hminov#text)));
+     ("widthPassOffset", `Float (float_of_string (entry_wpassof#text)));
+     ("heightPassOffset", `Float (float_of_string (entry_hpassof#text)));
+     ("observationParams", params)] )) (cnv' f)
 
 let startprog () =
     let pth = pth2'^"/v1//automator/startObservationProgram" in
@@ -525,7 +571,7 @@ let startprog () =
          ("startTime", `Int time_ms);
          ("observations", `List lst)] in
     print_endline !mos_id;
-    Utils.post' proto server [] [] pth (Quests.Request.Json prog') f
+    Utils.post' proto server [] [] pth (Quests.Request.Json prog') (cnv' f)
 
 let obsprog () =
     let pth = pth2'^"/v1//automator/runObservationProgram" in
@@ -539,12 +585,12 @@ let obsprog () =
      ("skipAutoInit", `Bool false);
      ("latitude", `Float lat_flt);
      ("longitude", `Float long_flt);
-     ("startTime", `Int time_ms)] )) f
+     ("startTime", `Int time_ms)] )) (cnv' f)
 
 let abortall () =
     let pth = pth2'^"/v1//app/abortAllOperations" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") f
+    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
 let stellarium' () =
     let debug (attr:Stellarium.attr) =
@@ -555,7 +601,7 @@ let stellarium' () =
       entry_mag#set_text (Printf.sprintf "%6.2f" attr.vis_mag);
       targ_status#set_text (attr.target ^ ": found") in
     let f = (fun s -> match s.[0] with '{' -> Stellarium.descend !sattr (Yojson.Basic.from_string s); debug !sattr | _ -> targ_status#set_text s ) in
-    Stellarium.stellarium' !sattr f
+    Stellarium.stellarium' !sattr (cnv' f)
 
 let fetch' () =
     let jhash = ref ("",ref false) in
@@ -575,7 +621,7 @@ let fetch' () =
                      let fd = open_out pth' in
                      output_string fd s;
                      close_out fd in
-    Utils.get' proto server [] headers pth f hdrs
+    Utils.get' proto server [] headers pth (cnv' f) hdrs
 
 let taskarray =
        [|
@@ -700,6 +746,7 @@ let color = ref (`RGB (0, 65535, 0))
 
 let app_quit' () = quit' := true
 let app_status' () =
+ print_endline (string_of_int (List.length !misclst));
  let fd = open_out "logfile.txt" in
  Hashtbl.iter (fun k x -> output_string fd (k^": "^x^"\n")) statush;
  close_out fd
@@ -715,10 +762,15 @@ let add_prog_entry () =
          [("duration", `Int 2);
           ("params",
            `Assoc
-             [("objectId", `String "M42"); ("ra", `Float ra_flt);
-              ("de", `Float dec_flt); ("rot", `Int 0); ("gain", `Int !gain_int);
-              ("histogramEnabled", `Bool true); ("histogramLow", `Int (-1));
-              ("histogramMedium", `Int 5); ("histogramHigh", `Int 0);
+             [("objectId", `String ( !sattr.target ));
+              ("ra", `Float ra_flt);
+              ("de", `Float dec_flt);
+              ("rot", `Int 0);
+              ("gain", `Int !gain_int);
+              ("histogramEnabled", `Bool true);
+              ("histogramLow", `Int (-1));
+              ("histogramMedium", `Int 5);
+              ("histogramHigh", `Int 0);
               ("backgroundEnabled", `Bool true);
               ("exposureMicroSec", `Int !expos_us);
               ("doStacking", `Bool true);
@@ -757,6 +809,14 @@ let gui () =
   exposlidefunc () 47.5;
   gainslidefunc () 20.0;
   entry_darkcnt#set_text "100";
+  entry_gridw#set_text "3";
+  entry_gridh#set_text "3";
+  entry_numi#set_text "3";
+  entry_nump#set_text "3";
+  entry_wminov#set_text "0.1";
+  entry_hminov#set_text "0.1";
+  entry_wpassof#set_text "0.1";
+  entry_hpassof#set_text "0.1";
   ignore (dbutton2#connect#clicked ~callback: (fun () -> sm_jump "darks"));
   tz'#set_text tzcity;
   tz'#set_editable false;
@@ -883,6 +943,6 @@ let tasks =
   iter_a (ref 0) taskarray
 
 let run () =
-  try Lwt_main.run tasks with _ -> print_endline "error"
+  (*try*) Lwt_main.run tasks (*with _ -> print_endline "error"*)
 
 let _ = run()
