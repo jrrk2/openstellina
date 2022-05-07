@@ -55,7 +55,7 @@ let boxt = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: frame_target#add ()
 let boxh = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
 
 (* Button0 *)
-let button0 = GButton.button ~label:"Connect WiFi" ~packing:boxu#add ()
+let button0 = GButton.button ~label:"Take Control" ~packing:boxu#add ()
 
 (* Button1 *)
 let button1 = GButton.button ~label:"Open Arm" ~packing:boxu#add ()
@@ -97,6 +97,7 @@ let entry_exp = GEdit.entry ~max_length: 10 ~packing: frame_exp#add ()
 let frame_gain = GBin.frame ~label: "Gain (dB)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
 let entry_gain = GEdit.entry ~max_length: 10 ~packing: frame_gain#add ()
 
+(*
 (* Range1 *)
 let fram_rng = GBin.frame ~label: "Exposure" ~packing:(boxt#pack ~expand:true ~fill:true ~padding:2) ()
 let expadj = GData.adjustment ~lower:26.0 ~upper:69.0 ~step_incr:0.01 ~page_incr:0.1 ()
@@ -106,6 +107,7 @@ let rng = GRange.scale `HORIZONTAL ~adjustment:expadj ~draw_value:false ~packing
 let fram_gain = GBin.frame ~label: "Gain" ~packing:(boxt#pack ~expand:true ~fill:true ~padding:2) ()
 let gainadj = GData.adjustment ~lower:0.0 ~upper:49.0 ~step_incr:0.1 ~page_incr:1.0 ()
 let gain = GRange.scale `HORIZONTAL ~adjustment:gainadj ~draw_value:false ~packing:fram_gain#add ()
+*)
 
 (* check if verbose *)
 let check = GButton.check_button ~label: "Verbose" ~active: false ~packing: boxt#add ()
@@ -136,11 +138,26 @@ let frame_obs = GBin.frame ~label:"location" ~packing:vbox'#pack ()
 let obox' = GPack.vbox ~border_width:5 ~packing:frame_obs#add ()
 let frame_tz = GBin.frame ~label:"TimeZone (from O/S)" ~packing:vbox'#pack ()
 let tz' = GEdit.entry ~max_length: 30 ~packing: frame_tz#add ()
+
+let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(vbox'#pack ~expand:true ~fill:true ~padding:2) ()
+let boxserv = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: framserv#add ()
+let rbuttons1 = GButton.radio_button ~label:"Simbad" ~packing: boxserv#add ()
+let rbuttons2 = GButton.radio_button ~group:rbuttons1#group ~label:"Stellarium" ~packing: boxserv#add ()
+let rbuttons3 = GButton.radio_button ~group:rbuttons1#group ~label:"Messier" ~active:true ~packing: boxserv#add ()
+
 let sbox = GPack.hbox ~border_width:5 ~packing:vbox'#add ()
 let frame_entry = GBin.frame ~label:"Target Search" ~packing:sbox#pack ()
 let targ_entry = GEdit.entry ~max_length: 30 ~packing: frame_entry#add ()
 let frame_status = GBin.frame ~label:"Target Result" ~packing:sbox#pack ()
 let targ_status = GEdit.entry ~max_length: 30 ~packing: frame_status#add ()
+
+
+let frame_planets = GBin.frame ~label:"NASA Horizons Solar System Ephemeris" ~packing:vbox'#pack ()
+let pbox = GPack.vbox ~border_width:5 ~packing:frame_planets#add ()
+let planet_lst = ["Mercury"; "Venus"; "Earth"; "Mars"; "Jupiter"; "Saturn"; "Uranus"; "Neptune"; "Pluto"; "Figneria"; "Geldonia"]
+let pmodel, ptext_column = GTree.store_of_list Gobject.Data.string planet_lst
+let planets = GEdit.combo_box_entry ~text_column:ptext_column ~model:pmodel ~packing:pbox#pack ()
+
 let llbox = GPack.vbox ~spacing:1 ~border_width: 10 ~packing: obox#add ()
 let frame_lat = GBin.frame ~label: "Latitude" ~packing:(llbox#pack ~expand:true (* ~fill:false ~padding:0 *) ) ()
 let entry_lat = GEdit.entry ~max_length: 20 ~packing: frame_lat#add ()
@@ -175,6 +192,12 @@ let button14 = GButton.button ~label:"Add Target to Observation Program" ~packin
 let button15 = GButton.button ~label:"Start Observation Program" ~packing:boxprog#add ()
 (* Button16 *)
 let button16 = GButton.button ~label:"Abort All" ~packing:boxprog#add ()
+
+(*
+(* Button17 *)
+let button17 = GButton.button ~label:"Simbad" ~packing:boxprog#add ()
+*)
+
 (* program parameters *)
 let frame_gridw = GBin.frame ~label: "Grid width" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
 let entry_gridw = GEdit.entry ~max_length: 18 ~packing: frame_gridw#add ()
@@ -367,12 +390,18 @@ let obj_id = ref ""
 let obj_nam = ref ""
 let mos_id  = ref ""
 let xflip = ref "BOTH"
+let xserv = ref "messier"
 let xgain = ref 200
 let sattr = ref (Stellarium.attr "")
 let jpegh = Hashtbl.create 127
+(*
 let gain_int = ref 200
 let expos_us = ref 1000000
+*)
 let (prog_entries:Yojson.t list ref) = ref []
+
+let expos_us () = let e = try float_of_string entry_exp#text with _ -> 10.0 in entry_exp#set_text (string_of_float e); int_of_float (1000000.0 *. e)
+let gain_int () = let e = try float_of_string entry_gain#text with _ -> 20.0 in entry_gain#set_text (string_of_float e); int_of_float (10.0 *. e)
 
 let jpegadd s =
  let len = String.length s in
@@ -409,13 +438,21 @@ let observe' () =
     if check#active then print_endline (string_of_float ra_flt^" "^string_of_float dec_flt);
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
-    [("ra", `Float ra_flt); ("de", `Float dec_flt); ("isJ2000", `Bool true);
-     ("rot", `Int 0); ("objectId", `String !obj_id);
-     ("objectName", `String !obj_nam); ("gain", `Int !gain_int);
-     ("exposureMicroSec", `Int (!expos_us)); ("doStacking", `Bool true);
-     ("histogramEnabled", `Bool true); ("histogramLow", `Float (-0.75));
-     ("histogramMedium", `Int 5); ("histogramHigh", `Int 0);
-     ("backgroundEnabled", `Bool true); ("backgroundPolyorder", `Int 4)])) (cnv' f)
+    [("ra", `Float ra_flt);
+     ("de", `Float dec_flt);
+     ("isJ2000", `Bool true);
+     ("rot", `Int 0);
+     ("objectId", `String !obj_id);
+     ("objectName", `String !obj_nam);
+     ("gain", `Int (gain_int()));
+     ("exposureMicroSec", `Int (expos_us()));
+     ("doStacking", `Bool true);
+     ("histogramEnabled", `Bool true);
+     ("histogramLow", `Float (-0.75));
+     ("histogramMedium", `Int 5);
+     ("histogramHigh", `Int 0);
+     ("backgroundEnabled", `Bool true);
+     ("backgroundPolyorder", `Int 4)])) (cnv' f)
 
 let darks' () =
     let pth = pth2'^"/v1//expertMode/startStorageAcquisition" in
@@ -426,7 +463,7 @@ let darks' () =
      ("overwrite", `Bool true);
      ("numExposures", `Int (int_of_string (entry_darkcnt#text)));
      ("gain", `Int !xgain);
-     ("exposureMicroSec", `Int (!expos_us));
+     ("exposureMicroSec", `Int (expos_us()));
      ("flip", `String !xflip)])) (cnv' f)
 
 let focus' () =
@@ -506,10 +543,10 @@ let singleshot () =
      ("wbr", `Int 50);
      ("wbb", `Int 60);
      ("flip", `Bool false);
-     ("gain", `Int !gain_int);
+     ("gain", `Int (gain_int()));
      ("binningType", `String "SOFT");
      ("binning", `Int 1);
-     ("exposureMicroSec", `Int (!expos_us));
+     ("exposureMicroSec", `Int (expos_us()));
      ("requestStats", `Bool false);
      ("enableMoonStats", `Bool false)] )) (cnv' f)
 
@@ -519,8 +556,8 @@ let astrometry () =
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("type", `String "JPEG");
      ("binning", `Int 2);
-     ("gain", `Int !gain_int);
-     ("exposureMicroSec", `Int (!expos_us));
+     ("gain", `Int (gain_int()));
+     ("exposureMicroSec", `Int (expos_us()));
      ("convertToDate", `Bool false)] )) (cnv' f)
 
 let mosaic () =
@@ -531,13 +568,13 @@ let mosaic () =
     let dec_flt = Utils.cnv_dec entry_dec#text in
     let params = `Assoc [
       ("doStacking", `Bool true);
-      ("gain", `Int !gain_int);
+      ("gain", `Int (gain_int()));
       ("histogramEnabled", `Bool true);
       ("histogramLow", `Int (-1));
       ("histogramMedium", `Int 5);
       ("histogramHigh", `Int 0);
       ("backgroundEnabled", `Bool true);
-      ("exposureMicroSec", `Int (!expos_us));
+      ("exposureMicroSec", `Int (expos_us()));
       ("objectId", `String (!sattr.target))] in
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("programName", `String !mos_id);
@@ -599,9 +636,148 @@ let stellarium' () =
       entry_alt#set_text attr.alt_dms;
       entry_az#set_text attr.az_dms;
       entry_mag#set_text (Printf.sprintf "%6.2f" attr.vis_mag);
-      targ_status#set_text (attr.target ^ ": found") in
+      targ_status#set_text (attr.target ^ ": found "^ !xserv) in
     let f = (fun s -> match s.[0] with '{' -> Stellarium.descend !sattr (Yojson.Basic.from_string s); debug !sattr | _ -> targ_status#set_text s ) in
     Stellarium.stellarium' !sattr (cnv' f)
+
+let simbad_cnv = function
+    | Xml.Element
+   ("VOTABLE",
+    [("xmlns", "http://www.ivoa.net/xml/VOTable/v1.2");
+     ("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+     ("xsi:schemaLocation",
+      "http://www.ivoa.net/xml/VOTable/v1.2 http://www.ivoa.net/xml/VOTable/v1.2");
+     ("version", "1.2")],
+    [Xml.Element
+      ("DEFINITIONS", [],
+       [Xml.Element
+         ("COOSYS",
+          [("ID", "COOSYS"); ("equinox", "2000"); ("epoch", "J2000");
+           ("system", "ICRS")],
+          [])]);
+     Xml.Element
+      ("RESOURCE", [("name", "Simbad query"); ("type", "results")],
+       [Xml.Element
+         ("TABLE", [("ID", "simbad"); ("name", "simbad query")],
+          [Xml.Element
+            ("DESCRIPTION", [], [Xml.PCData "... query string ..."]);
+           Xml.Element
+            ("FIELD",
+             [("ID", "MAIN_ID"); ("name", "MAIN_ID"); ("datatype", "char");
+              ("width", "22"); ("ucd", "meta.id;meta.main");
+              ("arraysize", "*")],
+             [Xml.Element
+               ("DESCRIPTION", [],
+                [Xml.PCData "Main identifier for an object"]);
+              Xml.Element
+               ("LINK",
+                [("value", "${MAIN_ID}");
+                 ("href",
+                  "http://simbad.u-strasbg.fr/simbad/sim-id?Ident=${MAIN_ID}&amp;NbIdent=1")],
+                [])]);
+           Xml.Element
+            ("FIELD",
+             [("ID", "RA"); ("name", "RA"); ("datatype", "char");
+              ("precision", "8"); ("width", "13");
+              ("ucd", "pos.eq.ra;meta.main"); ("arraysize", "13");
+              ("unit", "&quot;h:m:s&quot;")],
+             [Xml.Element ("DESCRIPTION", [], [Xml.PCData "Right ascension"])]);
+           Xml.Element
+            ("FIELD",
+             [("ID", "DEC"); ("name", "DEC"); ("datatype", "char");
+              ("precision", "8"); ("width", "13");
+              ("ucd", "pos.eq.dec;meta.main"); ("arraysize", "13");
+              ("unit", "&quot;d:m:s&quot;")],
+             [Xml.Element ("DESCRIPTION", [], [Xml.PCData "Declination"])]);
+           Xml.Element
+            ("DATA", [],
+             [Xml.Element
+               ("TABLEDATA", [],
+                [Xml.Element
+                  ("TR", [],
+                   [Xml.Element ("TD", [], [Xml.PCData ident]);
+                    Xml.Element ("TD", [], [Xml.PCData ra]);
+                    Xml.Element ("TD", [], [Xml.PCData dec])])])])])])]) ->
+    entry_ra#set_text ra;
+    entry_dec#set_text dec;
+    entry_alt#set_text "";
+    entry_az#set_text "";
+    targ_status#set_text (ident ^ ": found")
+| _ -> failwith "simbad XML error"
+
+let messier' () = 
+    let sel = targ_entry#text in
+    let len = Array.length Messier_catalogue.messier_array in
+    let ix = ref (try int_of_string (String.sub sel 1 (String.length sel - 1)) with _ -> 0) in
+    if sel.[0] <> 'M' || !ix = 0 || !ix > len then Array.iteri (fun i (a,_,_) -> if sel = a then ix := i+1) Messier_catalogue.messier_array;
+    let (ra,dec) = if !ix = 0 || !ix > len
+    then (targ_status#set_text (sel ^ ": not found"); ("",""))
+    else (let (found,b,c) = Messier_catalogue.messier_array.(!ix - 1) in targ_status#set_text (found ^ ": found"); (b,c)) in
+    entry_ra#set_text ra;
+    entry_dec#set_text dec;
+    entry_alt#set_text "";
+    entry_az#set_text "";
+    Lwt.return_unit
+
+let simbad' () =
+    let hdrs = ref [] in
+    let server =  "simbad.u-strasbg.fr" in
+    let pth = "/simbad/sim-id" in
+    let params = [ ("output.format", "VOTABLE"); ("output.params", "main_id,ra,dec"); ("Ident", targ_entry#text) ] in
+    let f = (fun s -> simbad_cnv (
+                                  let m = XmlParser.make() in
+                                      XmlParser.prove m false;
+                                      try XmlParser.parse m (SString s)
+                                      with _ -> let fd = open_out (targ_entry#text^".xml") in
+                                      output_string fd s;
+                                      close_out fd;
+                                      failwith "Xml.parse_string")) in
+    Utils.get' "http://" server params [] pth f hdrs
+
+let horizons' () =
+    let plnt = ref "" in
+    let lbl' = planets#entry#text in
+    List.iteri (fun ix loc -> if loc=lbl' then
+    begin
+    plnt := string_of_int ((ix+1)*100+99);
+    end) planet_lst;
+    let hdrs = ref [] in
+    let server =  "ssd.jpl.nasa.gov" in
+    let pth = "/api/horizons.api?format=text" in
+    let t = Unix.gmtime (Unix.gettimeofday()) in
+    let t' = Unix.gmtime (Unix.gettimeofday() +. 86400.0) in
+    let f = (fun s ->
+                 let body = ref "" in
+                 let lst = List.filter (fun x ->
+                                            let str = if String.length x > 5 then String.sub x 1 4 else "" in
+                                            let trial = try (int_of_string str) with _ -> 0 in
+                                            let use = trial = t.tm_year+1900 in
+                                            if false then print_endline (string_of_bool use^": "^str^": "^string_of_int trial^": "^x);
+                                            if String.length x > 18 && String.sub x 0 18 = "Target body name: " then
+                                            body := String.sub x 18 (String.index_from x 18 ' ' - 18);
+                                            if check#active then print_endline x;
+                                            use) (String.split_on_char '\n' s) in
+                 let eph = if List.length lst > t.tm_hour then List.nth lst t.tm_hour else String.make 80 ' ' in
+                 entry_ra#set_text (String.sub eph 23 11);
+                 entry_dec#set_text (String.sub eph 35 11);
+                 entry_alt#set_text "";
+                 entry_az#set_text "";
+                 entry_mag#set_text (String.sub eph 46 8);
+                 targ_status#set_text !body;
+                 print_endline eph) in
+    let req = 
+    [("COMMAND", "'"^ !plnt ^"'");
+     ("OBJ_DATA", "'YES'");
+     ("MAKE_EPHEM", "'YES'");
+     ("EPHEM_TYPE", "'OBSERVER'");
+     ("CENTER", "'500@399'");
+     ("START_TIME", Printf.sprintf "%d-%d-%d" (t.tm_year+1900) (t.tm_mon+1) t.tm_mday);
+     ("STOP_TIME", Printf.sprintf "%d-%d-%d" (t'.tm_year+1900) (t'.tm_mon+1) t'.tm_mday);
+     ("STEP_SIZE", "'1 h'");
+     ("QUANTITIES", "'1,9,20,23,24,29'");
+    ] in
+    if check#active then List.iter (fun (k,x) -> print_endline (k^": "^x)) req;
+    Utils.get' "https://" server req [] pth f hdrs
 
 let fetch' () =
     let jhash = ref ("",ref false) in
@@ -675,6 +851,12 @@ let taskarray =
          ("", status');
          ("stellarium", stellarium');
          ("", status');
+         ("horizons", horizons');
+         ("", status');
+         ("simbad", simbad');
+         ("", status');
+         ("messier", messier');
+         ("", status');
        |]
 (*
 let stoptask = Array.length taskarray - 1
@@ -698,7 +880,7 @@ let sm_jump lbl' =
 let search () = 
     let s = targ_entry#text in
     sattr := Stellarium.attr s;
-    sm_jump "stellarium"
+    sm_jump !xserv
 
 let update_status' kw stat =
   let len = String.length kw in
@@ -751,8 +933,10 @@ let app_status' () =
  Hashtbl.iter (fun k x -> output_string fd (k^": "^x^"\n")) statush;
  close_out fd
 
+(*
 let exposlidefunc _ v = expos_us := int_of_float (floor (1.3 ** v)); entry_exp#set_text (string_of_int !expos_us)
 let gainslidefunc _ v = gain_int := int_of_float (floor (v *. 10.0)); entry_gain#set_text (Printf.sprintf "%4.1f" (float_of_int !gain_int /. 10.0))
+*)
 
 let add_prog_entry () =
     let ra_flt = Utils.cnv_ra entry_ra#text in
@@ -766,13 +950,13 @@ let add_prog_entry () =
               ("ra", `Float ra_flt);
               ("de", `Float dec_flt);
               ("rot", `Int 0);
-              ("gain", `Int !gain_int);
+              ("gain", `Int (gain_int()));
               ("histogramEnabled", `Bool true);
               ("histogramLow", `Int (-1));
               ("histogramMedium", `Int 5);
               ("histogramHigh", `Int 0);
               ("backgroundEnabled", `Bool true);
-              ("exposureMicroSec", `Int !expos_us);
+              ("exposureMicroSec", `Int (expos_us()));
               ("doStacking", `Bool true);
               ("debayerInterpolation", `String "VNG")])] in
     prog_entries := obs :: !prog_entries
@@ -801,13 +985,21 @@ let gui () =
   ignore (button14#connect#clicked ~callback: (fun () -> add_prog_entry() ));
   ignore (button15#connect#clicked ~callback: (fun () -> sm_jump "startprog"));
   ignore (button16#connect#clicked ~callback: (fun () -> sm_jump "abortall"));
+(*
+  ignore (button17#connect#clicked ~callback: (fun () -> sm_jump "simbad"));
+*)
   ignore (rbutton1#connect#clicked ~callback:(fun () -> xflip := "FLIP"));
   ignore (rbutton2#connect#clicked ~callback:(fun () -> xflip := "NO_FLIP"));
   ignore (rbutton3#connect#clicked ~callback:(fun () -> xflip := "BOTH"));
+  ignore (rbuttons1#connect#clicked ~callback:(fun () -> xserv := "simbad"));
+  ignore (rbuttons2#connect#clicked ~callback:(fun () -> xserv := "stellarium"));
+  ignore (rbuttons3#connect#clicked ~callback:(fun () -> xserv := "messier"));
+(*
   ignore (rng#connect#change_value ~callback:exposlidefunc);
   ignore (gain#connect#change_value ~callback:gainslidefunc);
   exposlidefunc () 47.5;
   gainslidefunc () 20.0;
+*)
   entry_darkcnt#set_text "100";
   entry_gridw#set_text "3";
   entry_gridh#set_text "3";
@@ -821,6 +1013,8 @@ let gui () =
   tz'#set_text tzcity;
   tz'#set_editable false;
 
+  entry_exp#set_text "30.0";
+  entry_gain#set_text "20.0";
   let cities' = Hashtbl.find Base_locations.loch tzcity in
   let latitude,longitude = try float_of_string (Sys.getenv "LATITUDE"), 
     float_of_string (Sys.getenv "LONGITUDE") with _ ->  51.477777, 0.001388 in
@@ -846,6 +1040,9 @@ let gui () =
     (fun () -> loc_jump combo#entry#text)) ;
   combo#set_active !deflt;
   status_jpeg#set_editable false;
+  ignore (planets#entry#connect#changed ~callback:
+    (fun () -> sm_jump "horizons")) ;
+  planets#set_active 2;
 
   (* Show the window. *)
   window#show ();
@@ -853,7 +1050,7 @@ let gui () =
   ignore (targ_entry#connect#activate ~callback: search);
   targ_entry#set_editable true;
   targ_status#set_editable false;
-  targ_entry#set_text "(1) Ceres";
+  targ_entry#set_text (if true then "HIP100438" else "(1) Ceres");
   search()
 
 let goto_received ra_int dec_int =

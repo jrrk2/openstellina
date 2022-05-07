@@ -20,6 +20,6 @@
  (name openstellina)
  (synopsis "A http client for Stellina smart telescope by Vaonis")
  (description "Mobile Stellina App does not provide access to telescope exposures > 20s (lights or darks). This software bypasses the App and talks to the telescope directly")
- (depends ocaml dune lablgtk lwt_glib yojson cohttp-lwt-unix zeit ppx_let quests ppx_yojson lwt)
+ (depends ocaml dune lablgtk lwt_glib yojson cohttp-lwt-unix zeit ppx_let quests ppx_yojson lwt xml-light)
  (tags (Vaonis Stellina long-exposure GUI)))
  

@@ -1,6 +1,6 @@
 (executable
  (public_name openstellina)
  (name gui)
- (modules trans hidemsg msgs base_locations utils stellarium gui)
- (libraries lablgtk2 lwt_glib yojson cohttp-lwt-unix zeit ppx_let quests ppx_yojson lwt)
+ (modules trans hidemsg msgs base_locations utils stellarium messier_catalogue gui)
+ (libraries lablgtk2 lwt_glib yojson cohttp-lwt-unix zeit ppx_let quests ppx_yojson lwt xml-light)
 )
