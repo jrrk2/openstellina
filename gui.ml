@@ -24,7 +24,6 @@ let start = Queue.create ()
 
 let timezone = List.rev (String.split_on_char '/' (try Unix.readlink "/etc/localtime" with _ -> "/var/db/timezone/zoneinfo/Europe/London"))
 let tzcity = try Sys.getenv "TIME_ZONE" with _ -> List.hd (List.tl timezone)  ^ "/" ^ List.hd timezone
-let fake = try int_of_string (Sys.getenv "FAKE_INIT") > 0 with _ -> false
 
 let session' = ref {sid=""; ping_int=0; ping_tim=0}
 let statush = Hashtbl.create 32767
@@ -148,15 +147,44 @@ let rbuttons3 = GButton.radio_button ~group:rbuttons1#group ~label:"Messier" ~ac
 let sbox = GPack.hbox ~border_width:5 ~packing:vbox'#add ()
 let frame_entry = GBin.frame ~label:"Target Search" ~packing:sbox#pack ()
 let targ_entry = GEdit.entry ~max_length: 30 ~packing: frame_entry#add ()
-let frame_status = GBin.frame ~label:"Target Result" ~packing:sbox#pack ()
-let targ_status = GEdit.entry ~max_length: 30 ~packing: frame_status#add ()
+let frame_status = GBin.frame ~label:"Target Result" ~packing:(sbox#pack ~expand:true ~fill:true ~padding:2) ()
+let targ_status = GEdit.entry ~max_length: 40 ~packing: frame_status#add ()
 
+let ephem_lst = [
+"00:00";
+"01:00";
+"02:00";
+"03:00";
+"04:00";
+"05:00";
+"06:00";
+"07:00";
+"08:00";
+"09:00";
+"10:00";
+"11:00";
+"12:00";
+"13:00";
+"14:00";
+"15:00";
+"16:00";
+"17:00";
+"18:00";
+"19:00";
+"20:00";
+"21:00";
+"22:00";
+"23:00";
+"24:00";
+]
 
 let frame_planets = GBin.frame ~label:"NASA Horizons Solar System Ephemeris" ~packing:vbox'#pack ()
-let pbox = GPack.vbox ~border_width:5 ~packing:frame_planets#add ()
+let pbox = GPack.hbox ~border_width:5 ~packing:frame_planets#add ()
 let planet_lst = ["Mercury"; "Venus"; "Earth"; "Mars"; "Jupiter"; "Saturn"; "Uranus"; "Neptune"; "Pluto"; "Figneria"; "Geldonia"]
 let pmodel, ptext_column = GTree.store_of_list Gobject.Data.string planet_lst
 let planets = GEdit.combo_box_entry ~text_column:ptext_column ~model:pmodel ~packing:pbox#pack ()
+let emodel, etext_column = GTree.store_of_list Gobject.Data.string ephem_lst
+let ephem = GEdit.combo_box_entry ~text_column:etext_column ~model:emodel ~packing:pbox#pack ()
 
 let llbox = GPack.vbox ~spacing:1 ~border_width: 10 ~packing: obox#add ()
 let frame_lat = GBin.frame ~label: "Latitude" ~packing:(llbox#pack ~expand:true (* ~fill:false ~padding:0 *) ) ()
@@ -191,12 +219,9 @@ let button14 = GButton.button ~label:"Add Target to Observation Program" ~packin
 (* Button15 *)
 let button15 = GButton.button ~label:"Start Observation Program" ~packing:boxprog#add ()
 (* Button16 *)
-let button16 = GButton.button ~label:"Abort All" ~packing:boxprog#add ()
-
-(*
+let button16 = GButton.button ~label:"Take Samples" ~packing:boxprog#add ()
 (* Button17 *)
-let button17 = GButton.button ~label:"Simbad" ~packing:boxprog#add ()
-*)
+let button17 = GButton.button ~label:"Abort All" ~packing:boxprog#add ()
 
 (* program parameters *)
 let frame_gridw = GBin.frame ~label: "Grid width" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
@@ -399,6 +424,7 @@ let gain_int = ref 200
 let expos_us = ref 1000000
 *)
 let (prog_entries:Yojson.t list ref) = ref []
+let ephem_data_lst = ref []
 
 let expos_us () = let e = try float_of_string entry_exp#text with _ -> 10.0 in entry_exp#set_text (string_of_float e); int_of_float (1000000.0 *. e)
 let gain_int () = let e = try float_of_string entry_gain#text with _ -> 20.0 in entry_gain#set_text (string_of_float e); int_of_float (10.0 *. e)
@@ -419,8 +445,14 @@ let jpegadd s =
     status_jpeg#set_text s;
     end
 
+(*
+let fake = try int_of_string (Sys.getenv "FAKE_INIT") > 0 with _ -> false
+if fake then "debug_fakeAutoInit" else 
+if fake then "motors/pointTarget" else 
+*)
+
 let init' () =
-    let cmd = if fake then "debug_fakeAutoInit" else "startAutoInit" in
+    let cmd = "startAutoInit" in
     let pth = pth2'^"/v1//general/"^cmd in
     let time_ms = int_of_float (Unix.time() *. 1000.0) in
     let lat_flt = float_of_string entry_lat#text in
@@ -431,7 +463,7 @@ let init' () =
      ("longitude", `Float long_flt); ("time", `Int time_ms)] )) (cnv' f)
 
 let observe' () =
-    let cmd = if fake then "motors/pointTarget" else "general/startObservation" in
+    let cmd = "general/startObservation" in
     let pth = pth2'^"/v1//"^cmd in
     let ra_flt = Utils.cnv_ra entry_ra#text in
     let dec_flt = Utils.cnv_dec entry_dec#text in
@@ -624,6 +656,38 @@ let obsprog () =
      ("longitude", `Float long_flt);
      ("startTime", `Int time_ms)] )) (cnv' f)
 
+let samples () =
+    let pth = pth2'^"/v1//automator/takeSamples" in
+    let lat_flt = float_of_string entry_lat#text in
+    let long_flt = float_of_string entry_long#text in
+    let f = (fun s -> errchk' true (cnv s)) in
+    let expos_lst = `Int (expos_us() / 4) :: `Int (expos_us() / 2) :: `Int (expos_us()) :: `Int (expos_us() * 2) :: `Int (expos_us() * 4) :: [] in
+    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+  [("onlyEstimate", `Bool true);
+   ("latitude", `Float lat_flt);
+   ("longitude", `Float long_flt);
+   ("type", `String "FITS");
+   ("gains", `List [`Int 200]);
+   ("exposures", `List expos_lst);
+   ("binningTypes", `List [`String "SOFT"]);
+   ("binnings", `List [`Int 2]);
+   ("numExposures", `Int 1);
+   ("doPanorama", `Bool true);
+   ("azSampling", `Int 10);
+   ("azRange", `List [`Int 0; `Int 20]);
+   ("altSampling", `Int 5);
+   ("altRange", `List [`Int 20; `Int 90]);
+   ("doTracking", `Bool true);
+   ("raSampling", `Int 5);
+   ("raRange", `List [`Int 0; `Int 360]);
+   ("deSampling", `Int 5);
+   ("deRange", `List [`Int 10; `Int 90]);
+   ("doFocus", `Bool true);
+   ("mapSampling", `Int 5000);
+   ("mapRange", `List [`Int 0; `Int 256000]);
+   ("mapSampling2", `Int 0);
+   ("mapRange2", `List [`Int 175000; `Int 225000])] )) (cnv' f)
+
 let abortall () =
     let pth = pth2'^"/v1//app/abortAllOperations" in
     let f = (fun s -> errchk' true (cnv s)) in
@@ -636,7 +700,7 @@ let stellarium' () =
       entry_alt#set_text attr.alt_dms;
       entry_az#set_text attr.az_dms;
       entry_mag#set_text (Printf.sprintf "%6.2f" attr.vis_mag);
-      targ_status#set_text (attr.target ^ ": found "^ !xserv) in
+      targ_status#set_text ("Stellarium: "^attr.target) in
     let f = (fun s -> match s.[0] with '{' -> Stellarium.descend !sattr (Yojson.Basic.from_string s); debug !sattr | _ -> targ_status#set_text s ) in
     Stellarium.stellarium' !sattr (cnv' f)
 
@@ -702,7 +766,24 @@ let simbad_cnv = function
     entry_dec#set_text dec;
     entry_alt#set_text "";
     entry_az#set_text "";
-    targ_status#set_text (ident ^ ": found")
+    targ_status#set_text ("SIMBAD found: "^ident)
+| Xml.Element
+     ("VOTABLE",
+      [("xmlns", "http://www.ivoa.net/xml/VOTable/v1.2");
+       ("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+       ("xsi:schemaLocation",
+        "http://www.ivoa.net/xml/VOTable/v1.2 http://www.ivoa.net/xml/VOTable/v1.2");
+       ("version", "1.2")],
+      [Xml.Element
+        ("INFO",
+         [("name", "Error");
+          ("value", errmsg)],
+         [])]) ->
+entry_ra#set_text "";
+entry_dec#set_text "";
+entry_alt#set_text "";
+entry_az#set_text "";
+targ_status#set_text (errmsg)
 | _ -> failwith "simbad XML error"
 
 let messier' () = 
@@ -711,8 +792,8 @@ let messier' () =
     let ix = ref (try int_of_string (String.sub sel 1 (String.length sel - 1)) with _ -> 0) in
     if sel.[0] <> 'M' || !ix = 0 || !ix > len then Array.iteri (fun i (a,_,_) -> if sel = a then ix := i+1) Messier_catalogue.messier_array;
     let (ra,dec) = if !ix = 0 || !ix > len
-    then (targ_status#set_text (sel ^ ": not found"); ("",""))
-    else (let (found,b,c) = Messier_catalogue.messier_array.(!ix - 1) in targ_status#set_text (found ^ ": found"); (b,c)) in
+    then (targ_status#set_text ("Messier: " ^ sel ^ ": not found"); ("",""))
+    else (let (found,b,c) = Messier_catalogue.messier_array.(!ix - 1) in targ_status#set_text ("Messier found: " ^ found); (b,c)) in
     entry_ra#set_text ra;
     entry_dec#set_text dec;
     entry_alt#set_text "";
@@ -734,6 +815,15 @@ let simbad' () =
                                       failwith "Xml.parse_string")) in
     Utils.get' "http://" server params [] pth f hdrs
 
+let show_ephem ix =
+    let lst = !ephem_data_lst in
+    let eph = if List.length lst > ix then List.nth lst ix else String.make 80 ' ' in
+    entry_ra#set_text (String.sub eph 23 11);
+    entry_dec#set_text (String.sub eph 35 11);
+    entry_alt#set_text "";
+    entry_az#set_text "";
+    entry_mag#set_text (String.sub eph 46 8)
+
 let horizons' () =
     let plnt = ref "" in
     let lbl' = planets#entry#text in
@@ -748,7 +838,7 @@ let horizons' () =
     let t' = Unix.gmtime (Unix.gettimeofday() +. 86400.0) in
     let f = (fun s ->
                  let body = ref "" in
-                 let lst = List.filter (fun x ->
+                 ephem_data_lst := List.filter (fun x ->
                                             let str = if String.length x > 5 then String.sub x 1 4 else "" in
                                             let trial = try (int_of_string str) with _ -> 0 in
                                             let use = trial = t.tm_year+1900 in
@@ -756,15 +846,10 @@ let horizons' () =
                                             if String.length x > 18 && String.sub x 0 18 = "Target body name: " then
                                             body := String.sub x 18 (String.index_from x 18 ' ' - 18);
                                             if check#active then print_endline x;
-                                            use) (String.split_on_char '\n' s) in
-                 let eph = if List.length lst > t.tm_hour then List.nth lst t.tm_hour else String.make 80 ' ' in
-                 entry_ra#set_text (String.sub eph 23 11);
-                 entry_dec#set_text (String.sub eph 35 11);
-                 entry_alt#set_text "";
-                 entry_az#set_text "";
-                 entry_mag#set_text (String.sub eph 46 8);
-                 targ_status#set_text !body;
-                 print_endline eph) in
+                                            use) (String.split_on_char '\n' s);
+                 show_ephem (t.tm_hour);
+                 targ_status#set_text ("horizons: "^ !body);
+                 ephem#set_active t.tm_hour) in
     let req = 
     [("COMMAND", "'"^ !plnt ^"'");
      ("OBJ_DATA", "'YES'");
@@ -840,6 +925,8 @@ let taskarray =
          ("obsprog", obsprog);
          ("", status');
          ("startprog", startprog);
+         ("", status');
+         ("samples", samples);
          ("", status');
          ("abortall", abortall);
          ("", status');
@@ -984,10 +1071,8 @@ let gui () =
   ignore (button13#connect#clicked ~callback: (fun () -> sm_jump "obsprog"));
   ignore (button14#connect#clicked ~callback: (fun () -> add_prog_entry() ));
   ignore (button15#connect#clicked ~callback: (fun () -> sm_jump "startprog"));
-  ignore (button16#connect#clicked ~callback: (fun () -> sm_jump "abortall"));
-(*
-  ignore (button17#connect#clicked ~callback: (fun () -> sm_jump "simbad"));
-*)
+  ignore (button16#connect#clicked ~callback: (fun () -> sm_jump "samples"));
+  ignore (button17#connect#clicked ~callback: (fun () -> sm_jump "abortall"));
   ignore (rbutton1#connect#clicked ~callback:(fun () -> xflip := "FLIP"));
   ignore (rbutton2#connect#clicked ~callback:(fun () -> xflip := "NO_FLIP"));
   ignore (rbutton3#connect#clicked ~callback:(fun () -> xflip := "BOTH"));
@@ -1036,12 +1121,11 @@ let gui () =
     entry_long#set_text long';
     if check#active then print_endline (string_of_int ix^": "^lat'^", "^long')
     end) cities in
-  ignore (combo#entry#connect#changed ~callback:
-    (fun () -> loc_jump combo#entry#text)) ;
+  ignore (combo#entry#connect#changed ~callback: (fun () -> loc_jump combo#entry#text)) ;
   combo#set_active !deflt;
   status_jpeg#set_editable false;
-  ignore (planets#entry#connect#changed ~callback:
-    (fun () -> sm_jump "horizons")) ;
+  ignore (planets#entry#connect#changed ~callback: (fun () -> sm_jump "horizons")) ;
+  ignore (ephem#entry#connect#changed ~callback: (fun () -> let lbl' = ephem#entry#text in List.iteri (fun ix loc -> if loc=lbl' then show_ephem ix) ephem_lst)) ;
   planets#set_active 2;
 
   (* Show the window. *)

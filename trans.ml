@@ -1,4 +1,9 @@
 let trans = function
+| "R[0]@status@motors@ALT@atStop" -> "Altitude motor stopped"
+| "R[0]@status@motors@AZ@atStop" -> "Azimuth motor stopped"
+| "R[0]@status@motors@DER@atStop" -> "Derotator motor stopped"
+| "R@error@name" -> "General Error name"
+| "R@success" -> "Success/Failure"
 | "R[0]@status@apiVersion" -> "apiVersion"
 | "R[1]@apiVersion" -> "apiVersion"
 | "R[1]@sensors@defogStatus" -> "defogStatus"
@@ -12,7 +17,6 @@ let trans = function
 | "R@error@chain[0]@name" -> "extended error name"
 | "R@error@data@commandErrors[0]@chain[0]@name" -> "command errors name"
 | "R@error@data@commandErrors[0]@name" -> "command errors name"
-| "R@error@name" -> "general error name"
 | "R[0]@status@boardInitError@chain[0]@name" -> "board init extended error name"
 | "R[0]@status@boardInitError@name" -> "board init error name"
 | "R[0]@status@connectedDevices[0]@name" -> "first connected device"

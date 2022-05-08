@@ -8,10 +8,13 @@ let remove' = List.filter (function
 | "R@error@data@commandErrors[0]@data@data" -> false
 | "R@error@data@commandErrors[0]@data@register" -> false
 | "R@error@data@commandErrors[0]@name" -> false
-| "R@error@name" -> false
+| "R@error@name" -> true
 | "R@message" -> false
-| "R@success" -> false
+| "R@success" -> true
 | "R[0]" -> false
+| "R[0]@status@motors@ALT@atStop" -> true
+| "R[0]@status@motors@AZ@atStop" -> true
+| "R[0]@status@motors@DER@atStop" -> true
 (*
 | "R[0]@status@apiVersion" -> true
 | "R[0]@status@availableReports" -> false
@@ -30,15 +33,12 @@ let remove' = List.filter (function
 | "R[0]@status@logs@bufferSize" -> false
 | "R[0]@status@logs@numFiles" -> false
 | "R[0]@status@masterDeviceId" -> false
-| "R[0]@status@motors@ALT@atStop" -> false
 | "R[0]@status@motors@ALT@calibrated" -> false
 | "R[0]@status@motors@ALT@position" -> false
 | "R[0]@status@motors@ALT@state" -> false
-| "R[0]@status@motors@AZ@atStop" -> false
 | "R[0]@status@motors@AZ@calibrated" -> false
 | "R[0]@status@motors@AZ@position" -> false
 | "R[0]@status@motors@AZ@state" -> false
-| "R[0]@status@motors@DER@atStop" -> false
 | "R[0]@status@motors@DER@calibrated" -> false
 | "R[0]@status@motors@DER@position" -> false
 | "R[0]@status@motors@DER@state" -> false
