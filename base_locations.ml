@@ -26612,3 +26612,39 @@ let _ = Hashtbl.add loch "Pacific/Wallis" [
 ("Mata-Utu","Uvea",-13.281630,-176.174530);
 ]
 
+(* for testing *)
+
+let _ = Hashtbl.add loch "Zero/Zero" [
+("Zero","Zero",0.0,0.0);
+("Zero","Thirty",0.0,30.0);
+("Zero","Sixty",0.0,60.0);
+("Zero","Ninety",0.0,90.0);
+("Zero","Minus Thirty",0.0,-30.0);
+("Zero","Minus Sixty",0.0,-60.0);
+("Zero","Minus Ninety",0.0,-90.0);
+
+("Thirty","Zero",30.0,0.0);
+("Thirty","Thirty",30.0,30.0);
+("Thirty","Sixty",30.0,60.0);
+("Thirty","Ninety",30.0,90.0);
+("Thirty","Minus Thirty",30.0,-30.0);
+("Thirty","Minus Sixty",30.0,-60.0);
+("Thirty","Minus Ninety",30.0,-90.0);
+
+("Sixty","Zero",60.0,0.0);
+("Sixty","Thirty",60.0,30.0);
+("Sixty","Sixty",60.0,60.0);
+("Sixty","Ninety",60.0,90.0);
+("Sixty","Minus Thirty",60.0,-30.0);
+("Sixty","Minus Sixty",60.0,-60.0);
+("Sixty","Minus Ninety",60.0,-90.0);
+
+("Ninety","Zero",90.0,0.0);
+("Ninety","Thirty",90.0,30.0);
+("Ninety","Sixty",90.0,60.0);
+("Ninety","Ninety",90.0,90.0);
+("Ninety","Minus Thirty",90.0,-30.0);
+("Ninety","Minus Sixty",90.0,-60.0);
+("Ninety","Minus Ninety",90.0,-90.0);
+]
+

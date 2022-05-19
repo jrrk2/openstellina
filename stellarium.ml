@@ -5,6 +5,10 @@ type attr =
     mutable dec: float;
     mutable ra_hms: string;
     mutable dec_dms: string;
+    mutable ranow: float;
+    mutable decnow: float;
+    mutable ranow_hms: string;
+    mutable decnow_dms: string;
     mutable alt: float;
     mutable az: float;
     mutable alt_dms: string;
@@ -16,6 +20,8 @@ type attr =
     mutable transit_hms: string;
     mutable set_hms: string;
     mutable vis_mag: float;
+    mutable sidt: float;
+    mutable hour_ang: float;
   }
 
 let logfile = open_out "stellarium_logfile.txt"
@@ -23,14 +29,18 @@ let logfile = open_out "stellarium_logfile.txt"
 let rec descend' attr = function
 | ("raJ2000", `Float f) -> attr.ra <- f; attr.ra_hms <- Utils.hms_of_float f
 | ("decJ2000", `Float f) -> attr.dec <- f; attr.dec_dms <- Utils.dms_of_float f
+| ("ra", `Float f) -> attr.ranow <- f; attr.ranow_hms <- Utils.hms_of_float f
+| ("dec", `Float f) -> attr.decnow <- f; attr.decnow_dms <- Utils.dms_of_float f
 | ("altitude", `Float f) -> attr.alt <- f; attr.alt_dms <- Utils.dms_of_float f
 | ("azimuth", `Float f) -> attr.az <- f; attr.az_dms <- Utils.dms_of_float f
 | ("rise-dhr", `Float f) -> attr.rise <- f; attr.rise_hms <- Utils.dms_of_float f
 | ("transit-dhr", `Float f) -> attr.transit <- f; attr.transit_hms <- Utils.dms_of_float f
 | ("set-dhr", `Float f) -> attr.set <- f; attr.set_hms <- Utils.dms_of_float f
 | ("vmag", `Float f) -> attr.vis_mag <- f
+| ("hourAngle-hms", `String s) -> attr.hour_ang <- Utils.mod_ha (Utils.cnv_hms s /. 15.)
 | ("rise", `String _) -> ()
 | ("set", `String _) -> ()
+| ("appSidTm", `String s) -> attr.sidt <- Utils.cnv_hms s /. 15.
 | (str, `Bool b) -> output_string logfile (str^": "^string_of_bool b^"\n"); flush logfile
 | (str, `Float f) -> output_string logfile (str^": "^string_of_float f^"\n"); flush logfile
 | (str, `Int n) -> output_string logfile (str^": "^string_of_int n^"\n"); flush logfile
@@ -74,5 +84,8 @@ let stellarium attr =
 
 let attr nam = {target=nam;
 ra=0.; dec=0.; ra_hms=""; dec_dms="";
+ranow=0.; decnow=0.; ranow_hms=""; decnow_dms="";
 alt=0.; az=0.; alt_dms=""; az_dms="";
-rise=0.; transit=0.; set=0.; rise_hms=""; transit_hms=""; set_hms=""; vis_mag=0.0 }
+rise=0.; transit=0.; set=0.; rise_hms=""; transit_hms=""; set_hms=""; vis_mag=0.0;
+sidt=0.0; hour_ang=0.0;
+ }

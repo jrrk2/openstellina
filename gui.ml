@@ -32,7 +32,7 @@ let statush = Hashtbl.create 32767
 let _ = GMain.init ()
 (* Install Lwt<->Glib integration. *)
 let _ = Lwt_glib.install ()
-let window = GWindow.window ~width:1000 ~height:1000 ~title:"Openstellina GUI by Dr Jonathan Kimmitt" ()
+let window = GWindow.window ~width:1024 ~height:1024 ~title:"Openstellina GUI by Dr Jonathan Kimmitt" ()
 let vbox = GPack.vbox ~packing:window#add ()
 (* Menu bar *)
 let menubar = GMenu.menu_bar ~packing:vbox#pack ()
@@ -52,6 +52,8 @@ let boxu = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: frame_eaa#add ()
 let frame_target = GBin.frame ~label: "Target object settings" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
 let boxt = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: frame_target#add ()
 let boxh = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
+let boxv = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
+let boxs = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
 
 (* Button0 *)
 let button0 = GButton.button ~label:"Take Control" ~packing:boxu#add ()
@@ -109,7 +111,15 @@ let gain = GRange.scale `HORIZONTAL ~adjustment:gainadj ~draw_value:false ~packi
 *)
 
 (* check if verbose *)
-let check = GButton.check_button ~label: "Verbose" ~active: false ~packing: boxt#add ()
+let check = GButton.check_button ~label: "Verbose" ~active: false ~packing: boxv#add ()
+
+(* Spare1 *)
+let spare = Array.init 6 (fun ix -> let lbl = ["Altitude(catalog)";"Azimuth(catalog)";"Local Siderial Time";"Hour Angle";"LST(catalog)";"HA(catalog)"] in
+let fram_spare = GBin.frame ~label: (List.nth lbl ix) ~packing:(boxv#pack ~expand:true ~fill:true ~padding:2) () in
+GEdit.entry ~max_length: 20 ~packing: fram_spare#add ()) 
+let spare' = Array.init 6 (fun ix -> let lbl = ["Right Ascension(Jnow)";"Declination(Jnow)";"Julian Date";"JD(catalog)";"raJ2000";"decJ2000"] in
+let fram_spare = GBin.frame ~label: (List.nth lbl ix) ~packing:(boxs#pack ~expand:true ~fill:true ~padding:2) () in
+GEdit.entry ~max_length: 20 ~packing: fram_spare#add ()) 
 
 let framprog = GBin.frame ~label: "Observation program" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
 
@@ -142,7 +152,8 @@ let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(vbox'#pack ~expan
 let boxserv = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: framserv#add ()
 let rbuttons1 = GButton.radio_button ~label:"Simbad" ~packing: boxserv#add ()
 let rbuttons2 = GButton.radio_button ~group:rbuttons1#group ~label:"Stellarium" ~packing: boxserv#add ()
-let rbuttons3 = GButton.radio_button ~group:rbuttons1#group ~label:"Messier" ~active:true ~packing: boxserv#add ()
+let rbuttons3 = GButton.radio_button ~group:rbuttons1#group ~label:"Horizons" ~active:true ~packing: boxserv#add ()
+let rbuttons4 = GButton.radio_button ~group:rbuttons1#group ~label:"Messier" ~active:true ~packing: boxserv#add ()
 
 let sbox = GPack.hbox ~border_width:5 ~packing:vbox'#add ()
 let frame_entry = GBin.frame ~label:"Target Search" ~packing:sbox#pack ()
@@ -180,7 +191,7 @@ let ephem_lst = [
 
 let frame_planets = GBin.frame ~label:"NASA Horizons Solar System Ephemeris" ~packing:vbox'#pack ()
 let pbox = GPack.hbox ~border_width:5 ~packing:frame_planets#add ()
-let planet_lst = ["Mercury"; "Venus"; "Earth"; "Mars"; "Jupiter"; "Saturn"; "Uranus"; "Neptune"; "Pluto"; "Figneria"; "Geldonia"]
+let planet_lst = ["Mercury"; "Venus"; "Moon"; "Mars"; "Jupiter"; "Saturn"; "Uranus"; "Neptune"; "Pluto"; "Other Minor Planets"]
 let pmodel, ptext_column = GTree.store_of_list Gobject.Data.string planet_lst
 let planets = GEdit.combo_box_entry ~text_column:ptext_column ~model:pmodel ~packing:pbox#pack ()
 let emodel, etext_column = GTree.store_of_list Gobject.Data.string ephem_lst
@@ -206,6 +217,8 @@ let buttonB = GButton.button ~label:"Single Astrometry" ~packing:bbox#add ()
 let buttonC = GButton.button ~label:"Track On" ~packing:bbox#add ()
 (* ButtonD *)
 let buttonD = GButton.button ~label:"Track Off" ~packing:bbox#add ()
+(* ButtonE *)
+let buttonE = GButton.button ~label:"ManualInit" ~packing:bbox#add ()
 
 let vboxprog = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: framprog#add ()
 let boxprog = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vboxprog#add ()
@@ -462,6 +475,17 @@ let init' () =
     [("latitude", `Float lat_flt);
      ("longitude", `Float long_flt); ("time", `Int time_ms)] )) (cnv' f)
 
+let manualinit' () =
+    let cmd = "startManualInit" in
+    let pth = pth2'^"/v1//general/"^cmd in
+    let time_ms = int_of_float (Unix.time() *. 1000.0) in
+    let lat_flt = float_of_string entry_lat#text in
+    let long_flt = float_of_string entry_long#text in
+    let f = (fun s -> errchk' true (cnv s)) in
+    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [("latitude", `Float lat_flt);
+     ("longitude", `Float long_flt); ("time", `Int time_ms)] )) (cnv' f)
+
 let observe' () =
     let cmd = "general/startObservation" in
     let pth = pth2'^"/v1//"^cmd in
@@ -693,13 +717,47 @@ let abortall () =
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
+let show_entries jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang =
+    entry_ra#set_text (Utils.hms_of_float ra);
+    entry_dec#set_text (Utils.dms_of_float dec);
+    entry_alt#set_text (Utils.dms_of_float (alt_calc));
+    entry_az#set_text (Utils.dms_of_float (az_calc));
+    entry_mag#set_text (Printf.sprintf "%.2f" apmag);
+(* *)
+    spare.(0)#set_text (Utils.dms_of_float (elev));
+    spare.(1)#set_text (Utils.dms_of_float (azi));
+(* *)
+    spare.(2)#set_text (Printf.sprintf "%.4f" lst_calc);
+    spare.(3)#set_text (Printf.sprintf "%.4f" hour_calc);
+    spare.(4)#set_text (Printf.sprintf "%.4f" (sidt));
+    spare.(5)#set_text (Printf.sprintf "%.4f" (hour_ang));
+    spare'.(0)#set_text (Utils.hms_of_float ra_now);
+    spare'.(1)#set_text (Utils.dms_of_float dec_now);
+    spare'.(2)#set_text (string_of_float (jd_calc));
+    spare'.(3)#set_text (string_of_float (jd));
+    spare'.(4)#set_text (string_of_float ra);
+    spare'.(5)#set_text (string_of_float dec)
+
 let stellarium' () =
     let debug (attr:Stellarium.attr) =
+      let latitude = float_of_string entry_lat#text in
+      let longitude = float_of_string entry_long#text in
+      let yr,mon,dy,hr,min,sec = Utils.julian_now() in
+      let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec attr.ra attr.dec latitude longitude in
+      show_entries jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc 0.0 attr.ra attr.dec attr.az attr.alt attr.sidt attr.vis_mag attr.hour_ang;
+(*
       entry_ra#set_text attr.ra_hms;
       entry_dec#set_text attr.dec_dms;
       entry_alt#set_text attr.alt_dms;
       entry_az#set_text attr.az_dms;
       entry_mag#set_text (Printf.sprintf "%6.2f" attr.vis_mag);
+      spare'.(0)#set_text attr.ranow_hms;
+      spare'.(1)#set_text attr.decnow_dms;
+      spare'.(2)#set_text (string_of_float (attr.ranow*.Float.pi/.180.));
+      spare'.(3)#set_text (string_of_float (attr.decnow*.Float.pi/.180.));
+      spare'.(4)#set_text (string_of_float (attr.ra*.Float.pi/.180.));
+      spare'.(5)#set_text (string_of_float (attr.dec*.Float.pi/.180.));
+*)
       targ_status#set_text ("Stellarium: "^attr.target) in
     let f = (fun s -> match s.[0] with '{' -> Stellarium.descend !sattr (Yojson.Basic.from_string s); debug !sattr | _ -> targ_status#set_text s ) in
     Stellarium.stellarium' !sattr (cnv' f)
@@ -794,10 +852,13 @@ let messier' () =
     let (ra,dec) = if !ix = 0 || !ix > len
     then (targ_status#set_text ("Messier: " ^ sel ^ ": not found"); ("",""))
     else (let (found,b,c) = Messier_catalogue.messier_array.(!ix - 1) in targ_status#set_text ("Messier found: " ^ found); (b,c)) in
-    entry_ra#set_text ra;
-    entry_dec#set_text dec;
-    entry_alt#set_text "";
-    entry_az#set_text "";
+    let latitude = float_of_string entry_lat#text in
+    let longitude = float_of_string entry_long#text in
+    let ra_flt = Utils.cnv_ra ra in
+    let dec_flt = Utils.cnv_dec dec in
+    let yr,mon,dy,hr,min,sec = Utils.julian_now() in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+    show_entries jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc 0.0 ra_flt dec_flt 0.0 0.0 0.0 20.0 0.0;
     Lwt.return_unit
 
 let simbad' () =
@@ -817,49 +878,69 @@ let simbad' () =
 
 let show_ephem ix =
     let lst = !ephem_data_lst in
-    let eph = if List.length lst > ix then List.nth lst ix else String.make 80 ' ' in
-    entry_ra#set_text (String.sub eph 23 11);
-    entry_dec#set_text (String.sub eph 35 11);
-    entry_alt#set_text "";
-    entry_az#set_text "";
-    entry_mag#set_text (String.sub eph 46 8)
+    let (eph:string) = if List.length lst > ix then List.nth lst ix else String.make 80 ' ' in
+    print_endline eph;
+    let scan = Scanf.sscanf eph " %d-%[A-Za-z]-%d %d:%d %f %[A-Za-z*] %f %f %f %f %f %f %f %f %f %f %[A-Za-z] %f"
+                        (fun yr mon dy hr min jd sun ra dec azi elev daz delv sidt apmag sbrt diam cnst hour_ang ->
+                            (yr,mon,dy,hr,min,jd,sun,ra,dec,azi,elev,daz,delv,sidt,apmag,sbrt,diam,cnst,hour_ang)) in
+    let (yr,mon,dy,hr,min,jd,sun,ra,dec,azi,elev,daz,delv,sidt,apmag,sbrt,diam,cnst,hour_ang) = scan in
+    let latitude = float_of_string entry_lat#text in
+    let longitude = float_of_string entry_long#text in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr (Utils.month mon) dy hr min 0 ra dec latitude longitude in
+    ignore (sun,daz,delv,sbrt,diam,cnst); (* prevent complier error because we don't use these at the moment *)
+    show_entries jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang
+
+(*
+let datum = fst (Unix.mktime {tm_sec=0; tm_min=0; tm_hour=1; tm_mday=1; tm_mon=0; tm_year = 100; tm_wday=0; tm_yday=0; tm_isdst=false})
+*)
 
 let horizons' () =
-    let plnt = ref "" in
-    let lbl' = planets#entry#text in
-    List.iteri (fun ix loc -> if loc=lbl' then
-    begin
-    plnt := string_of_int ((ix+1)*100+99);
-    end) planet_lst;
     let hdrs = ref [] in
     let server =  "ssd.jpl.nasa.gov" in
     let pth = "/api/horizons.api?format=text" in
-    let t = Unix.gmtime (Unix.gettimeofday()) in
-    let t' = Unix.gmtime (Unix.gettimeofday() +. 86400.0) in
+(* *)
+    let datum = Unix.gettimeofday() in
+(* *)
+    let t = Unix.gmtime datum in
+    let t' = Unix.gmtime (datum +. 86400.0) in
     let f = (fun s ->
-                 let body = ref "" in
-                 ephem_data_lst := List.filter (fun x ->
-                                            let str = if String.length x > 5 then String.sub x 1 4 else "" in
-                                            let trial = try (int_of_string str) with _ -> 0 in
-                                            let use = trial = t.tm_year+1900 in
-                                            if false then print_endline (string_of_bool use^": "^str^": "^string_of_int trial^": "^x);
-                                            if String.length x > 18 && String.sub x 0 18 = "Target body name: " then
-                                            body := String.sub x 18 (String.index_from x 18 ' ' - 18);
-                                            if check#active then print_endline x;
-                                            use) (String.split_on_char '\n' s);
-                 show_ephem (t.tm_hour);
-                 targ_status#set_text ("horizons: "^ !body);
-                 ephem#set_active t.tm_hour) in
+       let body = ref "" in
+       ephem_data_lst := List.filter (fun x ->
+       let str = if String.length x > 5 then String.sub x 1 4 else "" in
+       let trial = try (int_of_string str) with _ -> 0 in
+       let use = trial = t.tm_year+1900 in
+       if false then print_endline (string_of_bool use^": "^str^": "^string_of_int trial^": "^x);
+       let len' = String.length targ_entry#text in
+       let txt' = if String.length x > len'+18 then String.trim (String.sub x 18 len') else "" in
+       if String.length x > 18 && String.sub x 0 18 = "Target body name: " then
+          begin
+          let ix = try int_of_string txt' with _ -> 0 in
+          print_endline (string_of_int ix^"\""^txt'^"\"");
+          body := if String.length x > len'+18 && (txt' = targ_entry#text || ix > 0) then
+             String.sub x (len'+18) (String.index_from x (len'+18) ' ' - (len'+18))
+          else
+             String.sub x 18 (String.index_from x 18 ' ' - 18)
+          end;
+       if check#active then print_endline x;
+       use) (String.split_on_char '\n' s);
+       targ_status#set_text ("horizons: "^ !body);
+       ephem#set_active t.tm_hour) in
+    let lat_flt = float_of_string entry_lat#text in
+    let long_flt = float_of_string entry_long#text in
     let req = 
-    [("COMMAND", "'"^ !plnt ^"'");
+    [("COMMAND", "'"^ targ_entry#text ^"'");
      ("OBJ_DATA", "'YES'");
      ("MAKE_EPHEM", "'YES'");
-     ("EPHEM_TYPE", "'OBSERVER'");
-     ("CENTER", "'500@399'");
+     ("EPHEM_TYPE", "'OBS'");
+     ("CENTER", "'coord'");
+     ("APPARENT", "'REFRACTED'");
+     ("CAL_FORMAT", "'BOTH'");
+     ("ANG_FORMAT", "'DEG'");
+     ("SITE_COORD", Printf.sprintf "'%f,%f,%f'" long_flt lat_flt 0.0);
      ("START_TIME", Printf.sprintf "%d-%d-%d" (t.tm_year+1900) (t.tm_mon+1) t.tm_mday);
      ("STOP_TIME", Printf.sprintf "%d-%d-%d" (t'.tm_year+1900) (t'.tm_mon+1) t'.tm_mday);
      ("STEP_SIZE", "'1 h'");
-     ("QUANTITIES", "'1,9,20,23,24,29'");
+     ("QUANTITIES", "'1,4,5,7,9,13,29,42");
     ] in
     if check#active then List.iter (fun (k,x) -> print_endline (k^": "^x)) req;
     Utils.get' "https://" server req [] pth f hdrs
@@ -904,6 +985,8 @@ let taskarray =
          ("stopobs", stopobs');
          ("", status');
          ("park", park');
+         ("", status');
+         ("manualinit", manualinit');
          ("", status');
          ("motorgo", motorgo);
          ("motorstatus", motorstatus);
@@ -966,8 +1049,7 @@ let sm_jump lbl' =
 
 let search () = 
     let s = targ_entry#text in
-    sattr := Stellarium.attr s;
-    sm_jump !xserv
+    sm_jump (try let _ = int_of_string s in "horizons" with _ -> sattr := Stellarium.attr s; !xserv)
 
 let update_status' kw stat =
   let len = String.length kw in
@@ -1048,6 +1130,12 @@ let add_prog_entry () =
               ("debayerInterpolation", `String "VNG")])] in
     prog_entries := obs :: !prog_entries
 
+let horizons'' lbl' = 
+  List.iteri (fun ix loc -> if loc=lbl' then (match ix with
+      | 2 -> targ_entry#set_text "301"
+      | 9 -> ()
+      | _ -> targ_entry#set_text (string_of_int ((ix+1)*100+99)); search())) planet_lst
+
 let gui () = 
   ignore @@ factory_fil#add_item "Quit" ~callback: app_quit';
   ignore @@ factory_stell#add_item "Status" ~callback: app_status';
@@ -1067,6 +1155,7 @@ let gui () =
   ignore (buttonB#connect#clicked ~callback: (fun () -> sm_jump "astrometry"));
   ignore (buttonC#connect#clicked ~callback: (fun () -> sm_jump "trackon"));
   ignore (buttonD#connect#clicked ~callback: (fun () -> sm_jump "trackoff"));
+  ignore (buttonE#connect#clicked ~callback: (fun () -> sm_jump "manualinit"));
   ignore (button12#connect#clicked ~callback: (fun () -> sm_jump "mosaic"));
   ignore (button13#connect#clicked ~callback: (fun () -> sm_jump "obsprog"));
   ignore (button14#connect#clicked ~callback: (fun () -> add_prog_entry() ));
@@ -1078,7 +1167,8 @@ let gui () =
   ignore (rbutton3#connect#clicked ~callback:(fun () -> xflip := "BOTH"));
   ignore (rbuttons1#connect#clicked ~callback:(fun () -> xserv := "simbad"));
   ignore (rbuttons2#connect#clicked ~callback:(fun () -> xserv := "stellarium"));
-  ignore (rbuttons3#connect#clicked ~callback:(fun () -> xserv := "messier"));
+  ignore (rbuttons3#connect#clicked ~callback:(fun () -> xserv := "horizons"));
+  ignore (rbuttons4#connect#clicked ~callback:(fun () -> xserv := "messier"));
 (*
   ignore (rng#connect#change_value ~callback:exposlidefunc);
   ignore (gain#connect#change_value ~callback:gainslidefunc);
@@ -1124,9 +1214,9 @@ let gui () =
   ignore (combo#entry#connect#changed ~callback: (fun () -> loc_jump combo#entry#text)) ;
   combo#set_active !deflt;
   status_jpeg#set_editable false;
-  ignore (planets#entry#connect#changed ~callback: (fun () -> sm_jump "horizons")) ;
+  ignore (planets#entry#connect#changed ~callback: (fun () -> horizons'' planets#entry#text)) ;
   ignore (ephem#entry#connect#changed ~callback: (fun () -> let lbl' = ephem#entry#text in List.iteri (fun ix loc -> if loc=lbl' then show_ephem ix) ephem_lst)) ;
-  planets#set_active 2;
+  planets#set_active 9;
 
   (* Show the window. *)
   window#show ();
