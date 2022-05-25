@@ -27,6 +27,7 @@ let tzcity = try Sys.getenv "TIME_ZONE" with _ -> List.hd (List.tl timezone)  ^ 
 
 let session' = ref {sid=""; ping_int=0; ping_tim=0}
 let statush = Hashtbl.create 32767
+let connecting = ref false
 
 (* Initializes GTK. *)
 let _ = GMain.init ()
@@ -51,6 +52,7 @@ let frame_eaa = GBin.frame ~label: "Electronically assisted astronomy functions"
 let boxu = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: frame_eaa#add ()
 let frame_target = GBin.frame ~label: "Target object settings" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
 let boxt = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: frame_target#add ()
+let boxd = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
 let boxh = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
 let boxv = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
 let boxs = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
@@ -76,7 +78,44 @@ let button5 = GButton.button ~label:"Stop Observation" ~packing:boxu#add ()
 (* Button6 *)
 let button6 = GButton.button ~label:"Park" ~packing:boxu#add ()
 
+let approach = try int_of_string (Sys.getenv "APPROACH") with _ -> 0
+
+let tim = Array.init (if approach > 0 then 8 else 6) (fun ix -> let lbl = ["Year";"Month";"Day";"Hour";"Minute";"Second";"Closest(km)";"Abs Mag"] in
+let fram_tim = GBin.frame ~label: (List.nth lbl ix) ~packing:(boxd#pack ~expand:true ~fill:true ~padding:2) () in
+GEdit.entry ~max_length: 20 ~packing: fram_tim#add ()) 
+
+let datum () = fst (Unix.mktime {
+       tm_year=int_of_string(tim.(0)#text) - 1900;
+       tm_mon=Utils.month (tim.(1)#text) - 1;
+       tm_mday=int_of_string(tim.(2)#text);
+       tm_hour=int_of_string(tim.(3)#text);
+       tm_min=int_of_string(tim.(4)#text);
+       tm_sec=int_of_string(tim.(5)#text);
+       tm_yday=0;
+       tm_wday=0;
+       tm_isdst=false})
+
+let update_date yr mon dy hr min sec =
+      tim.(0)#set_text (string_of_int yr);
+      tim.(1)#set_text (string_of_int mon);
+      tim.(2)#set_text (string_of_int dy);
+      tim.(3)#set_text (string_of_int hr);
+      tim.(4)#set_text (string_of_int min);
+      tim.(5)#set_text (string_of_int sec)
+
+let split_date () =
+    let tm = Unix.gmtime (datum()) in
+    tm.tm_year+1900,tm.tm_mon+1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec
+
+let reset_date () =
+    let tm = Unix.gmtime (Unix.gettimeofday()) in
+    let yr,mon,dy,hr,min,sec = tm.tm_year+1900,tm.tm_mon+1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec in
+    update_date yr mon dy hr min sec
+
 let _= GPack.vbox ~spacing:2 ~border_width: 10 ~packing: boxh#add ()
+let frame_nam = GBin.frame ~label: "Target Name" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
+let entry_nam = GEdit.entry ~max_length: 20 ~packing: frame_nam#add ()
+
 let frame_ra = GBin.frame ~label: "Right ascension" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
 let entry_ra = GEdit.entry ~max_length: 20 ~packing: frame_ra#add ()
 
@@ -110,22 +149,23 @@ let gainadj = GData.adjustment ~lower:0.0 ~upper:49.0 ~step_incr:0.1 ~page_incr:
 let gain = GRange.scale `HORIZONTAL ~adjustment:gainadj ~draw_value:false ~packing:fram_gain#add ()
 *)
 
-(* check if verbose *)
-let check = GButton.check_button ~label: "Verbose" ~active: false ~packing: boxv#add ()
-
 (* Spare1 *)
 let spare = Array.init 6 (fun ix -> let lbl = ["Altitude(catalog)";"Azimuth(catalog)";"Local Siderial Time";"Hour Angle";"LST(catalog)";"HA(catalog)"] in
 let fram_spare = GBin.frame ~label: (List.nth lbl ix) ~packing:(boxv#pack ~expand:true ~fill:true ~padding:2) () in
 GEdit.entry ~max_length: 20 ~packing: fram_spare#add ()) 
-let spare' = Array.init 6 (fun ix -> let lbl = ["Right Ascension(Jnow)";"Declination(Jnow)";"Julian Date";"JD(catalog)";"raJ2000";"decJ2000"] in
+let spare' = Array.init 6 (fun ix -> let lbl = ["Right Ascension(Jnow)";"Declination(Jnow)";"Julian Date";"JD(catalog)";"raJ2000(decimal)";"decJ2000(decimal)"] in
 let fram_spare = GBin.frame ~label: (List.nth lbl ix) ~packing:(boxs#pack ~expand:true ~fill:true ~padding:2) () in
 GEdit.entry ~max_length: 20 ~packing: fram_spare#add ()) 
 
-let framprog = GBin.frame ~label: "Observation program" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
+let framprog = GBin.frame ~label: "Observation/Mosaic program" ~packing:(box2#pack ~expand:true ~fill:true ~padding:0) ()
+
+let frame_manual = GBin.frame ~label: "Manual Alt/Az observing" ~packing:(box2#pack ~expand:true ~fill:true ~padding:0) ()
 
 let frame_observatory = GBin.frame ~label: "Observatory settings" ~packing:(box2#pack ~expand:true ~fill:true ~padding:0) ()
 
 let framx = GBin.frame ~label: "Dark frames" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
+
+let bbox = GPack.hbox ~border_width:5 ~packing:frame_manual#add ()
 
 let box3 = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: framx#add ()
 
@@ -148,48 +188,27 @@ let obox' = GPack.vbox ~border_width:5 ~packing:frame_obs#add ()
 let frame_tz = GBin.frame ~label:"TimeZone (from O/S)" ~packing:vbox'#pack ()
 let tz' = GEdit.entry ~max_length: 30 ~packing: frame_tz#add ()
 
-let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(vbox'#pack ~expand:true ~fill:true ~padding:2) ()
+(* check if verbose *)
+let check = GButton.check_button ~label: "Verbose" ~active: false ~packing: vbox'#add ()
+
+let xbox = GPack.vbox ~spacing:1 ~border_width: 1 ~packing: obox#add ()
+let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(xbox#pack ~expand:true ~fill:true ~padding:2) ()
 let boxserv = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: framserv#add ()
 let rbuttons1 = GButton.radio_button ~label:"Simbad" ~packing: boxserv#add ()
 let rbuttons2 = GButton.radio_button ~group:rbuttons1#group ~label:"Stellarium" ~packing: boxserv#add ()
 let rbuttons3 = GButton.radio_button ~group:rbuttons1#group ~label:"Horizons" ~active:true ~packing: boxserv#add ()
 let rbuttons4 = GButton.radio_button ~group:rbuttons1#group ~label:"Messier" ~active:true ~packing: boxserv#add ()
+let rbuttons5 = GButton.radio_button ~group:rbuttons1#group ~label:"NGC2000" ~active:true ~packing: boxserv#add ()
 
-let sbox = GPack.hbox ~border_width:5 ~packing:vbox'#add ()
+let sbox = GPack.hbox ~border_width:5 ~packing:xbox#add ()
 let frame_entry = GBin.frame ~label:"Target Search" ~packing:sbox#pack ()
 let targ_entry = GEdit.entry ~max_length: 30 ~packing: frame_entry#add ()
 let frame_status = GBin.frame ~label:"Target Result" ~packing:(sbox#pack ~expand:true ~fill:true ~padding:2) ()
 let targ_status = GEdit.entry ~max_length: 40 ~packing: frame_status#add ()
 
-let ephem_lst = [
-"00:00";
-"01:00";
-"02:00";
-"03:00";
-"04:00";
-"05:00";
-"06:00";
-"07:00";
-"08:00";
-"09:00";
-"10:00";
-"11:00";
-"12:00";
-"13:00";
-"14:00";
-"15:00";
-"16:00";
-"17:00";
-"18:00";
-"19:00";
-"20:00";
-"21:00";
-"22:00";
-"23:00";
-"24:00";
-]
+let ephem_lst = List.init 25 (fun ix -> Printf.sprintf "%.2d:00" ix)
 
-let frame_planets = GBin.frame ~label:"NASA Horizons Solar System Ephemeris" ~packing:vbox'#pack ()
+let frame_planets = GBin.frame ~label:"NASA Horizons Solar System Ephemeris" ~packing:xbox#pack ()
 let pbox = GPack.hbox ~border_width:5 ~packing:frame_planets#add ()
 let planet_lst = ["Mercury"; "Venus"; "Moon"; "Mars"; "Jupiter"; "Saturn"; "Uranus"; "Neptune"; "Pluto"; "Other Minor Planets"]
 let pmodel, ptext_column = GTree.store_of_list Gobject.Data.string planet_lst
@@ -197,14 +216,14 @@ let planets = GEdit.combo_box_entry ~text_column:ptext_column ~model:pmodel ~pac
 let emodel, etext_column = GTree.store_of_list Gobject.Data.string ephem_lst
 let ephem = GEdit.combo_box_entry ~text_column:etext_column ~model:emodel ~packing:pbox#pack ()
 
-let llbox = GPack.vbox ~spacing:1 ~border_width: 10 ~packing: obox#add ()
+let llbox = GPack.hbox ~spacing:1 ~border_width: 1 ~packing: obox'#add ()
 let frame_lat = GBin.frame ~label: "Latitude" ~packing:(llbox#pack ~expand:true (* ~fill:false ~padding:0 *) ) ()
 let entry_lat = GEdit.entry ~max_length: 20 ~packing: frame_lat#add ()
 let frame_long = GBin.frame ~label: "Longitude" ~packing:(llbox#pack ~expand:true (* ~fill:false ~padding:0 *) ) ()
 let entry_long = GEdit.entry ~max_length: 20 ~packing: frame_long#add ()
-let bbox = GPack.hbox ~border_width:5 ~packing:llbox#add ()
+
 (* Button7 *)
-let button7 = GButton.button ~label:"Motor Go" ~packing:bbox#add ()
+let button7 = GButton.button ~label:"Alt/Az Go" ~packing:bbox#add ()
 (* Button8 *)
 let button8 = GButton.button ~label:"Single Focus" ~packing:bbox#add ()
 (* Button9 *)
@@ -218,11 +237,20 @@ let buttonC = GButton.button ~label:"Track On" ~packing:bbox#add ()
 (* ButtonD *)
 let buttonD = GButton.button ~label:"Track Off" ~packing:bbox#add ()
 (* ButtonE *)
-let buttonE = GButton.button ~label:"ManualInit" ~packing:bbox#add ()
+let buttonE = GButton.button ~label:"Manual Init" ~packing:bbox#add ()
+(* ButtonF *)
+let buttonF = GButton.button ~label:"Read Params" ~packing:bbox#add ()
 
 let vboxprog = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: framprog#add ()
 let boxprog = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vboxprog#add ()
 let eboxprog = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vboxprog#add ()
+
+(* add text view with scroll bars *)
+let scroll = GBin.scrolled_window
+                 ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC
+                 ~packing:vboxprog#add ()
+let textview = GText.view ~packing:scroll#add_with_viewport ()
+
 (* Button12 *)
 let button12 = GButton.button ~label:"Write Mosaic Program" ~packing:boxprog#add ()
 (* Button13 *)
@@ -237,22 +265,24 @@ let button16 = GButton.button ~label:"Take Samples" ~packing:boxprog#add ()
 let button17 = GButton.button ~label:"Abort All" ~packing:boxprog#add ()
 
 (* program parameters *)
-let frame_gridw = GBin.frame ~label: "Grid width" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
-let entry_gridw = GEdit.entry ~max_length: 18 ~packing: frame_gridw#add ()
-let frame_gridh = GBin.frame ~label: "Grid height" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
-let entry_gridh = GEdit.entry ~max_length: 18 ~packing: frame_gridh#add ()
-let frame_numi = GBin.frame ~label: "Num images" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
-let entry_numi = GEdit.entry ~max_length: 18 ~packing: frame_numi#add ()
-let frame_nump = GBin.frame ~label: "Num passes" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
-let entry_nump = GEdit.entry ~max_length: 18 ~packing: frame_nump#add ()
-let frame_wminov = GBin.frame ~label: "Width min overlap" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
-let entry_wminov = GEdit.entry ~max_length: 18 ~packing: frame_wminov#add ()
-let frame_hminov = GBin.frame ~label: "Height min overlap" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
-let entry_hminov = GEdit.entry ~max_length: 18 ~packing: frame_hminov#add ()
-let frame_wpassof = GBin.frame ~label: "Width pass offset" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
-let entry_wpassof = GEdit.entry ~max_length: 18 ~packing: frame_wpassof#add ()
-let frame_hpassof = GBin.frame ~label: "Height pass offset" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:1) ()
-let entry_hpassof = GEdit.entry ~max_length: 18 ~packing: frame_hpassof#add ()
+let frame_gridw = GBin.frame ~label: "Grid width" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
+let entry_gridw = GEdit.entry ~max_length: 5 ~packing: frame_gridw#add ()
+let frame_gridh = GBin.frame ~label: "Grid height" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
+let entry_gridh = GEdit.entry ~max_length: 5 ~packing: frame_gridh#add ()
+let frame_numi = GBin.frame ~label: "Num images" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
+let entry_numi = GEdit.entry ~max_length: 5 ~packing: frame_numi#add ()
+let frame_nump = GBin.frame ~label: "Num passes" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
+let entry_nump = GEdit.entry ~max_length: 5 ~packing: frame_nump#add ()
+let frame_wminov = GBin.frame ~label: "Width min overlap" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
+let entry_wminov = GEdit.entry ~max_length: 10 ~packing: frame_wminov#add ()
+let frame_hminov = GBin.frame ~label: "Height min overlap" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
+let entry_hminov = GEdit.entry ~max_length: 10 ~packing: frame_hminov#add ()
+let frame_wpassof = GBin.frame ~label: "Width pass offset" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
+let entry_wpassof = GEdit.entry ~max_length: 10 ~packing: frame_wpassof#add ()
+let frame_hpassof = GBin.frame ~label: "Height pass offset" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
+let entry_hpassof = GEdit.entry ~max_length: 10 ~packing: frame_hpassof#add ()
+let frame_duration = GBin.frame ~label: "Target Duration" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
+let entry_duration = GEdit.entry ~max_length: 8 ~packing: frame_duration#add ()
 
 let _ = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vbox#add ()
 let status_win (box':GPack.box array) lbls =
@@ -422,15 +452,15 @@ let status' () =
     "Accept-Language: en-GB,en;q=0.9"] in
     let pth = pth2'^"/v1//logs/consume" in
     let f = (fun s -> errchk' false (cnv s)) in
-    Utils.post' proto server params headers pth (Quests.Request.Raw ("{}")) (cnv' f)
+    if !connecting then Utils.post' proto server params headers pth (Quests.Request.Raw ("{}")) (cnv' f) else Lwt.return_unit
 
 let obj_id = ref ""
 let obj_nam = ref ""
 let mos_id  = ref ""
 let xflip = ref "BOTH"
-let xserv = ref "messier"
+let xserv = ref "ngc2000"
+
 let xgain = ref 200
-let sattr = ref (Stellarium.attr "")
 let jpegh = Hashtbl.create 127
 (*
 let gain_int = ref 200
@@ -554,8 +584,8 @@ let motorgo () =
     let pth = pth2'^"/v1//motors/goAbsolute" in
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
-    [("ALT", `Float (!sattr.alt));
-     ("AZ", `Float (!sattr.az))] )) (cnv' f)
+    [("ALT", `Float (Utils.cnv_dec entry_alt#text));
+     ("AZ", `Float (Utils.cnv_dec entry_az#text))] )) (cnv' f)
 
 let track () =
     let pth = pth2'^"/v1//motors/track" in
@@ -613,8 +643,14 @@ let astrometry () =
     [("type", `String "JPEG");
      ("binning", `Int 2);
      ("gain", `Int (gain_int()));
-     ("exposureMicroSec", `Int (expos_us()));
+     ("exposureMicroSec", `Int 500000);
      ("convertToDate", `Bool false)] )) (cnv' f)
+
+let readparams () =
+    let pth = pth2'^"/v1//camera/debug_readParams" in
+    let f = (fun s -> errchk' true (cnv s)) in
+    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [] )) (cnv' f)
 
 let mosaic () =
     mos_id := "mo"^string_of_int (int_of_float (Unix.time()) mod 1000000);
@@ -631,12 +667,12 @@ let mosaic () =
       ("histogramHigh", `Int 0);
       ("backgroundEnabled", `Bool true);
       ("exposureMicroSec", `Int (expos_us()));
-      ("objectId", `String (!sattr.target))] in
+      ("objectId", `String (entry_nam#text))] in
     Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("programName", `String !mos_id);
      ("ra", `Float ra_flt);
      ("de", `Float dec_flt);
-     ("settingsFrom", `String (!sattr.target));
+     ("settingsFrom", `String (entry_nam#text));
      ("gridWidth", `Int (int_of_string (entry_gridw#text)));
      ("gridHeight", `Int (int_of_string (entry_gridh#text)));
      ("numImages", `Int (int_of_string (entry_numi#text)));
@@ -717,16 +753,15 @@ let abortall () =
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
-let show_entries jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang =
+let show_entries nam jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang =
+    if nam <> "" then entry_nam#set_text nam;
     entry_ra#set_text (Utils.hms_of_float ra);
     entry_dec#set_text (Utils.dms_of_float dec);
     entry_alt#set_text (Utils.dms_of_float (alt_calc));
     entry_az#set_text (Utils.dms_of_float (az_calc));
     entry_mag#set_text (Printf.sprintf "%.2f" apmag);
-(* *)
     spare.(0)#set_text (Utils.dms_of_float (elev));
     spare.(1)#set_text (Utils.dms_of_float (azi));
-(* *)
     spare.(2)#set_text (Printf.sprintf "%.4f" lst_calc);
     spare.(3)#set_text (Printf.sprintf "%.4f" hour_calc);
     spare.(4)#set_text (Printf.sprintf "%.4f" (sidt));
@@ -739,25 +774,13 @@ let show_entries jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd r
     spare'.(5)#set_text (string_of_float dec)
 
 let stellarium' () =
+    let sattr = ref (Stellarium.attr targ_entry#text) in
     let debug (attr:Stellarium.attr) =
       let latitude = float_of_string entry_lat#text in
       let longitude = float_of_string entry_long#text in
-      let yr,mon,dy,hr,min,sec = Utils.julian_now() in
+      let yr,mon,dy,hr,min,sec = split_date() in
       let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec attr.ra attr.dec latitude longitude in
-      show_entries jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc 0.0 attr.ra attr.dec attr.az attr.alt attr.sidt attr.vis_mag attr.hour_ang;
-(*
-      entry_ra#set_text attr.ra_hms;
-      entry_dec#set_text attr.dec_dms;
-      entry_alt#set_text attr.alt_dms;
-      entry_az#set_text attr.az_dms;
-      entry_mag#set_text (Printf.sprintf "%6.2f" attr.vis_mag);
-      spare'.(0)#set_text attr.ranow_hms;
-      spare'.(1)#set_text attr.decnow_dms;
-      spare'.(2)#set_text (string_of_float (attr.ranow*.Float.pi/.180.));
-      spare'.(3)#set_text (string_of_float (attr.decnow*.Float.pi/.180.));
-      spare'.(4)#set_text (string_of_float (attr.ra*.Float.pi/.180.));
-      spare'.(5)#set_text (string_of_float (attr.dec*.Float.pi/.180.));
-*)
+      show_entries attr.target jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc 0.0 attr.ra attr.dec attr.az attr.alt attr.sidt attr.vis_mag attr.hour_ang;
       targ_status#set_text ("Stellarium: "^attr.target) in
     let f = (fun s -> match s.[0] with '{' -> Stellarium.descend !sattr (Yojson.Basic.from_string s); debug !sattr | _ -> targ_status#set_text s ) in
     Stellarium.stellarium' !sattr (cnv' f)
@@ -812,6 +835,17 @@ let simbad_cnv = function
               ("unit", "&quot;d:m:s&quot;")],
              [Xml.Element ("DESCRIPTION", [], [Xml.PCData "Declination"])]);
            Xml.Element
+              ("FIELD",
+               [("ID", "FLUX_V"); ("name", "FLUX_V"); ("datatype", "float");
+                ("ucd", "phot.mag;em.opt.V"); ("unit", "mag")],
+               [Xml.Element ("DESCRIPTION", [], [Xml.PCData "Magnitude V"])]);
+             Xml.Element
+              ("FIELD",
+               [("ID", "FLUX_UNIT_mag"); ("name", "FLUX_UNIT_mag");
+                ("datatype", "char"); ("width", "3");
+                ("ucd", "meta.unit;phot.flux")],
+               [Xml.Element ("DESCRIPTION", [], [Xml.PCData "flux unit"])]);
+             Xml.Element
             ("DATA", [],
              [Xml.Element
                ("TABLEDATA", [],
@@ -819,11 +853,16 @@ let simbad_cnv = function
                   ("TR", [],
                    [Xml.Element ("TD", [], [Xml.PCData ident]);
                     Xml.Element ("TD", [], [Xml.PCData ra]);
-                    Xml.Element ("TD", [], [Xml.PCData dec])])])])])])]) ->
-    entry_ra#set_text ra;
-    entry_dec#set_text dec;
-    entry_alt#set_text "";
-    entry_az#set_text "";
+                    Xml.Element ("TD", [], [Xml.PCData dec]);
+                    Xml.Element ("TD", [], [Xml.PCData mag]);
+                    Xml.Element ("TD", [], [])])])])])])]) ->
+    let latitude = float_of_string entry_lat#text in
+    let longitude = float_of_string entry_long#text in
+    let yr,mon,dy,hr,min,sec = split_date() in
+    let ra_flt = Utils.cnv_ra ra in
+    let dec_flt = Utils.cnv_dec dec in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+    show_entries ident jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan (float_of_string mag) nan;
     targ_status#set_text ("SIMBAD found: "^ident)
 | Xml.Element
      ("VOTABLE",
@@ -849,23 +888,38 @@ let messier' () =
     let len = Array.length Messier_catalogue.messier_array in
     let ix = ref (try int_of_string (String.sub sel 1 (String.length sel - 1)) with _ -> 0) in
     if sel.[0] <> 'M' || !ix = 0 || !ix > len then Array.iteri (fun i (a,_,_) -> if sel = a then ix := i+1) Messier_catalogue.messier_array;
-    let (ra,dec) = if !ix = 0 || !ix > len
-    then (targ_status#set_text ("Messier: " ^ sel ^ ": not found"); ("",""))
-    else (let (found,b,c) = Messier_catalogue.messier_array.(!ix - 1) in targ_status#set_text ("Messier found: " ^ found); (b,c)) in
+    let (found,ra,dec) = if !ix = 0 || !ix > len
+    then (targ_status#set_text ("Messier: " ^ sel ^ ": not found"); ("","",""))
+    else (let (found,b,c) = Messier_catalogue.messier_array.(!ix - 1) in targ_status#set_text ("Messier found: " ^ found); (found,b,c)) in
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
     let ra_flt = Utils.cnv_ra ra in
     let dec_flt = Utils.cnv_dec dec in
-    let yr,mon,dy,hr,min,sec = Utils.julian_now() in
+    let yr,mon,dy,hr,min,sec = split_date() in
     let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
-    show_entries jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc 0.0 ra_flt dec_flt 0.0 0.0 0.0 20.0 0.0;
+    show_entries found jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan nan nan;
     Lwt.return_unit
 
+let ngc2000' () = 
+    let sel = targ_entry#text in
+    (try (let (ra_flt,dec_flt,cnst,diam,mag,desc) = Hashtbl.find Ngc2000.ngchash sel in
+    targ_status#set_text ("NGC2000 found: " ^ sel);
+    let yr,mon,dy,hr,min,sec = split_date() in
+    let latitude = float_of_string entry_lat#text in
+    let longitude = float_of_string entry_long#text in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+    ignore (cnst,diam,mag,desc);
+    show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan)
+    with _ ->
+    targ_status#set_text ("NGC2000: " ^ sel ^ ": not found");
+    show_entries "" nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan);
+    Lwt.return_unit
+    
 let simbad' () =
     let hdrs = ref [] in
     let server =  "simbad.u-strasbg.fr" in
     let pth = "/simbad/sim-id" in
-    let params = [ ("output.format", "VOTABLE"); ("output.params", "main_id,ra,dec"); ("Ident", targ_entry#text) ] in
+    let params = [ ("output.format", "VOTABLE"); ("output.params", "main_id,ra,dec,flux(V),flux_unit(mag)"); ("Ident", targ_entry#text) ] in
     let f = (fun s -> simbad_cnv (
                                   let m = XmlParser.make() in
                                       XmlParser.prove m false;
@@ -880,29 +934,33 @@ let show_ephem ix =
     let lst = !ephem_data_lst in
     let (eph:string) = if List.length lst > ix then List.nth lst ix else String.make 80 ' ' in
     print_endline eph;
-    let scan = Scanf.sscanf eph " %d-%[A-Za-z]-%d %d:%d %f %[A-Za-z*] %f %f %f %f %f %f %f %f %f %f %[A-Za-z] %f"
-                        (fun yr mon dy hr min jd sun ra dec azi elev daz delv sidt apmag sbrt diam cnst hour_ang ->
-                            (yr,mon,dy,hr,min,jd,sun,ra,dec,azi,elev,daz,delv,sidt,apmag,sbrt,diam,cnst,hour_ang)) in
-    let (yr,mon,dy,hr,min,jd,sun,ra,dec,azi,elev,daz,delv,sidt,apmag,sbrt,diam,cnst,hour_ang) = scan in
+    try let scan = Scanf.sscanf eph " %d-%[A-Za-z]-%d %d:%d %f %[A-Za-z*] %f %f %f %f %f %f %f %f %[^ ] %[A-Za-z] %f"
+                        (fun yr mon dy hr min jd sun ra dec azi elev daz delv sidt apmag sbrt cnst hour_ang ->
+                            (yr,mon,dy,hr,min,jd,sun,ra,dec,azi,elev,daz,delv,sidt,apmag,sbrt,cnst,hour_ang)) in
+    let (yr,mon,dy,hr,min,jd,sun,ra,dec,azi,elev,daz,delv,sidt,apmag,sbrt,cnst,hour_ang) = scan in
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
     let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr (Utils.month mon) dy hr min 0 ra dec latitude longitude in
-    ignore (sun,daz,delv,sbrt,diam,cnst); (* prevent complier error because we don't use these at the moment *)
-    show_entries jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang
+    ignore (sun,daz,delv,sbrt,cnst); (* prevent complier error because we don't use these at the moment *)
+    show_entries "" jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang
+    with _ -> 
+    show_entries "" nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan
 
 (*
 let datum = fst (Unix.mktime {tm_sec=0; tm_min=0; tm_hour=1; tm_mday=1; tm_mon=0; tm_year = 100; tm_wday=0; tm_yday=0; tm_isdst=false})
+*)
+
+(*
+ 2022-May-24 00:00 2459723.500000000 A   283.06729  45.34441   87.458179  62.208412    211.28    497.77  16.1126959778   18.610    n.a.   Lyr   -2.768899387
 *)
 
 let horizons' () =
     let hdrs = ref [] in
     let server =  "ssd.jpl.nasa.gov" in
     let pth = "/api/horizons.api?format=text" in
-(* *)
-    let datum = Unix.gettimeofday() in
-(* *)
-    let t = Unix.gmtime datum in
-    let t' = Unix.gmtime (datum +. 86400.0) in
+    let datum' = datum() in
+    let t = Unix.gmtime datum' in
+    let t' = Unix.gmtime (datum' +. 86400.0) in
     let f = (fun s ->
        let body = ref "" in
        ephem_data_lst := List.filter (fun x ->
@@ -910,21 +968,16 @@ let horizons' () =
        let trial = try (int_of_string str) with _ -> 0 in
        let use = trial = t.tm_year+1900 in
        if false then print_endline (string_of_bool use^": "^str^": "^string_of_int trial^": "^x);
-       let len' = String.length targ_entry#text in
-       let txt' = if String.length x > len'+18 then String.trim (String.sub x 18 len') else "" in
-       if String.length x > 18 && String.sub x 0 18 = "Target body name: " then
+       if String.length x >= 32 && String.sub x 0 12 = "JPL/HORIZONS" then
           begin
-          let ix = try int_of_string txt' with _ -> 0 in
-          print_endline (string_of_int ix^"\""^txt'^"\"");
-          body := if String.length x > len'+18 && (txt' = targ_entry#text || ix > 0) then
-             String.sub x (len'+18) (String.index_from x (len'+18) ' ' - (len'+18))
-          else
-             String.sub x 18 (String.index_from x 18 ' ' - 18)
+          body := String.trim (String.sub x 12 (String.length x - 32));
           end;
        if check#active then print_endline x;
        use) (String.split_on_char '\n' s);
        targ_status#set_text ("horizons: "^ !body);
-       ephem#set_active t.tm_hour) in
+       entry_nam#set_text !body;
+       ephem#set_active t.tm_hour;
+       show_ephem t.tm_hour) in
     let lat_flt = float_of_string entry_lat#text in
     let long_flt = float_of_string entry_long#text in
     let req = 
@@ -940,10 +993,62 @@ let horizons' () =
      ("START_TIME", Printf.sprintf "%d-%d-%d" (t.tm_year+1900) (t.tm_mon+1) t.tm_mday);
      ("STOP_TIME", Printf.sprintf "%d-%d-%d" (t'.tm_year+1900) (t'.tm_mon+1) t'.tm_mday);
      ("STEP_SIZE", "'1 h'");
-     ("QUANTITIES", "'1,4,5,7,9,13,29,42");
+     ("QUANTITIES", "'1,4,5,7,9,29,42");
     ] in
     if check#active then List.iter (fun (k,x) -> print_endline (k^": "^x)) req;
     Utils.get' "https://" server req [] pth f hdrs
+
+type smdb = {
+    h: float;
+    des: string;
+    orb: string;
+    jd: string;
+    cd: string;
+    dist: string;
+    dist_min: string;
+    dist_max: string;
+    v_rel: string;
+    v_inf: string;
+    t_sigma_f: string;
+    }
+
+let dump_smdb fd {des;orb;jd;cd;dist;dist_min;dist_max;v_rel;v_inf;t_sigma_f;h} =
+  output_string fd (des^" "^orb^" "^jd^" "^cd^" "^dist^" "^dist_min^" "^dist_max^" "^v_rel^" "^v_inf^" "^t_sigma_f^" "^string_of_float h^"\n")
+
+(*
+let smdb_compare {h=a;_} {h=b;_} =
+   let lft = float_of_string a in
+   let rght = float_of_string b in
+   print_endline (string_of_float lft^" "^string_of_float rght);
+   int_of_float (lft -. rght)
+*)
+
+let smdb_list = function
+| `List
+           [`String des; `String orb; `String jd;
+            `String cd; `String dist;
+            `String dist_min; `String dist_max;
+            `String v_rel; `String v_inf;
+            `String t_sigma_f; `String h'] -> let h = float_of_string h' in {h;des;orb;jd;cd;dist;dist_min;dist_max;v_rel;v_inf;t_sigma_f}
+| _ -> failwith "json_list"
+
+let  (smdb_decode:Yojson.Basic.t -> smdb list) = function
+| `Assoc
+    [("signature",
+      `Assoc
+        [("source", `String "NASA/JPL SBDB Close Approach Data API");
+         ("version", `String "1.4")]);
+     ("count", `String _);
+     ("fields",
+      `List
+        [`String "des"; `String "orbit_id"; `String "jd"; `String "cd";
+         `String "dist"; `String "dist_min"; `String "dist_max";
+         `String "v_rel"; `String "v_inf"; `String "t_sigma_f"; `String "h"]);
+     ("data",
+      `List lst)] -> List.map smdb_list lst
+| _ -> failwith "json"
+
+let smdb_entries = ref [||]
 
 let fetch' () =
     let jhash = ref ("",ref false) in
@@ -965,8 +1070,78 @@ let fetch' () =
                      close_out fd in
     Utils.get' proto server [] headers pth (cnv' f) hdrs
 
-let taskarray =
+let quit' = ref false
+
+let rec sm_jump lbl' = 
+  let target = ref (-1) in
+  Array.iteri (fun ix (lbl, _) -> if lbl=lbl' then (target := ix; if check#active then print_endline (string_of_int (ix+1)^": "^lbl'))) taskarray;
+  if !target <> -1 then
+    begin
+    Queue.add !target start;
+    print_endline (fst taskarray.(!target))
+    end
+
+and search () = 
+    let s = targ_entry#text in
+    sm_jump (try let _ = int_of_string s in "horizons" with _ -> !xserv)
+
+and smdb'' sentries lbl' = 
+  List.iteri (fun ix loc -> if loc=lbl' then
+      begin
+      let {des;orb;jd;cd;dist;dist_min;dist_max;v_rel;v_inf;t_sigma_f;h} = !smdb_entries.(ix) in
+      dump_smdb stderr ({des;orb;jd;cd;dist;dist_min;dist_max;v_rel;v_inf;t_sigma_f;h});
+      let scan = Scanf.sscanf cd " %d-%[A-Za-z]-%d %d:%d"
+                        (fun yr mon dy hr min ->
+                            (yr,mon,dy,hr,min)) in
+      let (yr,mon,dy,hr,min) = scan in
+      update_date yr (Utils.month mon) dy hr min 0;
+      tim.(6)#set_text (Printf.sprintf "%8.0f" (1.496e8 *. float_of_string dist_min));
+      tim.(7)#set_text (string_of_float h);
+      targ_entry#set_text lbl';
+      xserv := "horizons";
+      search();
+      end) sentries
+
+and smdb' () = if approach > 0 then
+    begin
+    let hdrs = ref [] in
+    let server =  "ssd-api.jpl.nasa.gov" in
+    let pth = "/cad.api" in
+    let datum = Unix.gettimeofday() in
+    let t = Unix.gmtime datum in
+    let t' = Unix.gmtime (datum +. 86400.0 *. 365.2425) in
+    let f = (fun s ->
+        let lst = smdb_decode (Yojson.Basic.from_string s) in
+        let dbgfile = open_out "smdba1.txt" in
+        List.iter (dump_smdb dbgfile) lst;
+        close_out dbgfile;
+        let srt = List.sort compare lst in
+        let dbgfile = open_out "smdba2.txt" in
+        List.iter (dump_smdb dbgfile) srt;
+        close_out dbgfile;
+        smdb_entries := Array.sub (Array.of_list srt) 0 20;
+        let sentries = List.map (fun {des;_} -> des) (Array.to_list !smdb_entries) in
+        let smodel, etext_column = GTree.store_of_list Gobject.Data.string sentries in
+        let smenu = GEdit.combo_box_entry ~text_column:etext_column ~model:smodel ~packing:pbox#pack () in
+        ignore (smenu#entry#connect#changed ~callback: (fun () -> smdb'' sentries smenu#entry#text));
+        smenu#set_active 0;
+         ) in
+    let req = [
+     ("date-min", Printf.sprintf "%d-%.2d-%.2d" (t.tm_year+1900) (t.tm_mon+1) t.tm_mday);
+     ("date-max", Printf.sprintf "%d-%.2d-%.2d" (t'.tm_year+1900) (t'.tm_mon+1) t'.tm_mday);
+    ] in
+    if true then List.iter (fun (k,x) -> print_endline (k^": "^x)) req;
+    Utils.get' "https://" server req [] pth f hdrs
+    end
+ else
+    begin
+    reset_date();
+    Lwt.return_unit
+    end
+
+and taskarray =
        [|
+         ("smdb", smdb');
          ("", status');
          ("connect", get1');
          ("post2", post2');
@@ -999,6 +1174,8 @@ let taskarray =
          ("", status');
          ("astrometry", astrometry);
          ("", status');
+         ("readparams", readparams);
+         ("", status');
          ("track", track);
          ("", status');
          ("trackoff", trackoff);
@@ -1019,37 +1196,17 @@ let taskarray =
          ("", status');
          ("openarm", openarm');
          ("", status');
+         ("simbad", simbad');
+         ("", status');
          ("stellarium", stellarium');
          ("", status');
          ("horizons", horizons');
          ("", status');
-         ("simbad", simbad');
-         ("", status');
          ("messier", messier');
          ("", status');
+         ("ngc2000", ngc2000');
+         ("", status');
        |]
-(*
-let stoptask = Array.length taskarray - 1
-
-let err ix errmsg =
-    if !ix <> stoptask then print_endline ("terminating at step "^string_of_int !ix^" due to error "^errmsg);
-    ix := stoptask
-*)
-
-let quit' = ref false
-
-let sm_jump lbl' = 
-  let target = ref (-1) in
-  Array.iteri (fun ix (lbl, _) -> if lbl=lbl' then (target := ix; if check#active then print_endline (string_of_int (ix+1)^": "^lbl'))) taskarray;
-  if !target <> -1 then
-    begin
-    Queue.add !target start;
-    print_endline (fst taskarray.(!target))
-    end
-
-let search () = 
-    let s = targ_entry#text in
-    sm_jump (try let _ = int_of_string s in "horizons" with _ -> sattr := Stellarium.attr s; !xserv)
 
 let update_status' kw stat =
   let len = String.length kw in
@@ -1082,6 +1239,7 @@ let rec iter_a ix a =
         Hashtbl.iter (fun _ x -> if !x then () else sm_jump "fetch") jpegh;
         update_status ();
         usleep 0.1;
+        reset_date();
         let waiting = false in
         Lwt_engine.iter waiting;
         Lwt.apply (fun f -> f ()) x >>= fun () -> iter_a ix a
@@ -1110,12 +1268,12 @@ let gainslidefunc _ v = gain_int := int_of_float (floor (v *. 10.0)); entry_gain
 let add_prog_entry () =
     let ra_flt = Utils.cnv_ra entry_ra#text in
     let dec_flt = Utils.cnv_dec entry_dec#text in
-    print_endline ("add_prog_entry: "^string_of_float ra_flt^" "^string_of_float dec_flt);
+    let duration = int_of_string entry_duration#text in
     let obs = `Assoc
-         [("duration", `Int 2);
+         [("duration", `Int duration);
           ("params",
            `Assoc
-             [("objectId", `String ( !sattr.target ));
+             [("objectId", `String ( entry_nam#text ));
               ("ra", `Float ra_flt);
               ("de", `Float dec_flt);
               ("rot", `Int 0);
@@ -1128,11 +1286,38 @@ let add_prog_entry () =
               ("exposureMicroSec", `Int (expos_us()));
               ("doStacking", `Bool true);
               ("debayerInterpolation", `String "VNG")])] in
-    prog_entries := obs :: !prog_entries
+    prog_entries := obs :: !prog_entries;
+    let progtxt = Buffer.create 100 in
+    Printf.bprintf progtxt "Entry duration declination exposure gain target_name right_ascension rotation status\n";
+    List.iteri (fun ix -> fun (json:Yojson.t) -> match json with `Assoc
+         [("duration", `Int duration);
+          ("params",
+           `Assoc lst)] -> Printf.bprintf progtxt "  %5d  %8d " (ix+1) duration;
+         let ra_flt = ref 0.0 in
+         let dec_flt = ref 0.0 in
+         List.iter (function
+           | ("de", `Float dec) -> dec_flt := dec; Printf.bprintf progtxt "   %11s" (Utils.dms_of_float dec)
+           | ("exposureMicroSec", `Int expos_us) -> Printf.bprintf progtxt "   %8.3f" (float_of_int expos_us /. 1e6)
+           | ("gain", `Int gain) -> Printf.bprintf progtxt "   %4d" gain
+           | ("objectId", `String id) -> Printf.bprintf progtxt "   %11s" id
+           | ("ra", `Float ra) -> ra_flt := ra; Printf.bprintf progtxt "   %15s" (Utils.hms_of_float ra)
+           | ("rot", `Int rot) -> Printf.bprintf progtxt "   %8d" rot
+           | _ -> ()) (List.sort compare lst);
+         let latitude = float_of_string entry_lat#text in
+         let longitude = float_of_string entry_long#text in
+         let yr,mon,dy,hr,min,sec = split_date() in
+         let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec !ra_flt !dec_flt latitude longitude in
+         if alt_calc < 0.0 then Printf.bprintf progtxt "  ** object below horizon ** ";
+         ignore (jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc);
+         Printf.bprintf progtxt "\n"
+         | _ -> ()) (List.rev !prog_entries);
+    let contents = Buffer.contents progtxt in
+    if check#active then Printf.printf "buffer length = %d\n" (String.length contents);
+    textview#buffer#set_text contents
 
 let horizons'' lbl' = 
   List.iteri (fun ix loc -> if loc=lbl' then (match ix with
-      | 2 -> targ_entry#set_text "301"
+      | 2 -> targ_entry#set_text "301"; search()
       | 9 -> ()
       | _ -> targ_entry#set_text (string_of_int ((ix+1)*100+99)); search())) planet_lst
 
@@ -1141,7 +1326,7 @@ let gui () =
   ignore @@ factory_stell#add_item "Status" ~callback: app_status';
 (* Quit when the window is closed. *)
   ignore (window#connect#destroy ~callback: app_quit');
-  ignore (button0#connect#clicked ~callback: (fun () -> sm_jump "connect"));
+  ignore (button0#connect#clicked ~callback: (fun () -> connecting := true; reset_date(); sm_jump "connect"));
   ignore (button1#connect#clicked ~callback: (fun () -> sm_jump "openarm"));
   ignore (button2#connect#clicked ~callback: (fun () -> sm_jump "init"));
   ignore (button3#connect#clicked ~callback: (fun () -> sm_jump "observe"));
@@ -1156,6 +1341,7 @@ let gui () =
   ignore (buttonC#connect#clicked ~callback: (fun () -> sm_jump "trackon"));
   ignore (buttonD#connect#clicked ~callback: (fun () -> sm_jump "trackoff"));
   ignore (buttonE#connect#clicked ~callback: (fun () -> sm_jump "manualinit"));
+  ignore (buttonF#connect#clicked ~callback: (fun () -> sm_jump "readparams"));
   ignore (button12#connect#clicked ~callback: (fun () -> sm_jump "mosaic"));
   ignore (button13#connect#clicked ~callback: (fun () -> sm_jump "obsprog"));
   ignore (button14#connect#clicked ~callback: (fun () -> add_prog_entry() ));
@@ -1169,6 +1355,7 @@ let gui () =
   ignore (rbuttons2#connect#clicked ~callback:(fun () -> xserv := "stellarium"));
   ignore (rbuttons3#connect#clicked ~callback:(fun () -> xserv := "horizons"));
   ignore (rbuttons4#connect#clicked ~callback:(fun () -> xserv := "messier"));
+  ignore (rbuttons5#connect#clicked ~callback:(fun () -> xserv := "ngc2000"));
 (*
   ignore (rng#connect#change_value ~callback:exposlidefunc);
   ignore (gain#connect#change_value ~callback:gainslidefunc);
@@ -1184,6 +1371,9 @@ let gui () =
   entry_hminov#set_text "0.1";
   entry_wpassof#set_text "0.1";
   entry_hpassof#set_text "0.1";
+  entry_duration#set_text "15";
+  textview#buffer#set_text "";
+
   ignore (dbutton2#connect#clicked ~callback: (fun () -> sm_jump "darks"));
   tz'#set_text tzcity;
   tz'#set_editable false;
@@ -1224,7 +1414,7 @@ let gui () =
   ignore (targ_entry#connect#activate ~callback: search);
   targ_entry#set_editable true;
   targ_status#set_editable false;
-  targ_entry#set_text (if true then "HIP100438" else "(1) Ceres");
+  targ_entry#set_text (try Sys.getenv "STELLINA_TARGET" with _ -> "IC 434");
   search()
 
 let goto_received ra_int dec_int =

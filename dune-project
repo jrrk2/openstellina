@@ -1,7 +1,7 @@
 (lang dune 3.0)
 
 (name openstellina)
-(version opam-publish-openstellina.0.0.3-dirty)
+(version opam-publish-openstellina.0.0.3-9-gfcd7c54-dirty)
 
 (generate_opam_files false)
 
@@ -20,6 +20,6 @@
  (name openstellina)
  (synopsis "A http client for Stellina smart telescope by Vaonis")
  (description "Mobile Stellina App does not provide access to telescope exposures > 20s (lights or darks). This software bypasses the App and talks to the telescope directly")
- (depends ocaml dune lablgtk lwt_glib yojson cohttp-lwt-unix zeit ppx_let quests ppx_yojson lwt xml-light)
+ (depends ocaml dune lablgtk lwt_glib yojson cohttp-lwt-unix zeit ppx_let quests ppx_yojson lwt xml-light camlimages)
  (tags (Vaonis Stellina long-exposure GUI)))
  

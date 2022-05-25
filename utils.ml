@@ -10,7 +10,7 @@ let hms_of_float x' =
     let m' = (x15 -. h) *. 60.0 in
     let m = floor (m') in
     let s = (m' -. m) *. 60.0 in
-    Printf.sprintf "%d %d %d" (int_of_float h) (int_of_float m) (int_of_float s)
+    if Float.is_nan x' then "nan" else Printf.sprintf "%d %d %d" (int_of_float h) (int_of_float m) (int_of_float s)
 
 let dms_of_float x' =
     let neg = x' < 0.0 in
@@ -19,7 +19,7 @@ let dms_of_float x' =
     let m' = (x -. d) *. 60.0 in
     let m = floor (m') in
     let s = (m' -. m) *. 60.0 in
-    Printf.sprintf "%c%d %d %d" (if neg then '-' else '+') (int_of_float d) (int_of_float m) (int_of_float s)
+    if Float.is_nan x' then "nan" else Printf.sprintf "%c%d %d %d" (if neg then '-' else '+') (int_of_float d) (int_of_float m) (int_of_float s)
 
 let cnv_ra fmt =
     try Scanf.sscanf fmt "%f %f %f" (fun a b c -> a *. 15.0 +. b /. 4.0 +. c /. 240.0) with _ -> 0.0
@@ -144,13 +144,9 @@ let month = function
 | "Oct" -> 10
 | "Nov" -> 11
 | "Dec" -> 12
-| oth -> failwith oth
+| oth -> try int_of_string oth with _ -> failwith "month conversion"
 
 let jd_2000 = 2451544.5
-
-let julian_now () =
-    let tm = Unix.gmtime (Unix.gettimeofday()) in
-    tm.tm_year+1900,tm.tm_mon+1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec
 
 let altaz_calc yr mon dy hr min sec ra dec latitude longitude =
     let jd_calc = computeTheJulianDay true yr mon dy +. float_of_int(hr*3600+min*60+sec) /. 86400.0 in
