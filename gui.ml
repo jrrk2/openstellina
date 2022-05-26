@@ -903,6 +903,7 @@ let messier' () =
 let ngc2000' () = 
     let sel = targ_entry#text in
     (try (let (ra_flt,dec_flt,cnst,diam,mag,desc) = Hashtbl.find Ngc2000.ngchash sel in
+    print_endline (string_of_float ra_flt^" : "^string_of_float dec_flt);
     targ_status#set_text ("NGC2000 found: " ^ sel);
     let yr,mon,dy,hr,min,sec = split_date() in
     let latitude = float_of_string entry_lat#text in
@@ -1049,6 +1050,12 @@ let  (smdb_decode:Yojson.Basic.t -> smdb list) = function
 | _ -> failwith "json"
 
 let smdb_entries = ref [||]
+let ngc_entries = ref [||]
+
+let sort_ngc a b =
+  let (_, (_,_,_,_,maga,_,_,_,_,_,_,_)) = a in
+  let (_, (_,_,_,_,magb,_,_,_,_,_,_,_)) = b in
+  int_of_float (maga -. magb)
 
 let fetch' () =
     let jhash = ref ("",ref false) in
@@ -1071,6 +1078,20 @@ let fetch' () =
     Utils.get' proto server [] headers pth (cnv' f) hdrs
 
 let quit' = ref false
+
+let dump_ngc fd (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) =
+  ignore (jd_calc, ra_now, dec_now, cnst, diam, lst_calc, hour_calc);
+  output_string fd (sel^" "^string_of_float ra_flt^" "^string_of_float dec_flt^" "^string_of_float mag^" "^string_of_float alt_calc^" "^string_of_float az_calc^"\n")
+
+let ngc'' nentries lbl' =
+  List.iteri (fun ix loc -> if loc=lbl' then
+      begin
+      let (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) = !ngc_entries.(ix) in
+      dump_ngc stderr (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc));
+      show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan;
+      targ_entry#set_text ("");
+      targ_status#set_text ("");
+      end) nentries
 
 let rec sm_jump lbl' = 
   let target = ref (-1) in
@@ -1136,6 +1157,33 @@ and smdb' () = if approach > 0 then
  else
     begin
     reset_date();
+    let yr,mon,dy,hr,min,sec = split_date() in
+    let latitude = float_of_string entry_lat#text in
+    let longitude = float_of_string entry_long#text in
+    let lst = ref [] in
+    Hashtbl.iter (fun sel (ra_flt,dec_flt,cnst,diam,mag,desc)  ->
+        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+        ignore (cnst,diam,mag,desc);
+        if alt_calc > 40.0 && (az_calc > 300.0 || az_calc < 60.0) && (mag < 15.0) then
+           begin
+           lst := (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) :: !lst;
+           end
+        ) Ngc2000.ngchash;
+    print_endline ("selected NGC objects = "^string_of_int (List.length !lst));
+    let dbgfile = open_out "ngca1.txt" in
+    List.iter (dump_ngc dbgfile) !lst;
+    close_out dbgfile;
+    let srt = List.sort sort_ngc !lst in
+    let dbgfile = open_out "ngca2.txt" in
+    List.iter (dump_ngc dbgfile) srt;
+    close_out dbgfile;
+    ngc_entries := Array.sub (Array.of_list srt) 0 20;
+    let nentries = List.map (fun (des,_) -> des) (Array.to_list !ngc_entries) in
+    let nmodel, ntext_column = GTree.store_of_list Gobject.Data.string nentries in
+    let nmenu = GEdit.combo_box_entry ~text_column:ntext_column ~model:nmodel ~packing:pbox#pack () in
+    ignore (nmenu#entry#connect#changed ~callback: (fun () -> ngc'' nentries nmenu#entry#text));
+    nmenu#set_active 0;
+    
     Lwt.return_unit
     end
 
@@ -1232,15 +1280,17 @@ let rec iter_a ix a =
   match a.(!ix) with
   | ("", x) ->
     if !quit' then
+        begin
+        usleep 0.1; (* to avoid unused function warning *)
         Lwt.return_unit
+        end
     else if not (Queue.is_empty start) then iter_a (ref (Queue.take start)) a
     else
         begin
         Hashtbl.iter (fun _ x -> if !x then () else sm_jump "fetch") jpegh;
         update_status ();
-        usleep 0.1;
-        reset_date();
-        let waiting = false in
+        if !connecting then reset_date();
+        let waiting = true in
         Lwt_engine.iter waiting;
         Lwt.apply (fun f -> f ()) x >>= fun () -> iter_a ix a
         end
