@@ -76,6 +76,17 @@ let stellarium' attr cb =
     let hdrs = ref [] in
     Utils.get' "http://" server req headers pth cb hdrs
 
+let focus' resp target =
+    let headers = Utils.split 
+   ["Content-Type: application/json";
+    "Accept: application/json"] in
+    let server =  "127.0.0.1:8090" in
+    let pth = "/api/main/focus" in
+    let cb = Quests.Request.Raw "{}" in
+    let params = [ ("target", target); ("mode", "center") ] in (* notice: American spelling *)
+    let f = (fun s -> resp s) in
+    Utils.post' "http://" server params headers pth cb f
+
 (* only for testing *)
 let stellarium attr =
   let f = (fun s -> descend attr (Yojson.Basic.from_string s); debug attr) in

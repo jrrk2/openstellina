@@ -107,8 +107,8 @@ let split_date () =
     let tm = Unix.gmtime (datum()) in
     tm.tm_year+1900,tm.tm_mon+1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec
 
-let reset_date () =
-    let tm = Unix.gmtime (Unix.gettimeofday()) in
+let reset_date tim =
+    let tm = Unix.gmtime tim in
     let yr,mon,dy,hr,min,sec = tm.tm_year+1900,tm.tm_mon+1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec in
     update_date yr mon dy hr min sec
 
@@ -204,7 +204,7 @@ let sbox = GPack.hbox ~border_width:5 ~packing:xbox#add ()
 let frame_entry = GBin.frame ~label:"Target Search" ~packing:sbox#pack ()
 let targ_entry = GEdit.entry ~max_length: 30 ~packing: frame_entry#add ()
 let frame_status = GBin.frame ~label:"Target Result" ~packing:(sbox#pack ~expand:true ~fill:true ~padding:2) ()
-let targ_status = GEdit.entry ~max_length: 40 ~packing: frame_status#add ()
+let targ_status = GEdit.entry ~max_length: 60 ~packing: frame_status#add ()
 
 let ephem_lst = List.init 25 (fun ix -> Printf.sprintf "%.2d:00" ix)
 
@@ -900,6 +900,10 @@ let messier' () =
     show_entries found jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan nan nan;
     Lwt.return_unit
 
+let focus_resp s =
+  targ_status#set_text (if bool_of_string s then "Stellarium focussed" else "Stellarium not focussed");
+  print_endline ("focus response: "^s)
+
 let ngc2000' () = 
     let sel = targ_entry#text in
     (try (let (ra_flt,dec_flt,cnst,diam,mag,desc) = Hashtbl.find Ngc2000.ngchash sel in
@@ -910,12 +914,14 @@ let ngc2000' () =
     let longitude = float_of_string entry_long#text in
     let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
     ignore (cnst,diam,mag,desc);
-    show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan)
+    show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan);
+    print_endline ("Focus: "^sel);
+    Stellarium.focus' focus_resp sel
     with _ ->
     targ_status#set_text ("NGC2000: " ^ sel ^ ": not found");
-    show_entries "" nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan);
-    Lwt.return_unit
-    
+    show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
+    Lwt.return_unit)
+
 let simbad' () =
     let hdrs = ref [] in
     let server =  "simbad.u-strasbg.fr" in
@@ -964,14 +970,15 @@ let horizons' () =
     let t' = Unix.gmtime (datum' +. 86400.0) in
     let f = (fun s ->
        let body = ref "" in
-       ephem_data_lst := List.filter (fun x ->
-       let str = if String.length x > 5 then String.sub x 1 4 else "" in
+       ephem_data_lst := List.filter (fun x' ->
+       let x = String.trim x' in
+       let str = if String.length x > 5 then String.sub x 0 4 else "" in
        let trial = try (int_of_string str) with _ -> 0 in
        let use = trial = t.tm_year+1900 in
        if false then print_endline (string_of_bool use^": "^str^": "^string_of_int trial^": "^x);
-       if String.length x >= 32 && String.sub x 0 12 = "JPL/HORIZONS" then
+       if String.length x >= 66 && (String.sub x 0 9 = "Revised: " || String.sub x 0 12 = "JPL/HORIZONS") then
           begin
-          body := String.trim (String.sub x 12 (String.length x - 32));
+          body := String.trim (String.sub x 22 (String.length x - 42));
           end;
        if check#active then print_endline x;
        use) (String.split_on_char '\n' s);
@@ -1083,17 +1090,21 @@ let dump_ngc fd (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, al
   ignore (jd_calc, ra_now, dec_now, cnst, diam, lst_calc, hour_calc);
   output_string fd (sel^" "^string_of_float ra_flt^" "^string_of_float dec_flt^" "^string_of_float mag^" "^string_of_float alt_calc^" "^string_of_float az_calc^"\n")
 
-let ngc'' nentries lbl' =
+let setfocus' () =
+  Stellarium.focus' focus_resp entry_nam#text
+
+let rec ngc'' nentries lbl' =
   List.iteri (fun ix loc -> if loc=lbl' then
       begin
       let (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) = !ngc_entries.(ix) in
       dump_ngc stderr (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc));
       show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan;
-      targ_entry#set_text ("");
-      targ_status#set_text ("");
+      targ_entry#set_text "";
+      targ_status#set_text "";
+      sm_jump "setfocus";
       end) nentries
 
-let rec sm_jump lbl' = 
+and sm_jump lbl' = 
   let target = ref (-1) in
   Array.iteri (fun ix (lbl, _) -> if lbl=lbl' then (target := ix; if check#active then print_endline (string_of_int (ix+1)^": "^lbl'))) taskarray;
   if !target <> -1 then
@@ -1156,18 +1167,24 @@ and smdb' () = if approach > 0 then
     end
  else
     begin
-    reset_date();
+    let timoff = try float_of_string (Sys.getenv "OPENSTELLINA_TIME_OFFSET") with _ -> 0.0 in
+    reset_date (timoff +. Unix.gettimeofday());
     let yr,mon,dy,hr,min,sec = split_date() in
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
     let lst = ref [] in
+    let accstr = try Sys.getenv "STELLINA_ACCEPTANCE" with _ -> "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0) & (mag < 15.0) & (ang_diam > 6.0)" in
+    let acceptance = Expr.simplify [] (Expr.expr accstr) in
+    Expr.dump stdout [] acceptance;
     Hashtbl.iter (fun sel (ra_flt,dec_flt,cnst,diam,mag,desc)  ->
         let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
         ignore (cnst,diam,mag,desc);
-        if alt_calc > 40.0 && (az_calc > 300.0 || az_calc < 60.0) && (mag < 15.0) then
-           begin
-           lst := (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) :: !lst;
-           end
+        let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num mag) :: ("ang_diam", Calc.Num diam) :: [] in
+        match Expr.simplify acclst acceptance with
+          | Calc.Bool true ->
+            if mag <> nan then lst := (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) :: !lst;
+          | Calc.Bool false -> ()
+          | oth -> Expr.dump stderr acclst oth
         ) Ngc2000.ngchash;
     print_endline ("selected NGC objects = "^string_of_int (List.length !lst));
     let dbgfile = open_out "ngca1.txt" in
@@ -1177,12 +1194,14 @@ and smdb' () = if approach > 0 then
     let dbgfile = open_out "ngca2.txt" in
     List.iter (dump_ngc dbgfile) srt;
     close_out dbgfile;
-    ngc_entries := Array.sub (Array.of_list srt) 0 20;
+    let entries = try int_of_string (Sys.getenv "OPENSTELLINA_ENTRIES") with _ -> 20 in
+    let entries = if entries > List.length srt then List.length srt else entries in
+    ngc_entries := Array.sub (Array.of_list srt) 0 entries;
     let nentries = List.map (fun (des,_) -> des) (Array.to_list !ngc_entries) in
     let nmodel, ntext_column = GTree.store_of_list Gobject.Data.string nentries in
     let nmenu = GEdit.combo_box_entry ~text_column:ntext_column ~model:nmodel ~packing:pbox#pack () in
     ignore (nmenu#entry#connect#changed ~callback: (fun () -> ngc'' nentries nmenu#entry#text));
-    nmenu#set_active 0;
+    nmenu#set_active entries;
     
     Lwt.return_unit
     end
@@ -1254,6 +1273,8 @@ and taskarray =
          ("", status');
          ("ngc2000", ngc2000');
          ("", status');
+         ("setfocus", setfocus');
+         ("", status');
        |]
 
 let update_status' kw stat =
@@ -1289,7 +1310,7 @@ let rec iter_a ix a =
         begin
         Hashtbl.iter (fun _ x -> if !x then () else sm_jump "fetch") jpegh;
         update_status ();
-        if !connecting then reset_date();
+        if !connecting then reset_date (Unix.gettimeofday());
         let waiting = true in
         Lwt_engine.iter waiting;
         Lwt.apply (fun f -> f ()) x >>= fun () -> iter_a ix a
@@ -1376,7 +1397,7 @@ let gui () =
   ignore @@ factory_stell#add_item "Status" ~callback: app_status';
 (* Quit when the window is closed. *)
   ignore (window#connect#destroy ~callback: app_quit');
-  ignore (button0#connect#clicked ~callback: (fun () -> connecting := true; reset_date(); sm_jump "connect"));
+  ignore (button0#connect#clicked ~callback: (fun () -> connecting := true; reset_date (Unix.gettimeofday()); sm_jump "connect"));
   ignore (button1#connect#clicked ~callback: (fun () -> sm_jump "openarm"));
   ignore (button2#connect#clicked ~callback: (fun () -> sm_jump "init"));
   ignore (button3#connect#clicked ~callback: (fun () -> sm_jump "observe"));
@@ -1464,7 +1485,7 @@ let gui () =
   ignore (targ_entry#connect#activate ~callback: search);
   targ_entry#set_editable true;
   targ_status#set_editable false;
-  targ_entry#set_text (try Sys.getenv "STELLINA_TARGET" with _ -> "IC 434");
+  targ_entry#set_text (try Sys.getenv "STELLINA_TARGET" with _ -> "NGC 5194");
   search()
 
 let goto_received ra_int dec_int =

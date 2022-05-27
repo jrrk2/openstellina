@@ -1,4 +1,5 @@
 (lang dune 3.0)
+(using menhir 2.1)
 
 (name openstellina)
 (version opam-publish-openstellina.0.0.3-9-gfcd7c54-dirty)

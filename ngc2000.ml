@@ -82,8 +82,8 @@ List.iter (fun (name,source_type,ra,dec,lii,bii,ref_revision,constellation,limit
 let ang = try float_of_string ang_diameter with _ -> print_endline ang_diameter; nan in
 let mag = try float_of_string app_mag with _ -> print_endline app_mag; nan in
 let contents = (float_of_string ra, float_of_string dec, constellation, ang, mag, description) in
-ignore (source_type,lii,bii,ref_revision,limit_ang_diameter,app_mag_flag,classification);
-Hashtbl.add ngchash name contents) [
+ignore (lii,bii,ref_revision,limit_ang_diameter,app_mag_flag,classification);
+match source_type with "-" | "OC" -> () | _ -> Hashtbl.add ngchash name contents) [
 ("NGC 2573","Gx","25.5","-89.33333333","302.76702969","-27.778663","C","Oct","","3.6","13.5","","F, S, R, glbM, Polarissima Australis","6700","");
 ("NGC 6438","Gx","276.5","-85.41666667","308.02437416","-26.52883629","S","Oct","","2.6","13","p","pB, R, vgbM","6700","");
 ("IC 4333","Gx","211.25","-84.26666667","304.87548556","-21.67460583","C","Oct","","1.7","","","eF, vS, eE 40deg , susp","6700","");

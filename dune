@@ -1,6 +1,16 @@
+(ocamllex
+  (modules lexer)
+)
+
+(menhir
+  (modules mfcalc)
+  (flags -la 2)
+)
+
 (executable
  (public_name openstellina)
  (name gui)
- (modules trans hidemsg msgs base_locations utils stellarium messier_catalogue ngc2000 gui)
+ (modules_without_implementation calc)
+ (modules trans hidemsg msgs base_locations utils stellarium messier_catalogue ngc2000 calc mfcalc lexer expr gui)
  (libraries lablgtk2 lwt_glib yojson cohttp-lwt-unix zeit ppx_let quests ppx_yojson lwt xml-light camlimages.jpeg)
 )
