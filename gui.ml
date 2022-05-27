@@ -1173,7 +1173,7 @@ and smdb' () = if approach > 0 then
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
     let lst = ref [] in
-    let accstr = try Sys.getenv "STELLINA_ACCEPTANCE" with _ -> "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0) & (mag < 15.0) & (ang_diam > 6.0)" in
+    let accstr = try Sys.getenv "OPENSTELLINA_ACCEPTANCE" with _ -> "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0) & (mag < 15.0) & (ang_diam > 6.0)" in
     let acceptance = Expr.simplify [] (Expr.expr accstr) in
     Expr.dump stdout [] acceptance;
     Hashtbl.iter (fun sel (ra_flt,dec_flt,cnst,diam,mag,desc)  ->
