@@ -198,7 +198,8 @@ let rbuttons1 = GButton.radio_button ~label:"Simbad" ~packing: boxserv#add ()
 let rbuttons2 = GButton.radio_button ~group:rbuttons1#group ~label:"Stellarium" ~packing: boxserv#add ()
 let rbuttons3 = GButton.radio_button ~group:rbuttons1#group ~label:"Horizons" ~active:true ~packing: boxserv#add ()
 let rbuttons4 = GButton.radio_button ~group:rbuttons1#group ~label:"Messier" ~active:true ~packing: boxserv#add ()
-let rbuttons5 = GButton.radio_button ~group:rbuttons1#group ~label:"NGC2000" ~active:true ~packing: boxserv#add ()
+let rbuttons5 = GButton.radio_button ~group:rbuttons1#group ~label:"PGC" ~active:true ~packing: boxserv#add ()
+let rbuttons6 = GButton.radio_button ~group:rbuttons1#group ~label:"NGC2000" ~active:true ~packing: boxserv#add ()
 
 let sbox = GPack.hbox ~border_width:5 ~packing:xbox#add ()
 let frame_entry = GBin.frame ~label:"Target Search" ~packing:sbox#pack ()
@@ -922,6 +923,34 @@ let ngc2000' () =
     show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
     Lwt.return_unit)
 
+(*
+Principal Galaxy cataloogue, biggest 25000 items out of ~1M
+
+("PGC", 4750, "J", 1, 19, 24.2, "+", 12, 26, 49, "GM", "Sd", 1.01, "+/-", 0.07, 0.27, "+/-", 0.06, 116., "+/-", 4., 8)
+*)
+
+let pgc' () = 
+    let sel = targ_entry#text in
+    print_endline ("Search "^string_of_int Pgc0.hlen^"&"^string_of_int Pgc1.hlen^" PGC for "^sel);
+    (try (let (_,_,_,rh,rm,rs,decs,dd,dm,ds,_,_,a,_,_,_,_,_,_,_,_,_) = Hashtbl.find Pgchash.pgch sel in
+    let mag = 50.625 /. (2.5 ** a) in (* bogus hack heuristic to convert angular diameter to magnitude *)
+    let ra_flt = float_of_int rh *. 15.0 +. float_of_int rm /. 4.0 +. rs /. 240.0 in
+    let dec_flt = float_of_int dd +. float_of_int dm /. 60.0 +. float_of_int ds /. 3600.0 in
+    let dec_flt = if decs.[0] = '-' then -. dec_flt else dec_flt in
+    print_endline (string_of_float ra_flt^" : "^string_of_float dec_flt);
+    targ_status#set_text ("PGC found: " ^ sel);
+    let yr,mon,dy,hr,min,sec = split_date() in
+    let latitude = float_of_string entry_lat#text in
+    let longitude = float_of_string entry_long#text in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+    show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan);
+    print_endline ("Focus: "^sel);
+    Stellarium.focus' focus_resp sel
+    with _ ->
+    targ_status#set_text ("PGC: " ^ sel ^ ": not found");
+    show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
+    Lwt.return_unit)
+
 let simbad' () =
     let hdrs = ref [] in
     let server =  "simbad.u-strasbg.fr" in
@@ -1273,6 +1302,8 @@ and taskarray =
          ("", status');
          ("ngc2000", ngc2000');
          ("", status');
+         ("pgc", pgc');
+         ("", status');
          ("setfocus", setfocus');
          ("", status');
        |]
@@ -1426,7 +1457,8 @@ let gui () =
   ignore (rbuttons2#connect#clicked ~callback:(fun () -> xserv := "stellarium"));
   ignore (rbuttons3#connect#clicked ~callback:(fun () -> xserv := "horizons"));
   ignore (rbuttons4#connect#clicked ~callback:(fun () -> xserv := "messier"));
-  ignore (rbuttons5#connect#clicked ~callback:(fun () -> xserv := "ngc2000"));
+  ignore (rbuttons5#connect#clicked ~callback:(fun () -> xserv := "pgc"));
+  ignore (rbuttons6#connect#clicked ~callback:(fun () -> xserv := "ngc2000"));
 (*
   ignore (rng#connect#change_value ~callback:exposlidefunc);
   ignore (gain#connect#change_value ~callback:gainslidefunc);
