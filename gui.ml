@@ -194,12 +194,16 @@ let check = GButton.check_button ~label: "Verbose" ~active: false ~packing: vbox
 let xbox = GPack.vbox ~spacing:1 ~border_width: 1 ~packing: obox#add ()
 let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(xbox#pack ~expand:true ~fill:true ~padding:2) ()
 let boxserv = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: framserv#add ()
-let rbuttons1 = GButton.radio_button ~label:"Simbad" ~packing: boxserv#add ()
-let rbuttons2 = GButton.radio_button ~group:rbuttons1#group ~label:"Stellarium" ~packing: boxserv#add ()
-let rbuttons3 = GButton.radio_button ~group:rbuttons1#group ~label:"Horizons" ~active:true ~packing: boxserv#add ()
-let rbuttons4 = GButton.radio_button ~group:rbuttons1#group ~label:"Messier" ~active:true ~packing: boxserv#add ()
-let rbuttons5 = GButton.radio_button ~group:rbuttons1#group ~label:"PGC" ~active:true ~packing: boxserv#add ()
-let rbuttons6 = GButton.radio_button ~group:rbuttons1#group ~label:"NGC2000" ~active:true ~packing: boxserv#add ()
+
+let radio' box lst = let grp = GButton.radio_button ~label:(List.hd lst) ~packing: box#add () in
+                 let a = Array.of_list (grp :: List.map (fun itm ->
+                                GButton.radio_button ~group:grp#group ~label:itm ~packing: box#add ()) (List.tl lst)) in
+                 let rselect = ref (0,"") in
+                 List.iteri (fun ix itm -> ignore (a.(ix)#connect#clicked ~callback:(fun () -> rselect := ix,itm))) lst;
+                 a, rselect
+
+let catalogues = ["Simbad"; "Stellarium"; "Horizons"; "Messier"; "PGC"; "NGC2000"]
+let rbuttons, xserv = radio' boxserv catalogues
 
 let sbox = GPack.hbox ~border_width:5 ~packing:xbox#add ()
 let frame_entry = GBin.frame ~label:"Target Search" ~packing:sbox#pack ()
@@ -459,7 +463,6 @@ let obj_id = ref ""
 let obj_nam = ref ""
 let mos_id  = ref ""
 let xflip = ref "BOTH"
-let xserv = ref "ngc2000"
 
 let xgain = ref 200
 let jpegh = Hashtbl.create 127
@@ -1144,7 +1147,8 @@ and sm_jump lbl' =
 
 and search () = 
     let s = targ_entry#text in
-    sm_jump (try let _ = int_of_string s in "horizons" with _ -> !xserv)
+    (try let _ = int_of_string s in rbuttons.(2)#set_active true with _ -> ());
+    sm_jump (String.lowercase_ascii (snd !xserv))
 
 and smdb'' sentries lbl' = 
   List.iteri (fun ix loc -> if loc=lbl' then
@@ -1159,7 +1163,7 @@ and smdb'' sentries lbl' =
       tim.(6)#set_text (Printf.sprintf "%8.0f" (1.496e8 *. float_of_string dist_min));
       tim.(7)#set_text (string_of_float h);
       targ_entry#set_text lbl';
-      xserv := "horizons";
+      rbuttons.(2)#set_active true;
       search();
       end) sentries
 
@@ -1453,12 +1457,8 @@ let gui () =
   ignore (rbutton1#connect#clicked ~callback:(fun () -> xflip := "FLIP"));
   ignore (rbutton2#connect#clicked ~callback:(fun () -> xflip := "NO_FLIP"));
   ignore (rbutton3#connect#clicked ~callback:(fun () -> xflip := "BOTH"));
-  ignore (rbuttons1#connect#clicked ~callback:(fun () -> xserv := "simbad"));
-  ignore (rbuttons2#connect#clicked ~callback:(fun () -> xserv := "stellarium"));
-  ignore (rbuttons3#connect#clicked ~callback:(fun () -> xserv := "horizons"));
-  ignore (rbuttons4#connect#clicked ~callback:(fun () -> xserv := "messier"));
-  ignore (rbuttons5#connect#clicked ~callback:(fun () -> xserv := "pgc"));
-  ignore (rbuttons6#connect#clicked ~callback:(fun () -> xserv := "ngc2000"));
+  let defcat = try int_of_string (Sys.getenv "OPENSTELLINA_DEFAULT_CATALOGUE") with _ -> 0 in
+  rbuttons.(defcat)#set_active true;
 (*
   ignore (rng#connect#change_value ~callback:exposlidefunc);
   ignore (gain#connect#change_value ~callback:gainslidefunc);
