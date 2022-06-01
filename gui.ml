@@ -263,17 +263,7 @@ let scroll = GBin.scrolled_window
 let textview = GText.view ~packing:scroll#add_with_viewport ()
 
 (* Button12 *)
-let button12 = GButton.button ~label:"Write Mosaic Program" ~packing:boxprog#add ()
-(* Button13 *)
-let button13 = GButton.button ~label:"Run Mosaic Program" ~packing:boxprog#add ()
-(* Button14 *)
-let button14 = GButton.button ~label:"Add Target to Observation Program" ~packing:boxprog#add ()
-(* Button15 *)
-let button15 = GButton.button ~label:"Start Observation Program" ~packing:boxprog#add ()
-(* Button16 *)
-let button16 = GButton.button ~label:"Take Samples" ~packing:boxprog#add ()
-(* Button17 *)
-let button17 = GButton.button ~label:"Abort All" ~packing:boxprog#add ()
+let buttonProg = Array.of_list (List.map (fun itm -> GButton.button ~label:itm ~packing:boxprog#add ()) ["Write Mosaic Program";"Run Mosaic Program";"Add Target to Observation Program";"Start Observation Program";"Take Samples";"Abort All"])
 
 (* program parameters *)
 let frame_gridw = GBin.frame ~label: "Grid width" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
