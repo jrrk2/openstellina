@@ -55,7 +55,7 @@ let process fd ocnt lin' =
     | Int n -> output_string fd (!delim'^string_of_int n); delim' := ", "
     | Flt f -> output_string fd (!delim'^string_of_float f); delim' := ", "
     | Lst l -> let delim = ref ")) [" in
-               List.iter (fun itm -> output_string fd (!delim^"\""^itm^"\""); delim := "; ") l;
+               List.iter (fun itm -> output_string fd (!delim^"\""^itm^"\""); delim := "; ") [List.hd l];
                output_string fd "]"
     ) rslt;
   output_string fd "\n"

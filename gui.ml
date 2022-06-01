@@ -24,6 +24,7 @@ let start = Queue.create ()
 
 let timezone = List.rev (String.split_on_char '/' (try Unix.readlink "/etc/localtime" with _ -> "/var/db/timezone/zoneinfo/Europe/London"))
 let tzcity = try Sys.getenv "TIME_ZONE" with _ -> List.hd (List.tl timezone)  ^ "/" ^ List.hd timezone
+let defcat = try int_of_string (Sys.getenv "OPENSTELLINA_DEFAULT_CATALOGUE") with _ -> 0
 
 let session' = ref {sid=""; ping_int=0; ping_tim=0}
 let statush = Hashtbl.create 32767
@@ -131,7 +132,10 @@ let entry_az = GEdit.entry ~max_length: 20 ~packing: frame_az#add ()
 let frame_mag = GBin.frame ~label: "Visual magnitude" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
 let entry_mag = GEdit.entry ~max_length: 10 ~packing: frame_mag#add ()
 
-let frame_exp = GBin.frame ~label: "Exposure (us)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
+let frame_ang = GBin.frame ~label: "Angular diameter" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
+let entry_ang = GEdit.entry ~max_length: 10 ~packing: frame_ang#add ()
+
+let frame_exp = GBin.frame ~label: "Exposure (sec)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
 let entry_exp = GEdit.entry ~max_length: 10 ~packing: frame_exp#add ()
 
 let frame_gain = GBin.frame ~label: "Gain (dB)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
@@ -169,9 +173,15 @@ let bbox = GPack.hbox ~border_width:5 ~packing:frame_manual#add ()
 
 let box3 = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: framx#add ()
 
-let rbutton1 = GButton.radio_button ~label:"flip" ~packing: box3#add ()
-let rbutton2 = GButton.radio_button ~group:rbutton1#group ~label:"no_flip" ~packing: box3#add ()
-let rbutton3 = GButton.radio_button ~group:rbutton1#group ~label:"both" ~active:true ~packing: box3#add ()
+let radio' selfun box lst = let grp = GButton.radio_button ~label:(List.hd lst) ~packing: box#add () in
+                 let a = Array.of_list (grp :: List.map (fun itm ->
+                                GButton.radio_button ~group:grp#group ~label:itm ~packing: box#add ()) (List.tl lst)) in
+                 List.iteri (fun ix itm -> ignore (a.(ix)#connect#clicked ~callback:(fun () -> selfun ix itm))) lst;
+                 fun ix -> a.(ix)#set_active true
+
+let xflip = ref ""
+let fitselfun ix _ = let fits = [| "FLIP"; "NO_FLIP"; "BOTH" |] in xflip := fits.(ix)
+let rbutton = radio' fitselfun box3 ["flip"; "no_flip"; "both"]
 
 let frame_darkcnt = GBin.frame ~label: "Dark Frame Count" ~packing:(box3#pack ~expand:true ~fill:true ~padding:2) ()
 let entry_darkcnt = GEdit.entry ~max_length: 20 ~packing: frame_darkcnt#add ()
@@ -195,15 +205,11 @@ let xbox = GPack.vbox ~spacing:1 ~border_width: 1 ~packing: obox#add ()
 let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(xbox#pack ~expand:true ~fill:true ~padding:2) ()
 let boxserv = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: framserv#add ()
 
-let radio' box lst = let grp = GButton.radio_button ~label:(List.hd lst) ~packing: box#add () in
-                 let a = Array.of_list (grp :: List.map (fun itm ->
-                                GButton.radio_button ~group:grp#group ~label:itm ~packing: box#add ()) (List.tl lst)) in
-                 let rselect = ref (0,"") in
-                 List.iteri (fun ix itm -> ignore (a.(ix)#connect#clicked ~callback:(fun () -> rselect := ix,itm))) lst;
-                 a, rselect
-
 let catalogues = ["Simbad"; "Stellarium"; "Horizons"; "Messier"; "PGC"; "NGC2000"]
-let rbuttons, xserv = radio' boxserv catalogues
+let catdefaults = [|"M51"; "M51"; "301"; "M51"; "PGC47404"; "NGC 5194"|]
+let xserv = ref ""
+let rselfun _ itm = xserv := String.lowercase_ascii itm
+let rbuttons = radio' rselfun boxserv catalogues
 
 let sbox = GPack.hbox ~border_width:5 ~packing:xbox#add ()
 let frame_entry = GBin.frame ~label:"Target Search" ~packing:sbox#pack ()
@@ -250,7 +256,7 @@ let vboxprog = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: framprog#add ()
 let boxprog = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vboxprog#add ()
 let eboxprog = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vboxprog#add ()
 
-(* add text view with scroll bars *)
+(* add text view with scroll bars for plannet observations *)
 let scroll = GBin.scrolled_window
                  ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC
                  ~packing:vboxprog#add ()
@@ -757,13 +763,14 @@ let abortall () =
     let f = (fun s -> errchk' true (cnv s)) in
     Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
-let show_entries nam jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang =
+let show_entries nam jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang ang_diam =
     if nam <> "" then entry_nam#set_text nam;
     entry_ra#set_text (Utils.hms_of_float ra);
     entry_dec#set_text (Utils.dms_of_float dec);
     entry_alt#set_text (Utils.dms_of_float (alt_calc));
     entry_az#set_text (Utils.dms_of_float (az_calc));
     entry_mag#set_text (Printf.sprintf "%.2f" apmag);
+    entry_ang#set_text (Printf.sprintf "%.2f" ang_diam);
     spare.(0)#set_text (Utils.dms_of_float (elev));
     spare.(1)#set_text (Utils.dms_of_float (azi));
     spare.(2)#set_text (Printf.sprintf "%.4f" lst_calc);
@@ -784,7 +791,7 @@ let stellarium' () =
       let longitude = float_of_string entry_long#text in
       let yr,mon,dy,hr,min,sec = split_date() in
       let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec attr.ra attr.dec latitude longitude in
-      show_entries attr.target jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc 0.0 attr.ra attr.dec attr.az attr.alt attr.sidt attr.vis_mag attr.hour_ang;
+      show_entries attr.target jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc 0.0 attr.ra attr.dec attr.az attr.alt attr.sidt attr.vis_mag attr.hour_ang nan;
       targ_status#set_text ("Stellarium: "^attr.target) in
     let f = (fun s -> match s.[0] with '{' -> Stellarium.descend !sattr (Yojson.Basic.from_string s); debug !sattr | _ -> targ_status#set_text s ) in
     Stellarium.stellarium' !sattr (cnv' f)
@@ -866,7 +873,7 @@ let simbad_cnv = function
     let ra_flt = Utils.cnv_ra ra in
     let dec_flt = Utils.cnv_dec dec in
     let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
-    show_entries ident jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan (float_of_string mag) nan;
+    show_entries ident jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan (float_of_string mag) nan nan;
     targ_status#set_text ("SIMBAD found: "^ident)
 | Xml.Element
      ("VOTABLE",
@@ -901,7 +908,7 @@ let messier' () =
     let dec_flt = Utils.cnv_dec dec in
     let yr,mon,dy,hr,min,sec = split_date() in
     let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
-    show_entries found jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan nan nan;
+    show_entries found jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan nan nan nan;
     Lwt.return_unit
 
 let focus_resp s =
@@ -918,12 +925,12 @@ let ngc2000' () =
     let longitude = float_of_string entry_long#text in
     let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
     ignore (cnst,diam,mag,desc);
-    show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan);
+    show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan nan);
     print_endline ("Focus: "^sel);
     Stellarium.focus' focus_resp sel
     with _ ->
     targ_status#set_text ("NGC2000: " ^ sel ^ ": not found");
-    show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
+    show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
     Lwt.return_unit)
 
 (*
@@ -936,7 +943,7 @@ let pgc' () =
     let sel = targ_entry#text in
     print_endline ("Search "^string_of_int Pgc0.hlen^"&"^string_of_int Pgc1.hlen^" PGC for "^sel);
     (try (let (_,_,_,rh,rm,rs,decs,dd,dm,ds,_,_,a,_,_,_,_,_,_,_,_,_) = Hashtbl.find Pgchash.pgch sel in
-    let mag = 50.625 /. (2.5 ** a) in (* bogus hack heuristic to convert angular diameter to magnitude *)
+    let mag = 20.0/.(a *. a) in
     let ra_flt = float_of_int rh *. 15.0 +. float_of_int rm /. 4.0 +. rs /. 240.0 in
     let dec_flt = float_of_int dd +. float_of_int dm /. 60.0 +. float_of_int ds /. 3600.0 in
     let dec_flt = if decs.[0] = '-' then -. dec_flt else dec_flt in
@@ -946,12 +953,12 @@ let pgc' () =
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
     let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
-    show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan);
+    show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan a);
     print_endline ("Focus: "^sel);
     Stellarium.focus' focus_resp sel
     with _ ->
     targ_status#set_text ("PGC: " ^ sel ^ ": not found");
-    show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
+    show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
     Lwt.return_unit)
 
 let simbad' () =
@@ -981,9 +988,9 @@ let show_ephem ix =
     let longitude = float_of_string entry_long#text in
     let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr (Utils.month mon) dy hr min 0 ra dec latitude longitude in
     ignore (sun,daz,delv,sbrt,cnst); (* prevent complier error because we don't use these at the moment *)
-    show_entries "" jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang
+    show_entries "" jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang nan
     with _ -> 
-    show_entries "" nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan
+    show_entries "" nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan
 
 (*
 let datum = fst (Unix.mktime {tm_sec=0; tm_min=0; tm_hour=1; tm_mday=1; tm_mon=0; tm_year = 100; tm_wday=0; tm_yday=0; tm_isdst=false})
@@ -1089,12 +1096,29 @@ let  (smdb_decode:Yojson.Basic.t -> smdb list) = function
 | _ -> failwith "json"
 
 let smdb_entries = ref [||]
-let ngc_entries = ref [||]
+
+let dump_cat fd (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) =
+  ignore (jd_calc, ra_now, dec_now, cnst, lst_calc, hour_calc);
+  output_string fd (sel^" "^string_of_float ra_flt^" "^string_of_float dec_flt^" "^string_of_float mag^" "^string_of_float alt_calc^" "^string_of_float az_calc^" "^string_of_float diam^"\n")
 
 let sort_ngc a b =
   let (_, (_,_,_,_,maga,_,_,_,_,_,_,_)) = a in
   let (_, (_,_,_,_,magb,_,_,_,_,_,_,_)) = b in
-  int_of_float (maga -. magb)
+  if maga < magb then -1 else 1
+
+let sort_pgc fd a b =
+  let (_, (_,_,_,diama,_,_,_,_,_,_,_,_)) = a in
+  let (_, (_,_,_,diamb,_,_,_,_,_,_,_,_)) = b in
+(*
+  dump_cat fd a;
+  dump_cat fd b;
+*)
+  let diff = if diama < diamb then 1 else -1 in
+(*
+  output_string fd (string_of_float diamb^" "^string_of_float diama^" "^string_of_int diff^"\n");
+*)
+  ignore(fd);
+  diff
 
 let fetch' () =
     let jhash = ref ("",ref false) in
@@ -1118,19 +1142,15 @@ let fetch' () =
 
 let quit' = ref false
 
-let dump_ngc fd (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) =
-  ignore (jd_calc, ra_now, dec_now, cnst, diam, lst_calc, hour_calc);
-  output_string fd (sel^" "^string_of_float ra_flt^" "^string_of_float dec_flt^" "^string_of_float mag^" "^string_of_float alt_calc^" "^string_of_float az_calc^"\n")
-
 let setfocus' () =
   Stellarium.focus' focus_resp entry_nam#text
 
-let rec ngc'' nentries lbl' =
+let rec cat'' cat_entries nentries lbl' =
   List.iteri (fun ix loc -> if loc=lbl' then
       begin
-      let (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) = !ngc_entries.(ix) in
-      dump_ngc stderr (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc));
-      show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan;
+      let (sel, (ra_flt, dec_flt, cnst, diam, mag, jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) = cat_entries.(ix) in
+      dump_cat stderr (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc));
+      show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan diam;
       targ_entry#set_text "";
       targ_status#set_text "";
       sm_jump "setfocus";
@@ -1147,8 +1167,8 @@ and sm_jump lbl' =
 
 and search () = 
     let s = targ_entry#text in
-    (try let _ = int_of_string s in rbuttons.(2)#set_active true with _ -> ());
-    sm_jump (String.lowercase_ascii (snd !xserv))
+    (try let _ = int_of_string s in rbuttons 2 with _ -> ());
+    sm_jump !xserv
 
 and smdb'' sentries lbl' = 
   List.iteri (fun ix loc -> if loc=lbl' then
@@ -1163,7 +1183,7 @@ and smdb'' sentries lbl' =
       tim.(6)#set_text (Printf.sprintf "%8.0f" (1.496e8 *. float_of_string dist_min));
       tim.(7)#set_text (string_of_float h);
       targ_entry#set_text lbl';
-      rbuttons.(2)#set_active true;
+      rbuttons 2;
       search();
       end) sentries
 
@@ -1200,16 +1220,38 @@ and smdb' () = if approach > 0 then
     end
  else
     begin
-    let timoff = try float_of_string (Sys.getenv "OPENSTELLINA_TIME_OFFSET") with _ -> 0.0 in
-    reset_date (timoff +. Unix.gettimeofday());
     let yr,mon,dy,hr,min,sec = split_date() in
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
     let lst = ref [] in
-    let accstr = try Sys.getenv "OPENSTELLINA_ACCEPTANCE" with _ -> "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0) & (mag < 15.0) & (ang_diam > 6.0)" in
+    let accstr = try Sys.getenv "OPENSTELLINA_ACCEPTANCE" with _ -> "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)" in
     let acceptance = Expr.simplify [] (Expr.expr accstr) in
     Expr.dump stdout [] acceptance;
-    Hashtbl.iter (fun sel (ra_flt,dec_flt,cnst,diam,mag,desc)  ->
+    rbuttons defcat;
+    let srt = match defcat with
+      | 4 -> Hashtbl.iter (fun sel (_,_,_,rh,rm,rs,decs,dd,dm,ds,_,_,a,_,_,_,_,_,_,_,_,_) ->
+        let mag = 20.0 in
+        let diam = a in
+        let cnst = "" in
+        let ra_flt = float_of_int rh *. 15.0 +. float_of_int rm /. 4.0 +. rs /. 240.0 in
+        let dec_flt = float_of_int dd +. float_of_int dm /. 60.0 +. float_of_int ds /. 3600.0 in
+        let dec_flt = if decs.[0] = '-' then -. dec_flt else dec_flt in
+        let yr,mon,dy,hr,min,sec = split_date() in
+        let latitude = float_of_string entry_lat#text in
+        let longitude = float_of_string entry_long#text in
+        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+        let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num mag) :: ("ang_diam", Calc.Num diam) :: [] in
+        match Expr.simplify acclst acceptance with
+          | Calc.Bool true ->
+            if mag <> nan then lst := (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) :: !lst;
+          | Calc.Bool false -> ()
+          | oth -> Expr.dump stderr acclst oth
+      ) Pgchash.pgch;
+        let dbgfile = open_out "srt.txt" in
+        let srt = List.sort (sort_pgc dbgfile) !lst in
+        close_out dbgfile;
+        srt
+      | 5 -> Hashtbl.iter (fun sel (ra_flt,dec_flt,cnst,diam,mag,desc)  ->
         let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
         ignore (cnst,diam,mag,desc);
         let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num mag) :: ("ang_diam", Calc.Num diam) :: [] in
@@ -1219,23 +1261,23 @@ and smdb' () = if approach > 0 then
           | Calc.Bool false -> ()
           | oth -> Expr.dump stderr acclst oth
         ) Ngc2000.ngchash;
-    print_endline ("selected NGC objects = "^string_of_int (List.length !lst));
-    let dbgfile = open_out "ngca1.txt" in
-    List.iter (dump_ngc dbgfile) !lst;
+       List.sort sort_ngc !lst
+       | _ -> print_endline "That catalogue does not support searching by alt/az"; [] in
+    print_endline ("selected catalogue objects = "^string_of_int (List.length !lst));
+    let dbgfile = open_out "cat1.txt" in
+    List.iter (dump_cat dbgfile) !lst;
     close_out dbgfile;
-    let srt = List.sort sort_ngc !lst in
-    let dbgfile = open_out "ngca2.txt" in
-    List.iter (dump_ngc dbgfile) srt;
+    let dbgfile = open_out "cat2.txt" in
+    List.iter (dump_cat dbgfile) srt;
     close_out dbgfile;
     let entries = try int_of_string (Sys.getenv "OPENSTELLINA_ENTRIES") with _ -> 20 in
     let entries = if entries > List.length srt then List.length srt else entries in
-    ngc_entries := Array.sub (Array.of_list srt) 0 entries;
-    let nentries = List.map (fun (des,_) -> des) (Array.to_list !ngc_entries) in
+    let cat_entries = Array.sub (Array.of_list srt) 0 entries in
+    let nentries = List.map (fun (des,_) -> des) (Array.to_list cat_entries) in
     let nmodel, ntext_column = GTree.store_of_list Gobject.Data.string nentries in
     let nmenu = GEdit.combo_box_entry ~text_column:ntext_column ~model:nmodel ~packing:pbox#pack () in
-    ignore (nmenu#entry#connect#changed ~callback: (fun () -> ngc'' nentries nmenu#entry#text));
+    ignore (nmenu#entry#connect#changed ~callback: (fun () -> cat'' cat_entries nentries nmenu#entry#text));
     nmenu#set_active entries;
-    
     Lwt.return_unit
     end
 
@@ -1371,28 +1413,27 @@ let exposlidefunc _ v = expos_us := int_of_float (floor (1.3 ** v)); entry_exp#s
 let gainslidefunc _ v = gain_int := int_of_float (floor (v *. 10.0)); entry_gain#set_text (Printf.sprintf "%4.1f" (float_of_int !gain_int /. 10.0))
 *)
 
-let add_prog_entry () =
-    let ra_flt = Utils.cnv_ra entry_ra#text in
-    let dec_flt = Utils.cnv_dec entry_dec#text in
-    let duration = int_of_string entry_duration#text in
-    let obs = `Assoc
-         [("duration", `Int duration);
-          ("params",
-           `Assoc
-             [("objectId", `String ( entry_nam#text ));
-              ("ra", `Float ra_flt);
-              ("de", `Float dec_flt);
-              ("rot", `Int 0);
-              ("gain", `Int (gain_int()));
-              ("histogramEnabled", `Bool true);
-              ("histogramLow", `Int (-1));
-              ("histogramMedium", `Int 5);
-              ("histogramHigh", `Int 0);
-              ("backgroundEnabled", `Bool true);
-              ("exposureMicroSec", `Int (expos_us()));
-              ("doStacking", `Bool true);
-              ("debayerInterpolation", `String "VNG")])] in
-    prog_entries := obs :: !prog_entries;
+let rec (yojson_of_yojson_basic:Yojson.Basic.t -> Yojson.t) = function
+| `Assoc l -> `Assoc (List.map (fun (x,y) -> (x, yojson_of_yojson_basic y)) l)
+| `List l -> `List (List.map (fun y -> (yojson_of_yojson_basic y)) l)
+| `Int n -> `Int n
+| `Bool b -> `Bool b
+| `Float f -> `Float f
+| `String s -> `String s
+| `Null -> failwith "yojson_basic"
+
+let load_prog_entries () =
+    prog_entries := [];
+    try let fd = open_in "prog_entries.json" in
+    prog_entries := (match yojson_of_yojson_basic (Yojson.Basic.from_channel fd) with `List lst -> List.rev lst | _ -> []);
+    with Sys_error _ -> ()
+
+let dump_prog_entries () =
+    let fd = open_out "prog_entries.json" in
+    output_string fd (Yojson.pretty_to_string (`List (List.rev !prog_entries)));
+    close_out fd
+
+let show_prog_entries () =
     let progtxt = Buffer.create 100 in
     Printf.bprintf progtxt "Entry duration declination exposure gain target_name right_ascension rotation status\n";
     List.iteri (fun ix -> fun (json:Yojson.t) -> match json with `Assoc
@@ -1420,6 +1461,31 @@ let add_prog_entry () =
     let contents = Buffer.contents progtxt in
     if check#active then Printf.printf "buffer length = %d\n" (String.length contents);
     textview#buffer#set_text contents
+
+let add_prog_entry () =
+    let ra_flt = Utils.cnv_ra entry_ra#text in
+    let dec_flt = Utils.cnv_dec entry_dec#text in
+    let duration = int_of_string entry_duration#text in
+    let obs = `Assoc
+         [("duration", `Int duration);
+          ("params",
+           `Assoc
+             [("objectId", `String ( entry_nam#text ));
+              ("ra", `Float ra_flt);
+              ("de", `Float dec_flt);
+              ("rot", `Int 0);
+              ("gain", `Int (gain_int()));
+              ("histogramEnabled", `Bool true);
+              ("histogramLow", `Int (-1));
+              ("histogramMedium", `Int 5);
+              ("histogramHigh", `Int 0);
+              ("backgroundEnabled", `Bool true);
+              ("exposureMicroSec", `Int (expos_us()));
+              ("doStacking", `Bool true);
+              ("debayerInterpolation", `String "VNG")])] in
+    prog_entries := obs :: !prog_entries;
+    dump_prog_entries();
+    show_prog_entries()
 
 let horizons'' lbl' = 
   List.iteri (fun ix loc -> if loc=lbl' then (match ix with
@@ -1454,17 +1520,14 @@ let gui () =
   ignore (button15#connect#clicked ~callback: (fun () -> sm_jump "startprog"));
   ignore (button16#connect#clicked ~callback: (fun () -> sm_jump "samples"));
   ignore (button17#connect#clicked ~callback: (fun () -> sm_jump "abortall"));
-  ignore (rbutton1#connect#clicked ~callback:(fun () -> xflip := "FLIP"));
-  ignore (rbutton2#connect#clicked ~callback:(fun () -> xflip := "NO_FLIP"));
-  ignore (rbutton3#connect#clicked ~callback:(fun () -> xflip := "BOTH"));
-  let defcat = try int_of_string (Sys.getenv "OPENSTELLINA_DEFAULT_CATALOGUE") with _ -> 0 in
-  rbuttons.(defcat)#set_active true;
 (*
   ignore (rng#connect#change_value ~callback:exposlidefunc);
   ignore (gain#connect#change_value ~callback:gainslidefunc);
   exposlidefunc () 47.5;
   gainslidefunc () 20.0;
 *)
+  let timoff = try float_of_string (Sys.getenv "OPENSTELLINA_TIME_OFFSET") with _ -> 0.0 in
+  reset_date (timoff +. Unix.gettimeofday());
   entry_darkcnt#set_text "100";
   entry_gridw#set_text "3";
   entry_gridh#set_text "3";
@@ -1510,6 +1573,9 @@ let gui () =
   ignore (planets#entry#connect#changed ~callback: (fun () -> horizons'' planets#entry#text)) ;
   ignore (ephem#entry#connect#changed ~callback: (fun () -> let lbl' = ephem#entry#text in List.iteri (fun ix loc -> if loc=lbl' then show_ephem ix) ephem_lst)) ;
   planets#set_active 9;
+  rbutton 1;
+  load_prog_entries();
+  show_prog_entries();
 
   (* Show the window. *)
   window#show ();
@@ -1517,7 +1583,7 @@ let gui () =
   ignore (targ_entry#connect#activate ~callback: search);
   targ_entry#set_editable true;
   targ_status#set_editable false;
-  targ_entry#set_text (try Sys.getenv "STELLINA_TARGET" with _ -> "NGC 5194");
+  targ_entry#set_text (try Sys.getenv "STELLINA_TARGET" with _ -> catdefaults.(defcat));
   search()
 
 let goto_received ra_int dec_int =
