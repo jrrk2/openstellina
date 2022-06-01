@@ -25,6 +25,8 @@ let start = Queue.create ()
 let timezone = List.rev (String.split_on_char '/' (try Unix.readlink "/etc/localtime" with _ -> "/var/db/timezone/zoneinfo/Europe/London"))
 let tzcity = try Sys.getenv "TIME_ZONE" with _ -> List.hd (List.tl timezone)  ^ "/" ^ List.hd timezone
 let defcat = try int_of_string (Sys.getenv "OPENSTELLINA_DEFAULT_CATALOGUE") with _ -> 0
+let accstr = try Sys.getenv "OPENSTELLINA_ACCEPTANCE" with _ -> "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)"
+let acceptance = Expr.simplify [] (Expr.expr accstr)
 
 let session' = ref {sid=""; ping_int=0; ping_tim=0}
 let statush = Hashtbl.create 32767
@@ -47,16 +49,16 @@ let factory_fil = new GMenu.factory file_menu ~accel_group
 (* Stellina menu *)
 let factory_stell = new GMenu.factory stell_menu ~accel_group
 
-let box2 = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: vbox#add ()
+let box2 = GPack.vbox ~spacing:1 ~border_width: 2 ~packing: vbox#add ()
 let frame_eaa = GBin.frame ~label: "Electronically assisted astronomy functions" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
 
-let boxu = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: frame_eaa#add ()
-let frame_target = GBin.frame ~label: "Target object settings" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
-let boxt = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: frame_target#add ()
-let boxd = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
-let boxh = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
-let boxv = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
-let boxs = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: boxt#add ()
+let boxu = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: frame_eaa#add ()
+let frame_target = GBin.frame ~label: "Target object settings" ~packing:(box2#pack ~expand:true ~fill:false ~padding:1) ()
+let boxt = GPack.vbox ~spacing:1 ~border_width: 10 ~packing: frame_target#add ()
+let boxd = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: boxt#add ()
+let boxh = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: boxt#add ()
+let boxv = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: boxt#add ()
+let boxs = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: boxt#add ()
 
 (* Button0 *)
 let button0 = GButton.button ~label:"Take Control" ~packing:boxu#add ()
@@ -113,33 +115,35 @@ let reset_date tim =
     let yr,mon,dy,hr,min,sec = tm.tm_year+1900,tm.tm_mon+1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec in
     update_date yr mon dy hr min sec
 
-let _= GPack.vbox ~spacing:2 ~border_width: 10 ~packing: boxh#add ()
-let frame_nam = GBin.frame ~label: "Target Name" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
-let entry_nam = GEdit.entry ~max_length: 20 ~packing: frame_nam#add ()
+(*
+let _= GPack.vbox ~spacing:1 ~border_width: 10 ~packing: boxh#add ()
+*)
+let frame_nam = GBin.frame ~label: "Target Name" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_nam = GEdit.entry ~max_length: 32 ~packing: frame_nam#add ()
 
-let frame_ra = GBin.frame ~label: "Right ascension" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
-let entry_ra = GEdit.entry ~max_length: 20 ~packing: frame_ra#add ()
+let frame_ra = GBin.frame ~label: "Right ascension" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_ra = GEdit.entry ~max_length: 12 ~packing: frame_ra#add ()
 
-let frame_dec = GBin.frame ~label: "Declination" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
-let entry_dec = GEdit.entry ~max_length: 20 ~packing: frame_dec#add ()
+let frame_dec = GBin.frame ~label: "Declination" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_dec = GEdit.entry ~max_length: 12 ~packing: frame_dec#add ()
 
-let frame_alt = GBin.frame ~label: "Altitude" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
-let entry_alt = GEdit.entry ~max_length: 20 ~packing: frame_alt#add ()
+let frame_alt = GBin.frame ~label: "Altitude" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_alt = GEdit.entry ~max_length: 12 ~packing: frame_alt#add ()
 
-let frame_az = GBin.frame ~label: "Azimuth" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
-let entry_az = GEdit.entry ~max_length: 20 ~packing: frame_az#add ()
+let frame_az = GBin.frame ~label: "Azimuth" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_az = GEdit.entry ~max_length: 12 ~packing: frame_az#add ()
 
-let frame_mag = GBin.frame ~label: "Visual magnitude" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
-let entry_mag = GEdit.entry ~max_length: 10 ~packing: frame_mag#add ()
+let frame_mag = GBin.frame ~label: "Visual magnitude" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_mag = GEdit.entry ~max_length: 8 ~packing: frame_mag#add ()
 
-let frame_ang = GBin.frame ~label: "Angular diameter" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
-let entry_ang = GEdit.entry ~max_length: 10 ~packing: frame_ang#add ()
+let frame_ang = GBin.frame ~label: "Angular diameter" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_ang = GEdit.entry ~max_length: 8 ~packing: frame_ang#add ()
 
-let frame_exp = GBin.frame ~label: "Exposure (sec)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
-let entry_exp = GEdit.entry ~max_length: 10 ~packing: frame_exp#add ()
+let frame_exp = GBin.frame ~label: "Exposure (sec)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_exp = GEdit.entry ~max_length: 6 ~packing: frame_exp#add ()
 
-let frame_gain = GBin.frame ~label: "Gain (dB)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:2) ()
-let entry_gain = GEdit.entry ~max_length: 10 ~packing: frame_gain#add ()
+let frame_gain = GBin.frame ~label: "Gain (dB)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let entry_gain = GEdit.entry ~max_length: 6 ~packing: frame_gain#add ()
 
 (*
 (* Range1 *)
@@ -171,7 +175,7 @@ let framx = GBin.frame ~label: "Dark frames" ~packing:(box2#pack ~expand:true ~f
 
 let bbox = GPack.hbox ~border_width:5 ~packing:frame_manual#add ()
 
-let box3 = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: framx#add ()
+let box3 = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: framx#add ()
 
 let radio' selfun box lst = let grp = GButton.radio_button ~label:(List.hd lst) ~packing: box#add () in
                  let a = Array.of_list (grp :: List.map (fun itm ->
@@ -203,7 +207,7 @@ let check = GButton.check_button ~label: "Verbose" ~active: false ~packing: vbox
 
 let xbox = GPack.vbox ~spacing:1 ~border_width: 1 ~packing: obox#add ()
 let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(xbox#pack ~expand:true ~fill:true ~padding:2) ()
-let boxserv = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: framserv#add ()
+let boxserv = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: framserv#add ()
 
 let catalogues = ["Simbad"; "Stellarium"; "Horizons"; "Messier"; "PGC"; "NGC2000"]
 let catdefaults = [|"M51"; "M51"; "301"; "M51"; "PGC47404"; "NGC 5194"|]
@@ -252,18 +256,21 @@ let buttonE = GButton.button ~label:"Manual Init" ~packing:bbox#add ()
 (* ButtonF *)
 let buttonF = GButton.button ~label:"Read Params" ~packing:bbox#add ()
 
-let vboxprog = GPack.vbox ~spacing:2 ~border_width: 10 ~packing: framprog#add ()
-let boxprog = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vboxprog#add ()
-let eboxprog = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vboxprog#add ()
+let vboxprog = GPack.vbox ~spacing:1 ~border_width: 10 ~packing: framprog#add ()
+let boxprog = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: vboxprog#add ()
+let eboxprog = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: vboxprog#add ()
 
 (* add text view with scroll bars for plannet observations *)
 let scroll = GBin.scrolled_window
                  ~hpolicy:`AUTOMATIC ~vpolicy:`AUTOMATIC
                  ~packing:vboxprog#add ()
 let textview = GText.view ~packing:scroll#add_with_viewport ()
+let tbuffer = textview#buffer
 
-(* Button12 *)
-let buttonProg = Array.of_list (List.map (fun itm -> GButton.button ~label:itm ~packing:boxprog#add ()) ["Write Mosaic Program";"Run Mosaic Program";"Add Target to Observation Program";"Start Observation Program";"Take Samples";"Abort All"])
+(* ButtonProg *)
+let prog_strip = ["Write Mosaic Program";"Run Mosaic Program";"Add Target to Observation Program";"Start Observation Program";"Clear Observation Program";"Take Samples";"Abort All"]
+let prog_strip' = ["mosaic";"obsprog";"addprog";"startprog";"clearprog";"samples";"abortall"]
+let buttonProg = Array.of_list (List.map (fun itm -> GButton.button ~label:itm ~packing:boxprog#add ()) prog_strip)
 
 (* program parameters *)
 let frame_gridw = GBin.frame ~label: "Grid width" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
@@ -285,7 +292,7 @@ let entry_hpassof = GEdit.entry ~max_length: 10 ~packing: frame_hpassof#add ()
 let frame_duration = GBin.frame ~label: "Target Duration" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
 let entry_duration = GEdit.entry ~max_length: 8 ~packing: frame_duration#add ()
 
-let _ = GPack.hbox ~spacing:2 ~border_width: 10 ~packing: vbox#add ()
+let _ = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: vbox#add ()
 let status_win (box':GPack.box array) lbls =
   Array.init (Array.length lbls) (fun ix ->
   let lmax = 30 in
@@ -465,8 +472,8 @@ let jpegh = Hashtbl.create 127
 (*
 let gain_int = ref 200
 let expos_us = ref 1000000
-*)
 let (prog_entries:Yojson.t list ref) = ref []
+*)
 let ephem_data_lst = ref []
 
 let expos_us () = let e = try float_of_string entry_exp#text with _ -> 10.0 in entry_exp#set_text (string_of_float e); int_of_float (1000000.0 *. e)
@@ -682,25 +689,6 @@ let mosaic () =
      ("widthPassOffset", `Float (float_of_string (entry_wpassof#text)));
      ("heightPassOffset", `Float (float_of_string (entry_hpassof#text)));
      ("observationParams", params)] )) (cnv' f)
-
-let startprog () =
-    let pth = pth2'^"/v1//automator/startObservationProgram" in
-    let time_ms = int_of_float (Unix.time() *. 1000.0) in
-    let lat_flt = float_of_string entry_lat#text in
-    let long_flt = float_of_string entry_long#text in
-    let f = (fun s -> errchk' true (cnv s)) in
-    let lst = List.rev !prog_entries in
-    prog_entries := [];
-    print_endline ("Entries in program: "^string_of_int (List.length lst));
-    List.iteri (fun ix (itm:Yojson.t) -> print_endline ("observation["^string_of_int ix^"]: "^Yojson.to_string itm)) lst;
-    let (prog':Yojson.t) = `Assoc
-        [("skipAutoInit", `Bool false);
-         ("latitude", `Float lat_flt);
-         ("longitude", `Float long_flt);
-         ("startTime", `Int time_ms);
-         ("observations", `List lst)] in
-    print_endline !mos_id;
-    Utils.post' proto server [] [] pth (Quests.Request.Json prog') (cnv' f)
 
 let obsprog () =
     let pth = pth2'^"/v1//automator/runObservationProgram" in
@@ -1004,10 +992,23 @@ let horizons' () =
        let str = if String.length x > 5 then String.sub x 0 4 else "" in
        let trial = try (int_of_string str) with _ -> 0 in
        let use = trial = t.tm_year+1900 in
-       if false then print_endline (string_of_bool use^": "^str^": "^string_of_int trial^": "^x);
-       if String.length x >= 66 && (String.sub x 0 9 = "Revised: " || String.sub x 0 12 = "JPL/HORIZONS") then
+       let tok = Array.of_list (List.filter (function "" -> false | _ -> true) (String.split_on_char ' ' x)) in
+       if Array.length tok > 0 && tok.(0) = "Revised:" then
           begin
-          body := String.trim (String.sub x 22 (String.length x - 42));
+          let ix = ref (Array.length tok - 1) in
+          while (tok.(!ix).[0] >= '0' && tok.(!ix).[0] <= '9') || (tok.(!ix) = "/") do decr ix done;
+(*
+          print_endline ("last ix="^string_of_int !ix);
+          if true then Array.iteri (fun ix itm -> print_endline (string_of_int ix^": \""^itm^"\"")) tok;
+*)
+          body := String.concat " " (Array.to_list (Array.sub tok 4 (!ix - 3)));
+          end
+       else if Array.length tok > 0 && tok.(0) = "JPL/HORIZONS" then
+          begin
+(*
+          if true then Array.iteri (fun ix itm -> print_endline (string_of_int ix^": "^itm)) tok;
+*)
+          body := String.concat " " (Array.to_list (Array.sub tok 1 (Array.length tok - 3)));
           end;
        if check#active then print_endline x;
        use) (String.split_on_char '\n' s);
@@ -1135,6 +1136,88 @@ let quit' = ref false
 let setfocus' () =
   Stellarium.focus' focus_resp entry_nam#text
 
+let show_prog_entries prog_entries =
+    tbuffer#set_text "";
+    tbuffer#insert ~tag_names:["bold";"monospace"] (Printf.sprintf "Entry duration declination exposure gain                      target_name right_ascension rotation    ra_now    dec_now   altitude    azimuth   loc. sid. time   hour angle status");
+    tbuffer#insert ~tag_names:["monospace"] "\n";
+    List.iteri (fun ix -> fun (json:Yojson.t) -> match json with `Assoc
+         [("duration", `Int duration);
+          ("params",
+           `Assoc lst)] -> tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "%5d %6d " (ix+1) duration);
+         let ra_flt = ref 0.0 in
+         let dec_flt = ref 0.0 in
+         List.iter (function
+           | ("de", `Float dec) -> dec_flt := dec; tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %11s" (Utils.dms_of_float dec));
+           | ("exposureMicroSec", `Int expos_us) -> tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %8.3f" (float_of_int expos_us /. 1e6));
+           | ("gain", `Int gain) -> tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %5.1f" (float_of_int gain /. 10.));
+           | ("objectId", `String id) -> tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %32s" id);
+           | ("ra", `Float ra) -> ra_flt := ra; tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "   %11s" (Utils.hms_of_float ra));
+           | ("rot", `Int rot) -> tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "   %8d" rot);
+           | _ -> ()) (List.sort compare lst);
+         let latitude = float_of_string entry_lat#text in
+         let longitude = float_of_string entry_long#text in
+         let yr,mon,dy,hr,min,sec = split_date() in
+         let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec !ra_flt !dec_flt latitude longitude in
+         let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num nan) :: ("ang_diam", Calc.Num nan) :: [] in
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %10s" (Utils.hms_of_float ra_now));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %10s" (Utils.dms_of_float dec_now));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %10s" (Utils.dms_of_float alt_calc));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %10s" (Utils.dms_of_float az_calc));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "     %10.4f" lst_calc);
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "   %10.4f " hour_calc);
+         let stat = match Expr.simplify acclst acceptance with
+           | Calc.Bool true -> "  ** OK **\n"
+           | Calc.Bool false -> "  ** object outside viewport **\n"
+           | _ -> "  ** object status undecidadable **\n" in
+         ignore (jd_calc);
+         tbuffer#insert ~tag_names:["monospace"] stat
+         | _ -> ()) (List.rev prog_entries);
+    let start,stop = tbuffer#bounds in
+    tbuffer#apply_tag_by_name "monospace" ~start ~stop
+    
+let rec (yojson_of_yojson_basic:Yojson.Basic.t -> Yojson.t) = function
+| `Assoc l -> `Assoc (List.map (fun (x,y) -> (x, yojson_of_yojson_basic y)) l)
+| `List l -> `List (List.map (fun y -> (yojson_of_yojson_basic y)) l)
+| `Int n -> `Int n
+| `Bool b -> `Bool b
+| `Float f -> `Float f
+| `String s -> `String s
+| `Null -> failwith "yojson_basic"
+
+let load_prog_entries () =
+    try let fd = open_in "prog_entries.json" in
+    (match yojson_of_yojson_basic (Yojson.Basic.from_channel fd) with `List lst -> List.rev lst | _ -> []);
+    with Sys_error _ -> []
+
+let dump_prog_entries prog_entries =
+    let fd = open_out "prog_entries.json" in
+    output_string fd (Yojson.pretty_to_string (`List (List.rev prog_entries)));
+    close_out fd
+
+let clearprog() =
+    dump_prog_entries [];
+    show_prog_entries [];
+    Lwt.return_unit
+
+let startprog () =
+    let pth = pth2'^"/v1//automator/startObservationProgram" in
+    let time_ms = int_of_float (Unix.time() *. 1000.0) in
+    let lat_flt = float_of_string entry_lat#text in
+    let long_flt = float_of_string entry_long#text in
+    let f = (fun s -> errchk' true (cnv s)) in
+    let lst = List.rev (load_prog_entries()) in
+    dump_prog_entries [];
+    print_endline ("Entries in program: "^string_of_int (List.length lst));
+    List.iteri (fun ix (itm:Yojson.t) -> print_endline ("observation["^string_of_int ix^"]: "^Yojson.to_string itm)) lst;
+    let (prog':Yojson.t) = `Assoc
+        [("skipAutoInit", `Bool false);
+         ("latitude", `Float lat_flt);
+         ("longitude", `Float long_flt);
+         ("startTime", `Int time_ms);
+         ("observations", `List lst)] in
+    print_endline !mos_id;
+    Utils.post' proto server [] [] pth (Quests.Request.Json prog') (cnv' f)
+
 let rec cat'' cat_entries nentries lbl' =
   List.iteri (fun ix loc -> if loc=lbl' then
       begin
@@ -1214,8 +1297,6 @@ and smdb' () = if approach > 0 then
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
     let lst = ref [] in
-    let accstr = try Sys.getenv "OPENSTELLINA_ACCEPTANCE" with _ -> "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)" in
-    let acceptance = Expr.simplify [] (Expr.expr accstr) in
     Expr.dump stdout [] acceptance;
     rbuttons defcat;
     let srt = match defcat with
@@ -1271,6 +1352,32 @@ and smdb' () = if approach > 0 then
     Lwt.return_unit
     end
 
+and add_prog_entry () =
+    let ra_flt = Utils.cnv_ra entry_ra#text in
+    let dec_flt = Utils.cnv_dec entry_dec#text in
+    let duration = int_of_string entry_duration#text in
+    let obs = `Assoc
+         [("duration", `Int duration);
+          ("params",
+           `Assoc
+             [("objectId", `String ( entry_nam#text ));
+              ("ra", `Float ra_flt);
+              ("de", `Float dec_flt);
+              ("rot", `Int 0);
+              ("gain", `Int (gain_int()));
+              ("histogramEnabled", `Bool true);
+              ("histogramLow", `Int (-1));
+              ("histogramMedium", `Int 5);
+              ("histogramHigh", `Int 0);
+              ("backgroundEnabled", `Bool true);
+              ("exposureMicroSec", `Int (expos_us()));
+              ("doStacking", `Bool true);
+              ("debayerInterpolation", `String "VNG")])] in
+    let prog_entries = obs :: load_prog_entries() in
+    dump_prog_entries prog_entries;
+    show_prog_entries prog_entries;
+    Lwt.return_unit
+
 and taskarray =
        [|
          ("smdb", smdb');
@@ -1316,7 +1423,11 @@ and taskarray =
          ("", status');
          ("obsprog", obsprog);
          ("", status');
+         ("addprog", add_prog_entry);
+         ("", status');
          ("startprog", startprog);
+         ("", status');
+         ("clearprog", clearprog);
          ("", status');
          ("samples", samples);
          ("", status');
@@ -1403,80 +1514,6 @@ let exposlidefunc _ v = expos_us := int_of_float (floor (1.3 ** v)); entry_exp#s
 let gainslidefunc _ v = gain_int := int_of_float (floor (v *. 10.0)); entry_gain#set_text (Printf.sprintf "%4.1f" (float_of_int !gain_int /. 10.0))
 *)
 
-let rec (yojson_of_yojson_basic:Yojson.Basic.t -> Yojson.t) = function
-| `Assoc l -> `Assoc (List.map (fun (x,y) -> (x, yojson_of_yojson_basic y)) l)
-| `List l -> `List (List.map (fun y -> (yojson_of_yojson_basic y)) l)
-| `Int n -> `Int n
-| `Bool b -> `Bool b
-| `Float f -> `Float f
-| `String s -> `String s
-| `Null -> failwith "yojson_basic"
-
-let load_prog_entries () =
-    prog_entries := [];
-    try let fd = open_in "prog_entries.json" in
-    prog_entries := (match yojson_of_yojson_basic (Yojson.Basic.from_channel fd) with `List lst -> List.rev lst | _ -> []);
-    with Sys_error _ -> ()
-
-let dump_prog_entries () =
-    let fd = open_out "prog_entries.json" in
-    output_string fd (Yojson.pretty_to_string (`List (List.rev !prog_entries)));
-    close_out fd
-
-let show_prog_entries () =
-    let progtxt = Buffer.create 100 in
-    Printf.bprintf progtxt "Entry duration declination exposure gain target_name right_ascension rotation status\n";
-    List.iteri (fun ix -> fun (json:Yojson.t) -> match json with `Assoc
-         [("duration", `Int duration);
-          ("params",
-           `Assoc lst)] -> Printf.bprintf progtxt "  %5d  %8d " (ix+1) duration;
-         let ra_flt = ref 0.0 in
-         let dec_flt = ref 0.0 in
-         List.iter (function
-           | ("de", `Float dec) -> dec_flt := dec; Printf.bprintf progtxt "   %11s" (Utils.dms_of_float dec)
-           | ("exposureMicroSec", `Int expos_us) -> Printf.bprintf progtxt "   %8.3f" (float_of_int expos_us /. 1e6)
-           | ("gain", `Int gain) -> Printf.bprintf progtxt "   %4d" gain
-           | ("objectId", `String id) -> Printf.bprintf progtxt "   %11s" id
-           | ("ra", `Float ra) -> ra_flt := ra; Printf.bprintf progtxt "   %15s" (Utils.hms_of_float ra)
-           | ("rot", `Int rot) -> Printf.bprintf progtxt "   %8d" rot
-           | _ -> ()) (List.sort compare lst);
-         let latitude = float_of_string entry_lat#text in
-         let longitude = float_of_string entry_long#text in
-         let yr,mon,dy,hr,min,sec = split_date() in
-         let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec !ra_flt !dec_flt latitude longitude in
-         if alt_calc < 0.0 then Printf.bprintf progtxt "  ** object below horizon ** ";
-         ignore (jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc);
-         Printf.bprintf progtxt "\n"
-         | _ -> ()) (List.rev !prog_entries);
-    let contents = Buffer.contents progtxt in
-    if check#active then Printf.printf "buffer length = %d\n" (String.length contents);
-    textview#buffer#set_text contents
-
-let add_prog_entry () =
-    let ra_flt = Utils.cnv_ra entry_ra#text in
-    let dec_flt = Utils.cnv_dec entry_dec#text in
-    let duration = int_of_string entry_duration#text in
-    let obs = `Assoc
-         [("duration", `Int duration);
-          ("params",
-           `Assoc
-             [("objectId", `String ( entry_nam#text ));
-              ("ra", `Float ra_flt);
-              ("de", `Float dec_flt);
-              ("rot", `Int 0);
-              ("gain", `Int (gain_int()));
-              ("histogramEnabled", `Bool true);
-              ("histogramLow", `Int (-1));
-              ("histogramMedium", `Int 5);
-              ("histogramHigh", `Int 0);
-              ("backgroundEnabled", `Bool true);
-              ("exposureMicroSec", `Int (expos_us()));
-              ("doStacking", `Bool true);
-              ("debayerInterpolation", `String "VNG")])] in
-    prog_entries := obs :: !prog_entries;
-    dump_prog_entries();
-    show_prog_entries()
-
 let horizons'' lbl' = 
   List.iteri (fun ix loc -> if loc=lbl' then (match ix with
       | 2 -> targ_entry#set_text "301"; search()
@@ -1504,12 +1541,7 @@ let gui () =
   ignore (buttonD#connect#clicked ~callback: (fun () -> sm_jump "trackoff"));
   ignore (buttonE#connect#clicked ~callback: (fun () -> sm_jump "manualinit"));
   ignore (buttonF#connect#clicked ~callback: (fun () -> sm_jump "readparams"));
-  ignore (button12#connect#clicked ~callback: (fun () -> sm_jump "mosaic"));
-  ignore (button13#connect#clicked ~callback: (fun () -> sm_jump "obsprog"));
-  ignore (button14#connect#clicked ~callback: (fun () -> add_prog_entry() ));
-  ignore (button15#connect#clicked ~callback: (fun () -> sm_jump "startprog"));
-  ignore (button16#connect#clicked ~callback: (fun () -> sm_jump "samples"));
-  ignore (button17#connect#clicked ~callback: (fun () -> sm_jump "abortall"));
+  List.iteri (fun ix itm -> ignore (buttonProg.(ix)#connect#clicked ~callback: (fun () -> sm_jump itm))) prog_strip';
 (*
   ignore (rng#connect#change_value ~callback:exposlidefunc);
   ignore (gain#connect#change_value ~callback:gainslidefunc);
@@ -1525,10 +1557,10 @@ let gui () =
   entry_nump#set_text "3";
   entry_wminov#set_text "0.1";
   entry_hminov#set_text "0.1";
-  entry_wpassof#set_text "0.1";
-  entry_hpassof#set_text "0.1";
+  entry_wpassof#set_text "0.6";
+  entry_hpassof#set_text "0.6";
   entry_duration#set_text "15";
-  textview#buffer#set_text "";
+  tbuffer#set_text "";
 
   ignore (dbutton2#connect#clicked ~callback: (fun () -> sm_jump "darks"));
   tz'#set_text tzcity;
@@ -1564,9 +1596,13 @@ let gui () =
   ignore (ephem#entry#connect#changed ~callback: (fun () -> let lbl' = ephem#entry#text in List.iteri (fun ix loc -> if loc=lbl' then show_ephem ix) ephem_lst)) ;
   planets#set_active 9;
   rbutton 1;
-  load_prog_entries();
-  show_prog_entries();
-
+  ignore (tbuffer#create_tag ~name:"heading" [`WEIGHT `BOLD; `SIZE (15*Pango.scale)]);
+  ignore (tbuffer#create_tag ~name:"italic" [`STYLE `ITALIC]);
+  ignore (tbuffer#create_tag ~name:"bold" [`WEIGHT `BOLD]);
+  ignore (tbuffer#create_tag ~name:"big" [`SIZE 20]);
+  ignore (tbuffer#create_tag ~name:"monospace" [`FAMILY "monospace"]);
+  ignore (tbuffer#create_tag ~name:"no_wrap" [`WRAP_MODE `NONE]);
+  show_prog_entries (load_prog_entries());
   (* Show the window. *)
   window#show ();
 
