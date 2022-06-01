@@ -1138,37 +1138,46 @@ let setfocus' () =
 
 let show_prog_entries prog_entries =
     tbuffer#set_text "";
-    tbuffer#insert ~tag_names:["bold";"monospace"] (Printf.sprintf "Entry duration declination exposure gain                      target_name right_ascension rotation    ra_now    dec_now   altitude    azimuth   loc. sid. time   hour angle status");
+    tbuffer#insert ~tag_names:["bold";"monospace"] (Printf.sprintf "                      target_name # time right_asc. declination expos. gain rot.    ra_now   dec_now  altitude  azimuth   loc. sid.   hour ang status");
     tbuffer#insert ~tag_names:["monospace"] "\n";
     List.iteri (fun ix -> fun (json:Yojson.t) -> match json with `Assoc
          [("duration", `Int duration);
           ("params",
-           `Assoc lst)] -> tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "%5d %6d " (ix+1) duration);
-         let ra_flt = ref 0.0 in
-         let dec_flt = ref 0.0 in
-         List.iter (function
-           | ("de", `Float dec) -> dec_flt := dec; tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %11s" (Utils.dms_of_float dec));
-           | ("exposureMicroSec", `Int expos_us) -> tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %8.3f" (float_of_int expos_us /. 1e6));
-           | ("gain", `Int gain) -> tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %5.1f" (float_of_int gain /. 10.));
-           | ("objectId", `String id) -> tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %32s" id);
-           | ("ra", `Float ra) -> ra_flt := ra; tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "   %11s" (Utils.hms_of_float ra));
-           | ("rot", `Int rot) -> tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "   %8d" rot);
-           | _ -> ()) (List.sort compare lst);
+           `Assoc [("objectId", `String id);
+             ("ra", `Float ra_flt);
+             ("de", `Float dec_flt);
+             ("rot", `Int rot); 
+             ("gain", `Int gain);
+             ("histogramEnabled", _);
+             ("histogramLow", _);
+             ("histogramMedium", _);
+             ("histogramHigh", _);
+             ("backgroundEnabled", _);
+             ("exposureMicroSec", `Int expos_us);
+             ("doStacking", _);
+             ("debayerInterpolation", _)])] ->
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %32s" id);
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "%2d %4d" (ix+1) duration);
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Utils.hms_of_float ra_flt));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Utils.dms_of_float dec_flt));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "%8.3f" (float_of_int expos_us /. 1e6));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %4.1f" (float_of_int gain /. 10.));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "   %4d" rot);
          let latitude = float_of_string entry_lat#text in
          let longitude = float_of_string entry_long#text in
          let yr,mon,dy,hr,min,sec = split_date() in
-         let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec !ra_flt !dec_flt latitude longitude in
+         let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
          let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num nan) :: ("ang_diam", Calc.Num nan) :: [] in
-         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %10s" (Utils.hms_of_float ra_now));
-         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %10s" (Utils.dms_of_float dec_now));
-         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %10s" (Utils.dms_of_float alt_calc));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Utils.hms_of_float ra_now));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Utils.dms_of_float dec_now));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Utils.dms_of_float alt_calc));
          tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %10s" (Utils.dms_of_float az_calc));
-         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "     %10.4f" lst_calc);
-         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "   %10.4f " hour_calc);
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %8.4f" lst_calc);
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %8.4f " hour_calc);
          let stat = match Expr.simplify acclst acceptance with
-           | Calc.Bool true -> "  ** OK **\n"
-           | Calc.Bool false -> "  ** object outside viewport **\n"
-           | _ -> "  ** object status undecidadable **\n" in
+           | Calc.Bool true -> "  ** observable **\n"
+           | Calc.Bool false -> "  ** outside viewport **\n"
+           | _ -> "  ** undecidadable **\n" in
          ignore (jd_calc);
          tbuffer#insert ~tag_names:["monospace"] stat
          | _ -> ()) (List.rev prog_entries);
