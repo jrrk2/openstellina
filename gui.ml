@@ -876,17 +876,18 @@ let messier' () =
     let sel = targ_entry#text in
     let len = Array.length Messier_catalogue.messier_array in
     let ix = ref (try int_of_string (String.sub sel 1 (String.length sel - 1)) with _ -> 0) in
-    if sel.[0] <> 'M' || !ix = 0 || !ix > len then Array.iteri (fun i (a,_,_) -> if sel = a then ix := i+1) Messier_catalogue.messier_array;
-    let (found,ra,dec) = if !ix = 0 || !ix > len
-    then (targ_status#set_text ("Messier: " ^ sel ^ ": not found"); ("","",""))
-    else (let (found,b,c) = Messier_catalogue.messier_array.(!ix - 1) in targ_status#set_text ("Messier found: " ^ found); (found,b,c)) in
+    if sel.[0] <> 'M' || !ix = 0 || !ix > len then Array.iteri (fun i (a,_,_,_) -> if sel = a then ix := i+1) Messier_catalogue.messier_array;
+    let (found,ra,dec,mag) = if !ix = 0 || !ix > len
+    then (targ_status#set_text ("Messier: " ^ sel ^ ": not found"); ("","","",""))
+    else (let (found,b,c,d) = Messier_catalogue.messier_array.(!ix - 1) in targ_status#set_text ("Messier found: " ^ found); (found,b,c,d)) in
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
     let ra_flt = Utils.cnv_ra ra in
     let dec_flt = Utils.cnv_dec dec in
+    let mag = float_of_string mag in
     let yr,mon,dy,hr,min,sec = split_date() in
     let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
-    show_entries found jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan nan nan nan;
+    show_entries found jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan nan;
     Lwt.return_unit
 
 let focus_resp s =
@@ -1309,6 +1310,21 @@ and smdb' () = if approach > 0 then
     Expr.dump stdout [] acceptance;
     rbuttons defcat;
     let srt = match defcat with
+      | 3 -> Array.iter (fun (sel, ra, dec, mag) ->
+        let mag = float_of_string mag in
+        let diam = nan in
+        let cnst = "" in
+        let ra_flt = Utils.cnv_ra ra in
+        let dec_flt = Utils.cnv_dec dec in
+        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+        let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num mag) :: ("ang_diam", Calc.Num diam) :: [] in
+        match Expr.simplify acclst acceptance with
+          | Calc.Bool true ->
+            if mag <> nan then lst := (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) :: !lst;
+          | Calc.Bool false -> ()
+          | oth -> Expr.dump stderr acclst oth
+        ) Messier_catalogue.messier_array;
+        List.rev !lst
       | 4 -> Hashtbl.iter (fun sel (_,_,_,rh,rm,rs,decs,dd,dm,ds,_,_,a,_,_,_,_,_,_,_,_,_) ->
         let mag = 20.0 in
         let diam = a in
