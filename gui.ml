@@ -209,8 +209,8 @@ let xbox = GPack.vbox ~spacing:1 ~border_width: 1 ~packing: obox#add ()
 let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(xbox#pack ~expand:true ~fill:true ~padding:2) ()
 let boxserv = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: framserv#add ()
 
-let catalogues = ["Simbad"; "Stellarium"; "Horizons"; "Messier"; "PGC"; "NGC2000"]
-let catdefaults = [|"M51"; "M51"; "301"; "M51"; "PGC47404"; "NGC 5194"|]
+let catalogues = ["Simbad"; "Stellarium"; "Horizons"; "Messier"; "PGC"; "NGC2000"; "Abell"]
+let catdefaults = [|"M51"; "M51"; "301"; "M51"; "PGC47404"; "NGC 5194"; "ACO1656" |]
 let xserv = ref ""
 let rselfun _ itm = xserv := String.lowercase_ascii itm
 let rbuttons = radio' rselfun boxserv catalogues
@@ -940,6 +940,31 @@ let pgc' () =
     show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
     Lwt.return_unit)
 
+(* Abell catalogue of multiple galaxy clusters *)
+
+let abell' () = 
+    let sel = targ_entry#text in
+    print_endline ("Search "^string_of_int Abell0.hlen^" for "^sel);
+    (try (let (aco,rah,ram,des,ded,dem,bmtype,count,ra2000h,ra2000m,de2000s,de2000d,de2000m,xpos,ypos,glon,glat,redshift,rich,dclass,m10) = Hashtbl.find Abell0.abellh sel in
+    let mag = nan in
+    let ra_flt = float_of_int ra2000h *. 15.0 +. ra2000m /. 4.0 in
+    let dec_flt = float_of_int de2000d +. float_of_int de2000m /. 60.0 in
+    let dec_flt = if de2000s.[0] = '-' then -. dec_flt else dec_flt in
+    print_endline (string_of_float ra_flt^" : "^string_of_float dec_flt);
+    ignore (aco,rah,ram,des,ded,dem,bmtype,count,xpos,ypos,glon,glat,redshift,rich,dclass,m10);
+    targ_status#set_text ("Abell found: " ^ sel);
+    let yr,mon,dy,hr,min,sec = split_date() in
+    let latitude = float_of_string entry_lat#text in
+    let longitude = float_of_string entry_long#text in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+    show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan nan);
+    print_endline ("Focus: "^sel);
+    Stellarium.focus' focus_resp sel
+    with _ ->
+    targ_status#set_text ("PGC: " ^ sel ^ ": not found");
+    show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
+    Lwt.return_unit)
+
 let simbad' () =
     let hdrs = ref [] in
     let server =  "simbad.u-strasbg.fr" in
@@ -1358,6 +1383,23 @@ and smdb' () = if approach > 0 then
           | oth -> Expr.dump stderr acclst oth
         ) Ngc2000.ngchash;
        List.sort sort_ngc !lst
+      | 6 -> Hashtbl.iter (fun sel (aco,rah,ram,des,ded,dem,bmtype,count,ra2000h,ra2000m,de2000s,de2000d,de2000m,xpos,ypos,glon,glat,redshift,rich,dclass,m10) ->
+        let mag = nan in
+        let diam = nan in
+        let cnst = "" in
+        let ra_flt = float_of_int ra2000h *. 15.0 +. ra2000m /. 4.0 in
+        let dec_flt = float_of_int de2000d +. float_of_int de2000m /. 60.0 in
+        let dec_flt = if de2000s.[0] = '-' then -. dec_flt else dec_flt in
+        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+        ignore (aco,rah,ram,des,ded,dem,bmtype,count,xpos,ypos,glon,glat,redshift,rich,dclass,m10);
+        let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num mag) :: ("ang_diam", Calc.Num diam) :: [] in
+        match Expr.simplify acclst acceptance with
+          | Calc.Bool true ->
+            if mag <> nan then lst := (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) :: !lst;
+          | Calc.Bool false -> ()
+          | oth -> Expr.dump stderr acclst oth
+        ) Abell0.abellh;
+       List.sort sort_ngc !lst
        | _ -> print_endline "That catalogue does not support searching by alt/az"; [] in
     print_endline ("selected catalogue objects = "^string_of_int (List.length !lst));
     let dbgfile = open_out "cat1.txt" in
@@ -1475,6 +1517,8 @@ and taskarray =
          ("ngc2000", ngc2000');
          ("", status');
          ("pgc", pgc');
+         ("", status');
+         ("abell", abell');
          ("", status');
          ("setfocus", setfocus');
          ("", status');
