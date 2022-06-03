@@ -209,8 +209,8 @@ let xbox = GPack.vbox ~spacing:1 ~border_width: 1 ~packing: obox#add ()
 let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(xbox#pack ~expand:true ~fill:true ~padding:2) ()
 let boxserv = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: framserv#add ()
 
-let catalogues = ["Simbad"; "Stellarium"; "Horizons"; "Messier"; "PGC"; "NGC2000"; "Abell"]
-let catdefaults = [|"M51"; "M51"; "301"; "M51"; "PGC47404"; "NGC 5194"; "ACO1656" |]
+let catalogues = ["Simbad"; "Stellarium"; "Horizons"; "Messier"; "PGC"; "NGC2000"; "Abell"; "DSO"]
+let catdefaults = [|"M51"; "M51"; "301"; "M51"; "PGC47404"; "NGC 5194"; "ACO1656"; "" |]
 let xserv = ref ""
 let rselfun _ itm = xserv := String.lowercase_ascii itm
 let rbuttons = radio' rselfun boxserv catalogues
@@ -961,7 +961,29 @@ let abell' () =
     print_endline ("Focus: "^sel);
     Stellarium.focus' focus_resp sel
     with _ ->
-    targ_status#set_text ("PGC: " ^ sel ^ ": not found");
+    targ_status#set_text ("Abell: " ^ sel ^ ": not found");
+    show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
+    Lwt.return_unit)
+
+(* Merged DSO catalogue from Stellarium *)
+
+let dso' () = 
+    let dso = targ_entry#text in
+    let ix = Hashtbl.find Dsomaph.maph dso in
+    print_endline ("Search "^string_of_int Dso.hlen^" "^string_of_int Dsomap0.hlen^" "^string_of_int Dsomap1.hlen^" DSO objects for "^dso);
+    (try (let (num,ra_flt,dec_flt,magb,mag,typ,morph,major,minor,orient,redshift,eredshift,parallax,eparallax,dist,edist,_,_,id) = Hashtbl.find Dso.dsoh ix in
+    print_endline (string_of_float ra_flt^" : "^string_of_float dec_flt^": "^ List.hd id);
+    ignore (num,magb,typ,morph,major,minor,orient,redshift,eredshift,parallax,eparallax,dist,edist);
+    targ_status#set_text ("DSO found: " ^ List.hd id);
+    let yr,mon,dy,hr,min,sec = split_date() in
+    let latitude = float_of_string entry_lat#text in
+    let longitude = float_of_string entry_long#text in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+    show_entries (List.hd id) jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan major;
+    print_endline ("Focus: "^List.hd id);
+    Stellarium.focus' focus_resp (List.hd id))
+    with _ ->
+    targ_status#set_text ("DSO: " ^ dso ^ ": not found");
     show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
     Lwt.return_unit)
 
@@ -1334,6 +1356,7 @@ and smdb' () = if approach > 0 then
     let lst = ref [] in
     Expr.dump stdout [] acceptance;
     rbuttons defcat;
+    let skiplst = try String.split_on_char ';' (Sys.getenv "OPENSTELLINA_SKIPLST") with _ -> ["DN" ; "CL" ; "YSO" ; "MoC"; "*"] in
     let srt = match defcat with
       | 3 -> Array.iter (fun (sel, ra, dec, mag) ->
         let mag = float_of_string mag in
@@ -1399,6 +1422,19 @@ and smdb' () = if approach > 0 then
           | Calc.Bool false -> ()
           | oth -> Expr.dump stderr acclst oth
         ) Abell0.abellh;
+       List.sort sort_ngc !lst
+      | 7 -> Hashtbl.iter (fun _ (num,ra_flt,dec_flt,magb,mag,typ,morph,major,minor,orient,redshift,eredshift,parallax,eparallax,dist,edist,_,_,sel) ->
+        let diam = major in
+        let cnst = "" in
+        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+        ignore (num,magb,typ,morph,major,minor,orient,redshift,eredshift,parallax,eparallax,dist,edist);
+        let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num mag) :: ("ang_diam", Calc.Num diam) :: [] in
+        match Expr.simplify acclst acceptance with
+          | Calc.Bool true ->
+            if mag <> nan && not (List.mem typ skiplst) then lst := (List.hd sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) :: !lst;
+          | Calc.Bool false -> ()
+          | oth -> Expr.dump stderr acclst oth
+        ) Dso.dsoh;
        List.sort sort_ngc !lst
        | _ -> print_endline "That catalogue does not support searching by alt/az"; [] in
     print_endline ("selected catalogue objects = "^string_of_int (List.length !lst));
@@ -1519,6 +1555,8 @@ and taskarray =
          ("pgc", pgc');
          ("", status');
          ("abell", abell');
+         ("", status');
+         ("dso", dso');
          ("", status');
          ("setfocus", setfocus');
          ("", status');

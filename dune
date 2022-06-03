@@ -11,6 +11,6 @@
  (public_name openstellina)
  (name gui)
  (modules_without_implementation calc)
- (modules trans hidemsg msgs base_locations utils stellarium messier_catalogue ngc2000 calc mfcalc lexer expr pgchash pgc0 pgc1 abell0 gui)
+ (modules trans hidemsg msgs base_locations utils stellarium messier_catalogue ngc2000 calc mfcalc lexer expr pgchash pgc0 pgc1 abell0 dso dsomaph dsomap0 dsomap1 gui)
  (libraries lablgtk2 lwt_glib yojson cohttp-lwt-unix zeit ppx_let quests ppx_yojson lwt xml-light camlimages.jpeg)
 )
