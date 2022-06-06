@@ -24,7 +24,7 @@ let start = Queue.create ()
 
 let timezone = List.rev (String.split_on_char '/' (try Unix.readlink "/etc/localtime" with _ -> "/var/db/timezone/zoneinfo/Europe/London"))
 let tzcity = try Sys.getenv "TIME_ZONE" with _ -> List.hd (List.tl timezone)  ^ "/" ^ List.hd timezone
-let defcat = try int_of_string (Sys.getenv "OPENSTELLINA_DEFAULT_CATALOGUE") with _ -> 0
+let defcat = try int_of_string (Sys.getenv "OPENSTELLINA_DEFAULT_CATALOGUE") with _ -> 7
 let accstr = try Sys.getenv "OPENSTELLINA_ACCEPTANCE" with _ -> "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)"
 let acceptance = Expr.simplify [] (Expr.expr accstr)
 
@@ -81,9 +81,12 @@ let button5 = GButton.button ~label:"Stop Observation" ~packing:boxu#add ()
 (* Button6 *)
 let button6 = GButton.button ~label:"Park" ~packing:boxu#add ()
 
-let approach = try int_of_string (Sys.getenv "APPROACH") with _ -> 0
+let _ = List.iter print_endline (List.tl (Array.to_list Sys.argv))
 
-let tim = Array.init (if approach > 0 then 8 else 6) (fun ix -> let lbl = ["Year";"Month";"Day";"Hour";"Minute";"Second";"Closest(km)";"Abs Mag"] in
+let approach = Array.length Sys.argv > 1 && Sys.argv.(1) = "-f"
+let pairing = Array.length Sys.argv > 1 && Sys.argv.(1) = "-p"
+
+let tim = Array.init (if approach then 8 else 6) (fun ix -> let lbl = ["Year";"Month";"Day";"Hour";"Minute";"Second";"Closest(km)";"Abs Mag"] in
 let fram_tim = GBin.frame ~label: (List.nth lbl ix) ~packing:(boxd#pack ~expand:true ~fill:true ~padding:2) () in
 GEdit.entry ~max_length: 20 ~packing: fram_tim#add ()) 
 
@@ -210,7 +213,7 @@ let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(xbox#pack ~expand
 let boxserv = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: framserv#add ()
 
 let catalogues = ["Simbad"; "Stellarium"; "Horizons"; "Messier"; "PGC"; "NGC2000"; "Abell"; "DSO"]
-let catdefaults = [|"M51"; "M51"; "301"; "M51"; "PGC47404"; "NGC 5194"; "ACO1656"; "" |]
+let catdefaults = [|"M51"; "M51"; "301"; "M51"; "PGC47404"; "NGC 5194"; "ACO1656"; "M51" |]
 let xserv = ref ""
 let rselfun _ itm = xserv := String.lowercase_ascii itm
 let rbuttons = radio' rselfun boxserv catalogues
@@ -891,8 +894,8 @@ let messier' () =
     Lwt.return_unit
 
 let focus_resp s =
-  targ_status#set_text (if bool_of_string s then "Stellarium focussed" else "Stellarium not focussed");
-  print_endline ("focus response: "^s)
+  print_endline ("focus response: "^s);
+  targ_status#set_text (if bool_of_string s then "Stellarium focussed" else "Stellarium not focussed")
 
 let ngc2000' () = 
     let sel = targ_entry#text in
@@ -969,7 +972,8 @@ let abell' () =
 
 let dso' () = 
     let dso = targ_entry#text in
-    let ix = Hashtbl.find Dsomaph.maph dso in
+    match Hashtbl.find_opt Dsomaph.maph dso with
+    | Some ix ->
     print_endline ("Search "^string_of_int Dso.hlen^" "^string_of_int Dsomap0.hlen^" "^string_of_int Dsomap1.hlen^" DSO objects for "^dso);
     (try (let (num,ra_flt,dec_flt,magb,mag,typ,morph,major,minor,orient,redshift,eredshift,parallax,eparallax,dist,edist,_,_,id) = Hashtbl.find Dso.dsoh ix in
     print_endline (string_of_float ra_flt^" : "^string_of_float dec_flt^": "^ List.hd id);
@@ -986,6 +990,10 @@ let dso' () =
     targ_status#set_text ("DSO: " ^ dso ^ ": not found");
     show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
     Lwt.return_unit)
+    | None ->
+    targ_status#set_text ("DSO: " ^ dso ^ ": not found");
+    show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
+    Lwt.return_unit
 
 let simbad' () =
     let hdrs = ref [] in
@@ -1136,28 +1144,19 @@ let  (smdb_decode:Yojson.Basic.t -> smdb list) = function
 
 let smdb_entries = ref [||]
 
-let dump_cat fd (sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) =
-  ignore (jd_calc, ra_now, dec_now, cnst, lst_calc, hour_calc);
-  output_string fd (sel^" "^string_of_float ra_flt^" "^string_of_float dec_flt^" "^string_of_float mag^" "^string_of_float alt_calc^" "^string_of_float az_calc^" "^string_of_float diam^"\n")
+let dump_cat fd (sel, (ra_flt,dec_flt,desc,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) =
+  ignore (jd_calc, ra_now, dec_now, lst_calc, hour_calc);
+  output_string fd (sel^" \""^desc^"\" "^string_of_float ra_flt^" "^string_of_float dec_flt^" "^string_of_float mag^" "^string_of_float alt_calc^" "^string_of_float az_calc^" "^string_of_float diam^"\n")
 
-let sort_ngc a b =
+let sort_mag a b =
   let (_, (_,_,_,_,maga,_,_,_,_,_,_,_)) = a in
   let (_, (_,_,_,_,magb,_,_,_,_,_,_,_)) = b in
   if maga < magb then -1 else 1
 
-let sort_pgc fd a b =
+let sort_diam a b =
   let (_, (_,_,_,diama,_,_,_,_,_,_,_,_)) = a in
   let (_, (_,_,_,diamb,_,_,_,_,_,_,_,_)) = b in
-(*
-  dump_cat fd a;
-  dump_cat fd b;
-*)
-  let diff = if diama < diamb then 1 else -1 in
-(*
-  output_string fd (string_of_float diamb^" "^string_of_float diama^" "^string_of_int diff^"\n");
-*)
-  ignore(fd);
-  diff
+  if diama < diamb then 1 else -1
 
 let fetch' () =
     let jhash = ref ("",ref false) in
@@ -1182,7 +1181,9 @@ let fetch' () =
 let quit' = ref false
 
 let setfocus' () =
-  Stellarium.focus' focus_resp entry_nam#text
+  let txt = String.trim (if String.contains entry_nam#text '+' then String.sub entry_nam#text 0 (String.index entry_nam#text '+') else entry_nam#text) in
+  print_endline txt;
+  Stellarium.focus' focus_resp txt
 
 let show_prog_entries prog_entries =
     tbuffer#set_text "";
@@ -1317,8 +1318,9 @@ and smdb'' sentries lbl' =
       search();
       end) sentries
 
-and smdb' () = if approach > 0 then
+and smdb' () = if approach then
     begin
+    print_endline "Flyby/closest approach calculation";
     let hdrs = ref [] in
     let server =  "ssd-api.jpl.nasa.gov" in
     let pth = "/cad.api" in
@@ -1356,7 +1358,7 @@ and smdb' () = if approach > 0 then
     let lst = ref [] in
     Expr.dump stdout [] acceptance;
     rbuttons defcat;
-    let skiplst = try String.split_on_char ';' (Sys.getenv "OPENSTELLINA_SKIPLST") with _ -> ["DN" ; "CL" ; "YSO" ; "MoC"; "*"] in
+    let skiplst = try String.split_on_char ';' (Sys.getenv "OPENSTELLINA_SKIPLST") with _ -> ["DN" ; "CL" ; "YSO" ; "MoC"; "*"; "ISM"; "CGb"] in
     let srt = match defcat with
       | 3 -> Array.iter (fun (sel, ra, dec, mag) ->
         let mag = float_of_string mag in
@@ -1391,10 +1393,7 @@ and smdb' () = if approach > 0 then
           | Calc.Bool false -> ()
           | oth -> Expr.dump stderr acclst oth
       ) Pgchash.pgch;
-        let dbgfile = open_out "srt.txt" in
-        let srt = List.sort (sort_pgc dbgfile) !lst in
-        close_out dbgfile;
-        srt
+        List.sort sort_diam !lst
       | 5 -> Hashtbl.iter (fun sel (ra_flt,dec_flt,cnst,diam,mag,desc)  ->
         let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
         ignore (cnst,diam,mag,desc);
@@ -1405,7 +1404,7 @@ and smdb' () = if approach > 0 then
           | Calc.Bool false -> ()
           | oth -> Expr.dump stderr acclst oth
         ) Ngc2000.ngchash;
-       List.sort sort_ngc !lst
+       List.sort sort_mag !lst
       | 6 -> Hashtbl.iter (fun sel (aco,rah,ram,des,ded,dem,bmtype,count,ra2000h,ra2000m,de2000s,de2000d,de2000m,xpos,ypos,glon,glat,redshift,rich,dclass,m10) ->
         let mag = nan in
         let diam = nan in
@@ -1422,20 +1421,41 @@ and smdb' () = if approach > 0 then
           | Calc.Bool false -> ()
           | oth -> Expr.dump stderr acclst oth
         ) Abell0.abellh;
-       List.sort sort_ngc !lst
+       List.sort sort_mag !lst
       | 7 -> Hashtbl.iter (fun _ (num,ra_flt,dec_flt,magb,mag,typ,morph,major,minor,orient,redshift,eredshift,parallax,eparallax,dist,edist,_,_,sel) ->
         let diam = major in
-        let cnst = "" in
         let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
-        ignore (num,magb,typ,morph,major,minor,orient,redshift,eredshift,parallax,eparallax,dist,edist);
+        ignore (num,magb,morph,major,minor,orient,redshift,eredshift,parallax,eparallax,dist,edist);
         let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num mag) :: ("ang_diam", Calc.Num diam) :: [] in
         match Expr.simplify acclst acceptance with
           | Calc.Bool true ->
-            if mag <> nan && not (List.mem typ skiplst) then lst := (List.hd sel, (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) :: !lst;
+            if mag <> nan && not (List.mem typ skiplst) then lst := (List.hd sel, (ra_flt,dec_flt,typ,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) :: !lst;
           | Calc.Bool false -> ()
           | oth -> Expr.dump stderr acclst oth
         ) Dso.dsoh;
-       List.sort sort_ngc !lst
+       if pairing then
+         begin
+         let lst' = ref [] in
+         List.iteri (fun ix' (sel', (ra_flt',dec_flt',_,_,mag',_,_,_,_,_,_,_) as a) ->
+            List.iteri (fun ix'' (sel'', (ra_flt'',dec_flt'',_,_,mag'',_,_,_,_,_,_,_) as b) ->
+               let diam = sqrt ((ra_flt' -. ra_flt'') *. (ra_flt' -. ra_flt'') +. (dec_flt' -. dec_flt'') *. (dec_flt' -. dec_flt'')) in
+               if ix' < ix'' && (diam < 0.9) && (mag' < 10.) && (mag'' < 10.) then
+                  begin
+                  let mag = if mag' < mag'' then mag' else mag'' in
+                  let cnst = "" in
+                  let ra_flt = (ra_flt' +. ra_flt'') /. 2. in
+                  let dec_flt = (dec_flt' +. dec_flt'') /. 2. in
+                  let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+                  lst' := (sel'^" + "^sel'', (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) :: !lst';
+                  dump_cat stdout a;
+                  dump_cat stdout b;
+                  print_newline ();
+                  end;
+            ) !lst
+         ) !lst;
+         lst := !lst';
+         end;
+       List.sort sort_mag !lst
        | _ -> print_endline "That catalogue does not support searching by alt/az"; [] in
     print_endline ("selected catalogue objects = "^string_of_int (List.length !lst));
     let dbgfile = open_out "cat1.txt" in
