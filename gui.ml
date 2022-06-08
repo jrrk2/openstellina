@@ -37,8 +37,8 @@ let connecting = ref false
 let _ = GMain.init ()
 (* Install Lwt<->Glib integration. *)
 let _ = Lwt_glib.install ()
-let width = 1024
-let height = if manual then 800 else 716
+let width = 1100
+let height = 850
 let title = "Openstellina GUI by Dr Jonathan Kimmitt"
 let window = GWindow.window ~width ~height ~title ()
 let vbox = GPack.vbox ~packing:window#add ()
