@@ -25,6 +25,7 @@ let start = Queue.create ()
 let timezone = List.rev (String.split_on_char '/' (try Unix.readlink "/etc/localtime" with _ -> "/var/db/timezone/zoneinfo/Europe/London"))
 let tzcity = try Sys.getenv "TIME_ZONE" with _ -> List.hd (List.tl timezone)  ^ "/" ^ List.hd timezone
 let defcat = try int_of_string (Sys.getenv "OPENSTELLINA_DEFAULT_CATALOGUE") with _ -> 7
+let manual = try bool_of_string (Sys.getenv "OPENSTELLINA_MANUAL") with _ -> false
 let accstr = try Sys.getenv "OPENSTELLINA_ACCEPTANCE" with _ -> "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)"
 let acceptance = Expr.simplify [] (Expr.expr accstr)
 let tmpdir = Filename.get_temp_dir_name ()
@@ -36,7 +37,10 @@ let connecting = ref false
 let _ = GMain.init ()
 (* Install Lwt<->Glib integration. *)
 let _ = Lwt_glib.install ()
-let window = GWindow.window ~width:1024 ~height:1024 ~title:"Openstellina GUI by Dr Jonathan Kimmitt" ()
+let width = 1024
+let height = if manual then 800 else 716
+let title = "Openstellina GUI by Dr Jonathan Kimmitt"
+let window = GWindow.window ~width ~height ~title ()
 let vbox = GPack.vbox ~packing:window#add ()
 (* Menu bar *)
 let menubar = GMenu.menu_bar ~packing:vbox#pack ()
@@ -50,15 +54,15 @@ let factory_fil = new GMenu.factory file_menu ~accel_group
 let factory_stell = new GMenu.factory stell_menu ~accel_group
 
 let box2 = GPack.vbox ~spacing:1 ~border_width: 2 ~packing: vbox#add ()
-let frame_eaa = GBin.frame ~label: "Electronically assisted astronomy functions" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
+let frame_eaa = GBin.frame ~label: "Electronically assisted astronomy functions" ~packing:(box2#pack ~expand:true ~fill:true ~padding:0) ()
 
-let boxu = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: frame_eaa#add ()
-let frame_target = GBin.frame ~label: "Target object settings" ~packing:(box2#pack ~expand:true ~fill:false ~padding:1) ()
-let boxt = GPack.vbox ~spacing:1 ~border_width: 10 ~packing: frame_target#add ()
-let boxd = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: boxt#add ()
-let boxh = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: boxt#add ()
-let boxv = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: boxt#add ()
-let boxs = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: boxt#add ()
+let boxu = GPack.hbox ~spacing:1 ~border_width:2 ~packing: frame_eaa#add ()
+let frame_target = GBin.frame ~label: "Target object settings" ~packing:(box2#pack ~expand:true ~fill:false ~padding:0) ()
+let boxt = GPack.vbox ~spacing:1 ~border_width:2 ~packing: frame_target#add ()
+let boxd = GPack.hbox ~spacing:1 ~border_width:2 ~packing: boxt#add ()
+let boxh = GPack.hbox ~spacing:1 ~border_width:2 ~packing: boxt#add ()
+let boxv = GPack.hbox ~spacing:1 ~border_width:2 ~packing: boxt#add ()
+let boxs = GPack.hbox ~spacing:1 ~border_width:2 ~packing: boxt#add ()
 
 (* Button0 *)
 let button0 = GButton.button ~label:"Take Control" ~packing:boxu#add ()
@@ -87,7 +91,7 @@ let approach = Array.length Sys.argv > 1 && Sys.argv.(1) = "-f"
 let pairing = Array.length Sys.argv > 1 && Sys.argv.(1) = "-p"
 
 let tim = Array.init (if approach then 8 else 6) (fun ix -> let lbl = ["Year";"Month";"Day";"Hour";"Minute";"Second";"Closest(km)";"Abs Mag"] in
-let fram_tim = GBin.frame ~label: (List.nth lbl ix) ~packing:(boxd#pack ~expand:true ~fill:true ~padding:2) () in
+let fram_tim = GBin.frame ~label: (List.nth lbl ix) ~packing:(boxd#pack ~expand:true ~fill:true ~padding:0) () in
 GEdit.entry ~max_length: 20 ~packing: fram_tim#add ()) 
 
 let datum () = fst (Unix.mktime {
@@ -119,66 +123,64 @@ let reset_date tim =
     update_date yr mon dy hr min sec
 
 (*
-let _= GPack.vbox ~spacing:1 ~border_width: 10 ~packing: boxh#add ()
+let _= GPack.vbox ~spacing:1 ~border_width:2 ~packing: boxh#add ()
 *)
-let frame_nam = GBin.frame ~label: "Target Name" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let frame_nam = GBin.frame ~label: "Target Name" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:0) ()
 let entry_nam = GEdit.entry ~max_length: 32 ~packing: frame_nam#add ()
 
-let frame_ra = GBin.frame ~label: "Right ascension" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let frame_ra = GBin.frame ~label: "Right ascension" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:0) ()
 let entry_ra = GEdit.entry ~max_length: 12 ~packing: frame_ra#add ()
 
-let frame_dec = GBin.frame ~label: "Declination" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let frame_dec = GBin.frame ~label: "Declination" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:0) ()
 let entry_dec = GEdit.entry ~max_length: 12 ~packing: frame_dec#add ()
 
-let frame_alt = GBin.frame ~label: "Altitude" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let frame_alt = GBin.frame ~label: "Altitude" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:0) ()
 let entry_alt = GEdit.entry ~max_length: 12 ~packing: frame_alt#add ()
 
-let frame_az = GBin.frame ~label: "Azimuth" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let frame_az = GBin.frame ~label: "Azimuth" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:0) ()
 let entry_az = GEdit.entry ~max_length: 12 ~packing: frame_az#add ()
 
-let frame_mag = GBin.frame ~label: "Visual magnitude" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let frame_mag = GBin.frame ~label: "Visual magnitude" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:0) ()
 let entry_mag = GEdit.entry ~max_length: 8 ~packing: frame_mag#add ()
 
-let frame_ang = GBin.frame ~label: "Angular diameter" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let frame_ang = GBin.frame ~label: "Angular diameter" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:0) ()
 let entry_ang = GEdit.entry ~max_length: 8 ~packing: frame_ang#add ()
 
-let frame_exp = GBin.frame ~label: "Exposure (sec)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let frame_exp = GBin.frame ~label: "Exposure (sec)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:0) ()
 let entry_exp = GEdit.entry ~max_length: 6 ~packing: frame_exp#add ()
 
-let frame_gain = GBin.frame ~label: "Gain (dB)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:1) ()
+let frame_gain = GBin.frame ~label: "Gain (dB)" ~packing:(boxh#pack ~expand:true ~fill:true ~padding:0) ()
 let entry_gain = GEdit.entry ~max_length: 6 ~packing: frame_gain#add ()
 
 (*
 (* Range1 *)
-let fram_rng = GBin.frame ~label: "Exposure" ~packing:(boxt#pack ~expand:true ~fill:true ~padding:2) ()
+let fram_rng = GBin.frame ~label: "Exposure" ~packing:(boxt#pack ~expand:true ~fill:true ~padding:0) ()
 let expadj = GData.adjustment ~lower:26.0 ~upper:69.0 ~step_incr:0.01 ~page_incr:0.1 ()
 let rng = GRange.scale `HORIZONTAL ~adjustment:expadj ~draw_value:false ~packing:fram_rng#add ()
 
 (* Gain *)
-let fram_gain = GBin.frame ~label: "Gain" ~packing:(boxt#pack ~expand:true ~fill:true ~padding:2) ()
+let fram_gain = GBin.frame ~label: "Gain" ~packing:(boxt#pack ~expand:true ~fill:true ~padding:0) ()
 let gainadj = GData.adjustment ~lower:0.0 ~upper:49.0 ~step_incr:0.1 ~page_incr:1.0 ()
 let gain = GRange.scale `HORIZONTAL ~adjustment:gainadj ~draw_value:false ~packing:fram_gain#add ()
 *)
 
 (* Spare1 *)
 let spare = Array.init 6 (fun ix -> let lbl = ["Altitude(catalog)";"Azimuth(catalog)";"Local Siderial Time";"Hour Angle";"LST(catalog)";"HA(catalog)"] in
-let fram_spare = GBin.frame ~label: (List.nth lbl ix) ~packing:(boxv#pack ~expand:true ~fill:true ~padding:2) () in
+let fram_spare = GBin.frame ~label: (List.nth lbl ix) ~packing:(boxv#pack ~expand:true ~fill:true ~padding:0) () in
 GEdit.entry ~max_length: 20 ~packing: fram_spare#add ()) 
 let spare' = Array.init 6 (fun ix -> let lbl = ["Right Ascension(Jnow)";"Declination(Jnow)";"Julian Date";"JD(catalog)";"raJ2000(decimal)";"decJ2000(decimal)"] in
-let fram_spare = GBin.frame ~label: (List.nth lbl ix) ~packing:(boxs#pack ~expand:true ~fill:true ~padding:2) () in
+let fram_spare = GBin.frame ~label: (List.nth lbl ix) ~packing:(boxs#pack ~expand:true ~fill:true ~padding:0) () in
 GEdit.entry ~max_length: 20 ~packing: fram_spare#add ()) 
 
 let framprog = GBin.frame ~label: "Observation/Mosaic program" ~packing:(box2#pack ~expand:true ~fill:true ~padding:0) ()
 
-let frame_manual = GBin.frame ~label: "Manual Alt/Az observing" ~packing:(box2#pack ~expand:true ~fill:true ~padding:0) ()
-
+(*
 let frame_observatory = GBin.frame ~label: "Observatory settings" ~packing:(box2#pack ~expand:true ~fill:true ~padding:0) ()
+*)
 
-let framx = GBin.frame ~label: "Dark frames" ~packing:(box2#pack ~expand:true ~fill:true ~padding:2) ()
+let framx = GBin.frame ~label: "Dark frames" ~packing:(box2#pack ~expand:true ~fill:true ~padding:0) ()
 
-let bbox = GPack.hbox ~border_width:5 ~packing:frame_manual#add ()
-
-let box3 = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: framx#add ()
+let box3 = GPack.hbox ~spacing:1 ~border_width:2 ~packing: framx#add ()
 
 let radio' selfun box lst = let grp = GButton.radio_button ~label:(List.hd lst) ~packing: box#add () in
                  let a = Array.of_list (grp :: List.map (fun itm ->
@@ -190,7 +192,7 @@ let xflip = ref ""
 let fitselfun ix _ = let fits = [| "FLIP"; "NO_FLIP"; "BOTH" |] in xflip := fits.(ix)
 let rbutton = radio' fitselfun box3 ["flip"; "no_flip"; "both"]
 
-let frame_darkcnt = GBin.frame ~label: "Dark Frame Count" ~packing:(box3#pack ~expand:true ~fill:true ~padding:2) ()
+let frame_darkcnt = GBin.frame ~label: "Dark Frame Count" ~packing:(box3#pack ~expand:true ~fill:true ~padding:0) ()
 let entry_darkcnt = GEdit.entry ~max_length: 20 ~packing: frame_darkcnt#add ()
 
 let _ = GMisc.separator `HORIZONTAL ~packing: vbox#pack ()
@@ -198,10 +200,10 @@ let _ = GMisc.separator `HORIZONTAL ~packing: vbox#pack ()
 (* Dark Button2 *)
 let dbutton2 = GButton.button ~label:"Generate darks" ~packing:box3#add ()
 
-let obox = GPack.hbox ~border_width:10 ~packing:frame_observatory#add ()
-let vbox' = GPack.vbox ~border_width:10 ~packing:obox#add ()
+let obox = GPack.hbox ~border_width:2 ~packing:box2#add ()
+let vbox' = GPack.vbox ~border_width:2 ~packing:obox#add ()
 let frame_obs = GBin.frame ~label:"location" ~packing:vbox'#pack ()
-let obox' = GPack.vbox ~border_width:5 ~packing:frame_obs#add ()
+let obox' = GPack.vbox ~border_width:2 ~packing:frame_obs#add ()
 let frame_tz = GBin.frame ~label:"TimeZone (from O/S)" ~packing:vbox'#pack ()
 let tz' = GEdit.entry ~max_length: 30 ~packing: frame_tz#add ()
 
@@ -209,9 +211,9 @@ let tz' = GEdit.entry ~max_length: 30 ~packing: frame_tz#add ()
 let check = GButton.check_button ~label: "Verbose" ~active: false ~packing: vbox'#add ()
 let stellarium_enabled = GButton.check_button ~label: "Stellarium" ~active: true ~packing: vbox'#add ()
 
-let xbox = GPack.vbox ~spacing:1 ~border_width: 1 ~packing: obox#add ()
-let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(xbox#pack ~expand:true ~fill:true ~padding:2) ()
-let boxserv = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: framserv#add ()
+let xbox = GPack.vbox ~spacing:1 ~border_width:2 ~packing: obox#add ()
+let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(xbox#pack ~expand:true ~fill:true ~padding:0) ()
+let boxserv = GPack.hbox ~spacing:1 ~border_width:2 ~packing: framserv#add ()
 
 let catalogues = ["Simbad"; "Stellarium"; "Horizons"; "Messier"; "PGC"; "NGC2000"; "Abell"; "DSO"]
 let catdefaults = [|"M51"; "M51"; "301"; "M51"; "PGC47404"; "NGC 5194"; "ACO1656"; "M51" |]
@@ -219,49 +221,30 @@ let xserv = ref ""
 let rselfun _ itm = xserv := String.lowercase_ascii itm
 let rbuttons = radio' rselfun boxserv catalogues
 
-let sbox = GPack.hbox ~border_width:5 ~packing:xbox#add ()
+let sbox = GPack.hbox ~border_width:2 ~packing:xbox#add ()
 let frame_entry = GBin.frame ~label:"Target Search" ~packing:sbox#pack ()
 let targ_entry = GEdit.entry ~max_length: 30 ~packing: frame_entry#add ()
-let frame_status = GBin.frame ~label:"Target Result" ~packing:(sbox#pack ~expand:true ~fill:true ~padding:2) ()
+let frame_status = GBin.frame ~label:"Target Result" ~packing:(sbox#pack ~expand:true ~fill:true ~padding:0) ()
 let targ_status = GEdit.entry ~max_length: 60 ~packing: frame_status#add ()
 
 let ephem_lst = List.init 25 (fun ix -> Printf.sprintf "%.2d:00" ix)
 
 let frame_planets = GBin.frame ~label:"NASA Horizons Solar System Ephemeris" ~packing:xbox#pack ()
-let pbox = GPack.hbox ~border_width:5 ~packing:frame_planets#add ()
+let pbox = GPack.hbox ~border_width:2 ~packing:frame_planets#add ()
 let planet_lst = ["Mercury"; "Venus"; "Moon"; "Mars"; "Jupiter"; "Saturn"; "Uranus"; "Neptune"; "Pluto"; "Other Minor Planets"]
 let planets = GEdit.combo_box_entry_text ~strings:planet_lst ~packing:pbox#pack ()
 let ephem = GEdit.combo_box_entry_text ~strings:ephem_lst ~packing:pbox#pack ()
 let smenu = GEdit.combo_box_entry_text (* ~strings:[] *) ~packing:pbox#pack ()
 
-let llbox = GPack.hbox ~spacing:1 ~border_width: 1 ~packing: obox'#add ()
-let frame_lat = GBin.frame ~label: "Latitude" ~packing:(llbox#pack ~expand:true (* ~fill:false ~padding:0 *) ) ()
+let llbox = GPack.hbox ~spacing:1 ~border_width:2 ~packing: obox'#add ()
+let frame_lat = GBin.frame ~label: "Latitude" ~packing:(llbox#pack ~expand:true ~fill:true ~padding:0 ) ()
 let entry_lat = GEdit.entry ~max_length: 20 ~packing: frame_lat#add ()
-let frame_long = GBin.frame ~label: "Longitude" ~packing:(llbox#pack ~expand:true (* ~fill:false ~padding:0 *) ) ()
+let frame_long = GBin.frame ~label: "Longitude" ~packing:(llbox#pack ~expand:true ~fill:true ~padding:0 ) ()
 let entry_long = GEdit.entry ~max_length: 20 ~packing: frame_long#add ()
 
-(* Button7 *)
-let button7 = GButton.button ~label:"Alt/Az Go" ~packing:bbox#add ()
-(* Button8 *)
-let button8 = GButton.button ~label:"Single Focus" ~packing:bbox#add ()
-(* Button9 *)
-let button9 = GButton.button ~label:"Auto Focus" ~packing:bbox#add ()
-(* ButtonA *)
-let buttonA = GButton.button ~label:"Single Shot" ~packing:bbox#add ()
-(* ButtonB *)
-let buttonB = GButton.button ~label:"Single Astrometry" ~packing:bbox#add ()
-(* ButtonC *)
-let buttonC = GButton.button ~label:"Track On" ~packing:bbox#add ()
-(* ButtonD *)
-let buttonD = GButton.button ~label:"Track Off" ~packing:bbox#add ()
-(* ButtonE *)
-let buttonE = GButton.button ~label:"Manual Init" ~packing:bbox#add ()
-(* ButtonF *)
-let buttonF = GButton.button ~label:"Read Params" ~packing:bbox#add ()
-
-let vboxprog = GPack.vbox ~spacing:1 ~border_width: 10 ~packing: framprog#add ()
-let boxprog = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: vboxprog#add ()
-let eboxprog = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: vboxprog#add ()
+let vboxprog = GPack.vbox ~spacing:1 ~border_width:2 ~packing: framprog#add ()
+let boxprog = GPack.hbox ~spacing:1 ~border_width:2 ~packing: vboxprog#add ()
+let eboxprog = GPack.hbox ~spacing:1 ~border_width:2 ~packing: vboxprog#add ()
 
 (* add text view with scroll bars for plannet observations *)
 let scroll = GBin.scrolled_window
@@ -295,7 +278,7 @@ let entry_hpassof = GEdit.entry ~max_length: 10 ~packing: frame_hpassof#add ()
 let frame_duration = GBin.frame ~label: "Target Duration" ~packing:(eboxprog#pack ~expand:true ~fill:true ~padding:0) ()
 let entry_duration = GEdit.entry ~max_length: 8 ~packing: frame_duration#add ()
 
-let _ = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: vbox#add ()
+let _ = GPack.hbox ~spacing:1 ~border_width:2 ~packing: vbox#add ()
 (*
 let status_win (box':GPack.box array) lbls =
   Array.init (Array.length lbls) (fun ix ->
@@ -326,14 +309,15 @@ status_win (Array.init (Array.length lbls) (fun ix -> boxs)) lbls
 
 (*
 let visible_extra = Array.of_list (List.sort compare (Hidemsg.remove' Msgs.msgs))
-let crntbox () = GPack.hbox ~spacing:1 ~border_width: 5 ~packing: vbox#add ()
+let crntbox () = GPack.hbox ~spacing:1 ~border_width:2 ~packing: vbox#add ()
 let crnt' = ref (crntbox())
 let boxa = Array.init (Array.length visible_extra) (fun ix -> let rslt = !crnt' in if ix mod 5 = 4 then crnt' := crntbox(); rslt)
 let status_extra = status_win boxa visible_extra
-*)
 
-let frame_jpeg = GBin.frame ~label: "JPEG file" ~packing:(vbox#pack ~expand:false ~fill:false ~padding:0) ()
+let frame_jpeg = GBin.frame ~label: "JPEG file" ~packing:(vbox#pack ~expand:false ~fill:true ~padding:0) ()
 let status_jpeg = GEdit.entry ~max_length: 80 ~packing: frame_jpeg#add ()
+let _ = status_jpeg#set_editable false
+*)
 
 let cnv' body =
   let trim = try int_of_string (String.sub body 0 (String.index body ':')) with _ -> String.length body in
@@ -499,7 +483,9 @@ let jpegadd s =
         Hashtbl.add jpegh s (ref false);
 (* *)
         end;
+(*
     status_jpeg#set_text s;
+*)
     end
 
 (*
@@ -1593,6 +1579,16 @@ and taskarray =
          ("", status');
        |]
 
+let _ = if manual then
+  begin
+  let frame_manual = GBin.frame ~label: "Manual Alt/Az observing" ~packing:(box2#pack ~expand:true ~fill:true ~padding:0) () in
+  let bbox = GPack.hbox ~border_width:2 ~packing:frame_manual#add () in
+  List.iter2 (fun label itm -> let button = GButton.button ~label ~packing:bbox#add () in
+  ignore (button#connect#clicked ~callback: (fun () -> sm_jump itm)))
+  ["Alt/Az Go";"Single Focus";"Auto Focus";"Single Shot";"Single Astrometry";"Track On";"Track Off";"Manual Init";"Read Params"]
+  ["motorgo"; "singlefocus"; "autofocus"; "singleshot"; "astrometry"; "trackon"; "trackoff"; "manualinit"; "readparams"]
+  end
+
 (*
 let update_status' kw stat =
   let len = String.length kw in
@@ -1672,15 +1668,6 @@ let gui () =
   ignore (button4#connect#clicked ~callback: (fun () -> sm_jump "focus"));
   ignore (button5#connect#clicked ~callback: (fun () -> sm_jump "stopobs"));
   ignore (button6#connect#clicked ~callback: (fun () -> sm_jump "park"));
-  ignore (button7#connect#clicked ~callback: (fun () -> sm_jump "motorgo"));
-  ignore (button8#connect#clicked ~callback: (fun () -> sm_jump "singlefocus"));
-  ignore (button9#connect#clicked ~callback: (fun () -> sm_jump "autofocus"));
-  ignore (buttonA#connect#clicked ~callback: (fun () -> sm_jump "singleshot"));
-  ignore (buttonB#connect#clicked ~callback: (fun () -> sm_jump "astrometry"));
-  ignore (buttonC#connect#clicked ~callback: (fun () -> sm_jump "trackon"));
-  ignore (buttonD#connect#clicked ~callback: (fun () -> sm_jump "trackoff"));
-  ignore (buttonE#connect#clicked ~callback: (fun () -> sm_jump "manualinit"));
-  ignore (buttonF#connect#clicked ~callback: (fun () -> sm_jump "readparams"));
   List.iteri (fun ix itm -> ignore (buttonProg.(ix)#connect#clicked ~callback: (fun () -> sm_jump itm))) prog_strip';
 (*
   ignore (rng#connect#change_value ~callback:exposlidefunc);
@@ -1731,7 +1718,6 @@ let gui () =
     end) cities in
   ignore (combo#entry#connect#changed ~callback: (fun () -> loc_jump combo#entry#text)) ;
   combo#set_active !deflt;
-  status_jpeg#set_editable false;
   ignore ((fst planets)#entry#connect#changed ~callback: (fun () -> horizons'' (fst planets)#entry#text)) ;
   ignore ((fst ephem)#entry#connect#changed ~callback: (fun () -> let lbl' = (fst ephem)#entry#text in List.iteri (fun ix loc -> if loc=lbl' then show_ephem ix) ephem_lst)) ;
   (fst planets)#set_active 9;

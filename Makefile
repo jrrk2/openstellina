@@ -22,11 +22,11 @@ appbundle: preinstall _build/install/default/bin/$(APPNAME) $(APPNAME).icns
 	$(CP) PkgInfo $(APPBUNDLECONTENTS)/
 	$(CP) $(APPNAME).icns $(APPBUNDLERESOURCES)/
 	$(CP) _build/install/default/bin/$(APPNAME) $(APPBUNDLEMACOS)/
-	chmod a+rx /opt/homebrew
 	./path_change $(APPBUNDLEMACOS)/$(APPNAME)
 	for i in $(APPBUNDLELIBS)/*.dylib; do ./path_change $$i;done
 	for i in $(APPBUNDLELIBS)/*.dylib; do ./path_change $$i;done
 	otool -L $(APPBUNDLEMACOS)/openstellina
+	codesign --force --deep --sign - $(APPBUNDLEMACOS)/$(APPNAME)
 	chmod 0 /opt/homebrew
 
 $(APPNAME).icns: $(APPNAME).png
@@ -46,4 +46,5 @@ $(APPNAME).icns: $(APPNAME).png
 	$(RM) -r $(APPNAME).iconset
 
 preinstall:
+	chmod a+rx /opt/homebrew
 	dune build
