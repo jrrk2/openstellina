@@ -28,7 +28,7 @@ let defcat = try int_of_string (Sys.getenv "OPENSTELLINA_DEFAULT_CATALOGUE") wit
 let manual = try bool_of_string (Sys.getenv "OPENSTELLINA_MANUAL") with _ -> false
 let accstr = try Sys.getenv "OPENSTELLINA_ACCEPTANCE" with _ -> "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)"
 let acceptance = Expr.simplify [] (Expr.expr accstr)
-let tmpdir = Filename.get_temp_dir_name ()
+let tmpdir = (Filename.get_temp_dir_name ())^"/"
 let session' = ref {sid=""; ping_int=0; ping_tim=0}
 let statush = Hashtbl.create 32767
 let connecting = ref false
