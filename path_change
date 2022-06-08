@@ -1,0 +1,2 @@
+cp -n `otool -L $1|cut -d\( -f1|grep homebrew` openstellina.app/Contents/MacOS/lib
+for i in `otool -L $1|cut -d\( -f1|grep homebrew`; do install_name_tool -change $i `echo $i | sed s=[-@a-zA-Z0-9./+]*/=@executable_path/lib/=` $1; done

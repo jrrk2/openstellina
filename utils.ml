@@ -178,14 +178,16 @@ let get' proto server params headers pth f hdrs =
     ~headers:(headers)
   >|= ( fun arg -> hdrs := Cohttp.Header.to_list (Quests.Response.headers arg); Quests.Response.content arg) >|= f
 
-let get' proto server params headers pth f hdrs = try get' proto server params headers pth f hdrs with _ -> Lwt.return_unit
+let get' proto server params headers pth f hdrs = try get' proto server params headers pth f hdrs with _ -> Lwt.fail (Lwt.Canceled)
 
 let post' proto server params headers pth form f =
-  Quests.post (proto^server^""^pth)
+  let pth' = proto^server^pth in
+  print_endline pth';
+  Quests.post pth'
     ~params:(params)
     ~headers:(headers)
     ~data:(form)
   >|= Quests.Response.content >|= f
 
-let post' proto server params headers pth form f = try post' proto server params headers pth form f with _ -> Lwt.return_unit
+let post' proto server params headers pth form f = try post' proto server params headers pth form f with _ -> Lwt.fail (Lwt.Canceled)
 

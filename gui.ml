@@ -27,7 +27,7 @@ let tzcity = try Sys.getenv "TIME_ZONE" with _ -> List.hd (List.tl timezone)  ^ 
 let defcat = try int_of_string (Sys.getenv "OPENSTELLINA_DEFAULT_CATALOGUE") with _ -> 7
 let accstr = try Sys.getenv "OPENSTELLINA_ACCEPTANCE" with _ -> "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)"
 let acceptance = Expr.simplify [] (Expr.expr accstr)
-
+let tmpdir = Filename.get_temp_dir_name ()
 let session' = ref {sid=""; ping_int=0; ping_tim=0}
 let statush = Hashtbl.create 32767
 let connecting = ref false
@@ -207,6 +207,7 @@ let tz' = GEdit.entry ~max_length: 30 ~packing: frame_tz#add ()
 
 (* check if verbose *)
 let check = GButton.check_button ~label: "Verbose" ~active: false ~packing: vbox'#add ()
+let stellarium_enabled = GButton.check_button ~label: "Stellarium" ~active: true ~packing: vbox'#add ()
 
 let xbox = GPack.vbox ~spacing:1 ~border_width: 1 ~packing: obox#add ()
 let framserv = GBin.frame ~label: "Catalogue Server" ~packing:(xbox#pack ~expand:true ~fill:true ~padding:2) ()
@@ -229,10 +230,9 @@ let ephem_lst = List.init 25 (fun ix -> Printf.sprintf "%.2d:00" ix)
 let frame_planets = GBin.frame ~label:"NASA Horizons Solar System Ephemeris" ~packing:xbox#pack ()
 let pbox = GPack.hbox ~border_width:5 ~packing:frame_planets#add ()
 let planet_lst = ["Mercury"; "Venus"; "Moon"; "Mars"; "Jupiter"; "Saturn"; "Uranus"; "Neptune"; "Pluto"; "Other Minor Planets"]
-let pmodel, ptext_column = GTree.store_of_list Gobject.Data.string planet_lst
-let planets = GEdit.combo_box_entry ~text_column:ptext_column ~model:pmodel ~packing:pbox#pack ()
-let emodel, etext_column = GTree.store_of_list Gobject.Data.string ephem_lst
-let ephem = GEdit.combo_box_entry ~text_column:etext_column ~model:emodel ~packing:pbox#pack ()
+let planets = GEdit.combo_box_entry_text ~strings:planet_lst ~packing:pbox#pack ()
+let ephem = GEdit.combo_box_entry_text ~strings:ephem_lst ~packing:pbox#pack ()
+let smenu = GEdit.combo_box_entry_text (* ~strings:[] *) ~packing:pbox#pack ()
 
 let llbox = GPack.hbox ~spacing:1 ~border_width: 1 ~packing: obox'#add ()
 let frame_lat = GBin.frame ~label: "Latitude" ~packing:(llbox#pack ~expand:true (* ~fill:false ~padding:0 *) ) ()
@@ -296,6 +296,7 @@ let frame_duration = GBin.frame ~label: "Target Duration" ~packing:(eboxprog#pac
 let entry_duration = GEdit.entry ~max_length: 8 ~packing: frame_duration#add ()
 
 let _ = GPack.hbox ~spacing:1 ~border_width: 10 ~packing: vbox#add ()
+(*
 let status_win (box':GPack.box array) lbls =
   Array.init (Array.length lbls) (fun ix ->
   let lmax = 30 in
@@ -310,6 +311,7 @@ let status_win (box':GPack.box array) lbls =
   let stat = GEdit.entry ~max_length: 24 ~packing: frame_stat#add () in
   stat#set_editable false;
   stat)
+*)
 (*
 let status_line =
 let lbls = [|
@@ -322,11 +324,13 @@ let lbls = [|
 status_win (Array.init (Array.length lbls) (fun ix -> boxs)) lbls
 *)
 
+(*
 let visible_extra = Array.of_list (List.sort compare (Hidemsg.remove' Msgs.msgs))
 let crntbox () = GPack.hbox ~spacing:1 ~border_width: 5 ~packing: vbox#add ()
 let crnt' = ref (crntbox())
 let boxa = Array.init (Array.length visible_extra) (fun ix -> let rslt = !crnt' in if ix mod 5 = 4 then crnt' := crntbox(); rslt)
 let status_extra = status_win boxa visible_extra
+*)
 
 let frame_jpeg = GBin.frame ~label: "JPEG file" ~packing:(vbox#pack ~expand:false ~fill:false ~padding:0) ()
 let status_jpeg = GEdit.entry ~max_length: 80 ~packing: frame_jpeg#add ()
@@ -343,7 +347,7 @@ let cnv' body =
   let body = if rghtidx+1 < String.length body then String.sub body 0 (rghtidx + 1) else body in
   body
 
-let logfile = open_out "json.log"
+let logfile = open_out (tmpdir^"json.log")
 
 let cnv body' =
   let body = cnv' body' in
@@ -765,8 +769,25 @@ let show_entries nam jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc 
     spare'.(4)#set_text (string_of_float ra);
     spare'.(5)#set_text (string_of_float dec)
 
-let stellarium' () =
-    let sattr = ref (Stellarium.attr targ_entry#text) in
+let focus_resp s =
+  print_endline ("focus response: "^s);
+  targ_status#set_text (if bool_of_string s then "Stellarium focussed" else "Stellarium not focussed")
+
+let stellarium_focus sel = if stellarium_enabled#active then
+    begin
+    print_endline "Focus ...";
+    Stellarium.focus focus_resp sel
+    end
+    else Lwt.return_unit
+
+let setfocus' () =
+  let txt = String.trim (if String.contains entry_nam#text '+' then String.sub entry_nam#text 0 (String.index entry_nam#text '+') else entry_nam#text) in
+  stellarium_focus txt
+
+let stellarium_logfile = open_out (tmpdir^"stellarium_logfile.txt")
+
+let stellarium' () = if stellarium_enabled#active then
+    let sattr = ref (Stellarium.attr stellarium_logfile targ_entry#text) in
     let debug (attr:Stellarium.attr) =
       let latitude = float_of_string entry_lat#text in
       let longitude = float_of_string entry_long#text in
@@ -776,6 +797,7 @@ let stellarium' () =
       targ_status#set_text ("Stellarium: "^attr.target) in
     let f = (fun s -> match s.[0] with '{' -> Stellarium.descend !sattr (Yojson.Basic.from_string s); debug !sattr | _ -> targ_status#set_text s ) in
     Stellarium.stellarium' !sattr (cnv' f)
+    else Lwt.return_unit
 
 let simbad_cnv = function
     | Xml.Element
@@ -893,10 +915,6 @@ let messier' () =
     show_entries found jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan nan;
     Lwt.return_unit
 
-let focus_resp s =
-  print_endline ("focus response: "^s);
-  targ_status#set_text (if bool_of_string s then "Stellarium focussed" else "Stellarium not focussed")
-
 let ngc2000' () = 
     let sel = targ_entry#text in
     (try (let (ra_flt,dec_flt,cnst,diam,mag,desc) = Hashtbl.find Ngc2000.ngchash sel in
@@ -909,7 +927,7 @@ let ngc2000' () =
     ignore (cnst,diam,mag,desc);
     show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan nan);
     print_endline ("Focus: "^sel);
-    Stellarium.focus' focus_resp sel
+    stellarium_focus sel
     with _ ->
     targ_status#set_text ("NGC2000: " ^ sel ^ ": not found");
     show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
@@ -937,7 +955,7 @@ let pgc' () =
     let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
     show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan a);
     print_endline ("Focus: "^sel);
-    Stellarium.focus' focus_resp sel
+    stellarium_focus sel
     with _ ->
     targ_status#set_text ("PGC: " ^ sel ^ ": not found");
     show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
@@ -962,7 +980,7 @@ let abell' () =
     let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
     show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan nan);
     print_endline ("Focus: "^sel);
-    Stellarium.focus' focus_resp sel
+    stellarium_focus sel
     with _ ->
     targ_status#set_text ("Abell: " ^ sel ^ ": not found");
     show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
@@ -985,7 +1003,7 @@ let dso' () =
     let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
     show_entries (List.hd id) jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan major;
     print_endline ("Focus: "^List.hd id);
-    Stellarium.focus' focus_resp (List.hd id))
+    stellarium_focus (List.hd id))
     with _ ->
     targ_status#set_text ("DSO: " ^ dso ^ ": not found");
     show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
@@ -1004,7 +1022,7 @@ let simbad' () =
                                   let m = XmlParser.make() in
                                       XmlParser.prove m false;
                                       try XmlParser.parse m (SString s)
-                                      with _ -> let fd = open_out (targ_entry#text^".xml") in
+                                      with _ -> let fd = open_out (tmpdir^targ_entry#text^".xml") in
                                       output_string fd s;
                                       close_out fd;
                                       failwith "Xml.parse_string")) in
@@ -1070,7 +1088,7 @@ let horizons' () =
        use) (String.split_on_char '\n' s);
        targ_status#set_text ("horizons: "^ !body);
        entry_nam#set_text !body;
-       ephem#set_active t.tm_hour;
+       (fst ephem)#set_active t.tm_hour;
        show_ephem t.tm_hour) in
     let lat_flt = float_of_string entry_lat#text in
     let long_flt = float_of_string entry_long#text in
@@ -1093,10 +1111,10 @@ let horizons' () =
     Utils.get' "https://" server req [] pth f hdrs
 
 type smdb = {
+    jd: float;
     h: float;
     des: string;
     orb: string;
-    jd: string;
     cd: string;
     dist: string;
     dist_min: string;
@@ -1106,8 +1124,8 @@ type smdb = {
     t_sigma_f: string;
     }
 
-let dump_smdb fd {des;orb;jd;cd;dist;dist_min;dist_max;v_rel;v_inf;t_sigma_f;h} =
-  output_string fd (des^" "^orb^" "^jd^" "^cd^" "^dist^" "^dist_min^" "^dist_max^" "^v_rel^" "^v_inf^" "^t_sigma_f^" "^string_of_float h^"\n")
+let dump_smdb fd {jd;des;orb;cd;dist;dist_min;dist_max;v_rel;v_inf;t_sigma_f;h} =
+  output_string fd (des^" "^orb^" "^string_of_float jd^" "^cd^" "^dist^" "^dist_min^" "^dist_max^" "^v_rel^" "^v_inf^" "^t_sigma_f^" "^string_of_float h^"\n")
 
 (*
 let smdb_compare {h=a;_} {h=b;_} =
@@ -1119,11 +1137,11 @@ let smdb_compare {h=a;_} {h=b;_} =
 
 let smdb_list = function
 | `List
-           [`String des; `String orb; `String jd;
+           [`String des; `String orb; `String jd';
             `String cd; `String dist;
             `String dist_min; `String dist_max;
             `String v_rel; `String v_inf;
-            `String t_sigma_f; `String h'] -> let h = float_of_string h' in {h;des;orb;jd;cd;dist;dist_min;dist_max;v_rel;v_inf;t_sigma_f}
+            `String t_sigma_f; `String h'] -> let jd = float_of_string jd' and h = float_of_string h' in {jd;h;des;orb;cd;dist;dist_min;dist_max;v_rel;v_inf;t_sigma_f}
 | _ -> failwith "json_list"
 
 let  (smdb_decode:Yojson.Basic.t -> smdb list) = function
@@ -1173,17 +1191,12 @@ let fetch' () =
     let f = fun s -> let pth = String.rindex jpeg '/' in
                      let pth' = String.sub jpeg (pth+1) (String.length jpeg - pth - 1) in
                      if check#active then print_endline ("Dumping: "^pth');
-                     let fd = open_out pth' in
+                     let fd = open_out (tmpdir^pth') in
                      output_string fd s;
                      close_out fd in
     Utils.get' proto server [] headers pth (cnv' f) hdrs
 
 let quit' = ref false
-
-let setfocus' () =
-  let txt = String.trim (if String.contains entry_nam#text '+' then String.sub entry_nam#text 0 (String.index entry_nam#text '+') else entry_nam#text) in
-  print_endline txt;
-  Stellarium.focus' focus_resp txt
 
 let show_prog_entries prog_entries =
     tbuffer#set_text "";
@@ -1243,12 +1256,12 @@ let rec (yojson_of_yojson_basic:Yojson.Basic.t -> Yojson.t) = function
 | `Null -> failwith "yojson_basic"
 
 let load_prog_entries () =
-    try let fd = open_in "prog_entries.json" in
+    try let fd = open_in (tmpdir^"prog_entries.json") in
     (match yojson_of_yojson_basic (Yojson.Basic.from_channel fd) with `List lst -> List.rev lst | _ -> []);
     with Sys_error _ -> []
 
 let dump_prog_entries prog_entries =
-    let fd = open_out "prog_entries.json" in
+    let fd = open_out (tmpdir^"prog_entries.json") in
     output_string fd (Yojson.pretty_to_string (`List (List.rev prog_entries)));
     close_out fd
 
@@ -1329,19 +1342,18 @@ and smdb' () = if approach then
     let t' = Unix.gmtime (datum +. 86400.0 *. 365.2425) in
     let f = (fun s ->
         let lst = smdb_decode (Yojson.Basic.from_string s) in
-        let dbgfile = open_out "smdba1.txt" in
+        let dbgfile = open_out (tmpdir^"smdba1.txt") in
         List.iter (dump_smdb dbgfile) lst;
         close_out dbgfile;
         let srt = List.sort compare lst in
-        let dbgfile = open_out "smdba2.txt" in
+        let dbgfile = open_out (tmpdir^"smdba2.txt") in
         List.iter (dump_smdb dbgfile) srt;
         close_out dbgfile;
         smdb_entries := Array.sub (Array.of_list srt) 0 20;
         let sentries = List.map (fun {des;_} -> des) (Array.to_list !smdb_entries) in
-        let smodel, etext_column = GTree.store_of_list Gobject.Data.string sentries in
-        let smenu = GEdit.combo_box_entry ~text_column:etext_column ~model:smodel ~packing:pbox#pack () in
-        ignore (smenu#entry#connect#changed ~callback: (fun () -> smdb'' sentries smenu#entry#text));
-        smenu#set_active 0;
+        List.iter (GEdit.text_combo_add smenu) sentries;
+        ignore ((fst smenu)#entry#connect#changed ~callback: (fun () -> smdb'' sentries (fst smenu)#entry#text));
+        (fst smenu)#set_active 0;
          ) in
     let req = [
      ("date-min", Printf.sprintf "%d-%.2d-%.2d" (t.tm_year+1900) (t.tm_mon+1) t.tm_mday);
@@ -1458,20 +1470,19 @@ and smdb' () = if approach then
        List.sort sort_mag !lst
        | _ -> print_endline "That catalogue does not support searching by alt/az"; [] in
     print_endline ("selected catalogue objects = "^string_of_int (List.length !lst));
-    let dbgfile = open_out "cat1.txt" in
+    let dbgfile = open_out (tmpdir^"cat1.txt") in
     List.iter (dump_cat dbgfile) !lst;
     close_out dbgfile;
-    let dbgfile = open_out "cat2.txt" in
+    let dbgfile = open_out (tmpdir^"cat2.txt") in
     List.iter (dump_cat dbgfile) srt;
     close_out dbgfile;
     let entries = try int_of_string (Sys.getenv "OPENSTELLINA_ENTRIES") with _ -> 20 in
     let entries = if entries > List.length srt then List.length srt else entries in
     let cat_entries = Array.sub (Array.of_list srt) 0 entries in
     let nentries = List.map (fun (des,_) -> des) (Array.to_list cat_entries) in
-    let nmodel, ntext_column = GTree.store_of_list Gobject.Data.string nentries in
-    let nmenu = GEdit.combo_box_entry ~text_column:ntext_column ~model:nmodel ~packing:pbox#pack () in
-    ignore (nmenu#entry#connect#changed ~callback: (fun () -> cat'' cat_entries nentries nmenu#entry#text));
-    nmenu#set_active entries;
+    List.iter (GEdit.text_combo_add smenu) nentries;
+    ignore ((fst smenu)#entry#connect#changed ~callback: (fun () -> cat'' cat_entries nentries (fst smenu)#entry#text));
+    (fst smenu)#set_active entries;
     Lwt.return_unit
     end
 
@@ -1582,11 +1593,13 @@ and taskarray =
          ("", status');
        |]
 
+(*
 let update_status' kw stat =
   let len = String.length kw in
   match Hashtbl.find_opt statush kw with
     | None -> ()
     | Some x -> if len > 4 && String.sub kw (len-4) 4 = "@url" then jpegadd x else stat#set_text x
+*)
 
 let update_status () =
 (*
@@ -1596,8 +1609,8 @@ let update_status () =
   update_status' "message" status_line.(3);
   update_status' "result@message" status_line.(4);
   update_status' "R[1]@previousOperations@observation@capture@images[0]@url" status_jpeg;
-*)
   Array.iteri (fun ix itm -> update_status' itm status_extra.(ix)) visible_extra;
+*)
   ()
 
 let usleep t = ignore (Unix.select [] [] [] t)
@@ -1632,7 +1645,7 @@ let color = ref (`RGB (0, 65535, 0))
 let app_quit' () = quit' := true
 let app_status' () =
  print_endline (string_of_int (List.length !misclst));
- let fd = open_out "logfile.txt" in
+ let fd = open_out (tmpdir^"logfile.txt") in
  Hashtbl.iter (fun k x -> output_string fd (k^": "^x^"\n")) statush;
  close_out fd
 
@@ -1719,9 +1732,9 @@ let gui () =
   ignore (combo#entry#connect#changed ~callback: (fun () -> loc_jump combo#entry#text)) ;
   combo#set_active !deflt;
   status_jpeg#set_editable false;
-  ignore (planets#entry#connect#changed ~callback: (fun () -> horizons'' planets#entry#text)) ;
-  ignore (ephem#entry#connect#changed ~callback: (fun () -> let lbl' = ephem#entry#text in List.iteri (fun ix loc -> if loc=lbl' then show_ephem ix) ephem_lst)) ;
-  planets#set_active 9;
+  ignore ((fst planets)#entry#connect#changed ~callback: (fun () -> horizons'' (fst planets)#entry#text)) ;
+  ignore ((fst ephem)#entry#connect#changed ~callback: (fun () -> let lbl' = (fst ephem)#entry#text in List.iteri (fun ix loc -> if loc=lbl' then show_ephem ix) ephem_lst)) ;
+  (fst planets)#set_active 9;
   rbutton 1;
   ignore (tbuffer#create_tag ~name:"heading" [`WEIGHT `BOLD; `SIZE (15*Pango.scale)]);
   ignore (tbuffer#create_tag ~name:"italic" [`STYLE `ITALIC]);
@@ -1818,14 +1831,16 @@ let create_server sock =
         rslt
     in serve
 
-let tasks =
+let tasks = try
   gui();
   let sock, _ = create_socket () in
   let serve = create_server sock in
   let _ = serve() in
-  iter_a (ref 0) taskarray
+  iter_a (ref 0) taskarray;
+  with Unix.Unix_error(Unix.ECONNREFUSED, _, _) -> Lwt.fail (Lwt.Canceled)
 
 let run () =
-  (*try*) Lwt_main.run tasks (*with _ -> print_endline "error"*)
+  (try Lwt_main.run tasks with Unix.Unix_error(Unix.ECONNREFUSED, _, _) -> stellarium_enabled#set_active false);
+  Lwt_main.run (iter_a (ref 1) taskarray)
 
 let _ = run()

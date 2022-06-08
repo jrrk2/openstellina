@@ -22,9 +22,8 @@ type attr =
     mutable vis_mag: float;
     mutable sidt: float;
     mutable hour_ang: float;
+    logfile: out_channel;
   }
-
-let logfile = open_out "stellarium_logfile.txt"
 
 let rec descend' attr = function
 | ("raJ2000", `Float f) -> attr.ra <- f; attr.ra_hms <- Utils.hms_of_float f
@@ -41,13 +40,13 @@ let rec descend' attr = function
 | ("rise", `String _) -> ()
 | ("set", `String _) -> ()
 | ("appSidTm", `String s) -> attr.sidt <- Utils.cnv_hms s /. 15.
-| (str, `Bool b) -> output_string logfile (str^": "^string_of_bool b^"\n"); flush logfile
-| (str, `Float f) -> output_string logfile (str^": "^string_of_float f^"\n"); flush logfile
-| (str, `Int n) -> output_string logfile (str^": "^string_of_int n^"\n"); flush logfile
-| (str, `List lst) -> output_string logfile (str^":\n"); List.iter (descend attr) lst; flush logfile
-| (str, `Null) -> output_string logfile (str^": Null\n"); flush logfile
-| (str, `String s) -> output_string logfile (str^": \""^s^"\"\n"); flush logfile
-| (str, `Assoc lst) -> output_string logfile (str^":\n"); List.iter (descend' attr) lst; flush logfile
+| (str, `Bool b) -> output_string attr.logfile (str^": "^string_of_bool b^"\n"); flush attr.logfile
+| (str, `Float f) -> output_string attr.logfile (str^": "^string_of_float f^"\n"); flush attr.logfile
+| (str, `Int n) -> output_string attr.logfile (str^": "^string_of_int n^"\n"); flush attr.logfile
+| (str, `List lst) -> output_string attr.logfile (str^":\n"); List.iter (descend attr) lst; flush attr.logfile
+| (str, `Null) -> output_string attr.logfile (str^": Null\n"); flush attr.logfile
+| (str, `String s) -> output_string attr.logfile (str^": \""^s^"\"\n"); flush attr.logfile
+| (str, `Assoc lst) -> output_string attr.logfile (str^":\n"); List.iter (descend' attr) lst; flush attr.logfile
 
 and descend attr = function
 | `Assoc lst -> List.iter (descend' attr) lst
@@ -76,7 +75,7 @@ let stellarium' attr cb =
     let hdrs = ref [] in
     Utils.get' "http://" server req headers pth cb hdrs
 
-let focus' resp target =
+let focus resp target =
     let headers = Utils.split 
    ["Content-Type: application/json";
     "Accept: application/json"] in
@@ -93,10 +92,10 @@ let stellarium attr =
   let _ = Lwt_main.run (stellarium' attr f) in
   attr
 
-let attr nam = {target=nam;
+let attr logfile nam = {target=nam;
 ra=0.; dec=0.; ra_hms=""; dec_dms="";
 ranow=0.; decnow=0.; ranow_hms=""; decnow_dms="";
 alt=0.; az=0.; alt_dms=""; az_dms="";
 rise=0.; transit=0.; set=0.; rise_hms=""; transit_hms=""; set_hms=""; vis_mag=0.0;
-sidt=0.0; hour_ang=0.0;
+sidt=0.0; hour_ang=0.0; logfile=logfile
  }
