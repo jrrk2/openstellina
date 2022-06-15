@@ -1738,73 +1738,208 @@ let gui () =
   targ_entry#set_text (try Sys.getenv "STELLINA_TARGET" with _ -> catdefaults.(defcat));
   search()
 
-let goto_received ra_int dec_int =
-        let scal = 180. /. float_of_int(1 lsl 31) in
-        let ra = float_of_int ra_int *. scal in
-        let dec' = float_of_int dec_int *. scal in
-        let dec = if dec' > 180.0 then dec' -. 360.0 else dec' in
-        let rahms = Utils.hms_of_float ra in
-        let decdms = Utils.dms_of_float dec in
-        print_endline ("ra="^rahms^", dec="^decdms);
-        entry_ra#set_text rahms;
-        entry_dec#set_text decdms;
-        entry_alt#set_text "";
-        entry_az#set_text ""
+let devxml dev = Xml.Element
+ ("defSwitchVector",
+  [("device", dev); ("name", "CONNECTION");
+   ("label", "Connection"); ("group", "Main Control"); ("state", "Idle");
+   ("perm", "rw"); ("rule", "OneOfMany"); ("timeout", "60");
+   ("timestamp", "2022-06-14T15:21:31")],
+  [Xml.Element
+    ("defSwitch", [("name", "CONNECT"); ("label", "Connect")],
+     [Xml.PCData "Off"]);
+   Xml.Element
+    ("defSwitch", [("name", "DISCONNECT"); ("label", "Disconnect")],
+     [Xml.PCData "On"])])
 
-let goto_rslt = ref None
+let blob mr = Xml.Element
+ ("defTextVector",
+  [("device", mr); ("name", "DRIVER_INFO");
+   ("label", "Driver Info"); ("group", "Connection"); ("state", "Idle");
+   ("perm", "ro"); ("timeout", "60"); ("timestamp", "2022-06-14T18:06:31")],
+  [Xml.Element
+    ("defText", [("name", "DRIVER_NAME"); ("label", "Name")],
+     [Xml.PCData mr]);
+   Xml.Element
+    ("defText", [("name", "DRIVER_EXEC"); ("label", "Exec")],
+     [Xml.PCData "indi_simulator"]);
+   Xml.Element
+    ("defText", [("name", "DRIVER_VERSION"); ("label", "Version")],
+     [Xml.PCData "1.0"]);
+   Xml.Element
+    ("defText", [("name", "DRIVER_INTERFACE"); ("label", "Interface")],
+     [Xml.PCData "4096"])])
 
-let rec radix_256 buf ix wid = 
-    buf.(ix) + (if wid > 1 then ((radix_256 buf (ix+1) (wid-1)) lsl 8) else 0)
+let ccdxml = Xml.Element
+ ("defNumberVector",
+  [("device", "CCD Simulator"); ("name", "SIMULATOR_SETTINGS");
+   ("label", "Settings"); ("group", "Simulator Config"); ("state", "Idle");
+   ("perm", "rw"); ("timeout", "60"); ("timestamp", "2022-06-14T15:21:31")],
+  [Xml.Element
+    ("defNumber",
+     [("name", "SIM_XRES"); ("label", "CCD X resolution");
+      ("format", "%4.0f"); ("min", "512"); ("max", "8192"); ("step", "512")],
+     [Xml.PCData "1280"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_YRES"); ("label", "CCD Y resolution");
+      ("format", "%4.0f"); ("min", "512"); ("max", "8192"); ("step", "512")],
+     [Xml.PCData "1024"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_XSIZE"); ("label", "CCD X Pixel Size");
+      ("format", "%4.2f"); ("min", "1"); ("max", "30"); ("step", "5")],
+     [Xml.PCData "5.2000000000000001776"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_YSIZE"); ("label", "CCD Y Pixel Size");
+      ("format", "%4.2f"); ("min", "1"); ("max", "30"); ("step", "5")],
+     [Xml.PCData "5.2000000000000001776"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_MAXVAL"); ("label", "CCD Maximum ADU");
+      ("format", "%4.0f"); ("min", "255"); ("max", "65000");
+      ("step", "1000")],
+     [Xml.PCData "65000"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_SATURATION"); ("label", "Saturation Mag");
+      ("format", "%4.1f"); ("min", "0"); ("max", "20"); ("step", "1")],
+     [Xml.PCData "1"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_LIMITINGMAG"); ("label", "Limiting Mag");
+      ("format", "%4.1f"); ("min", "0"); ("max", "20"); ("step", "1")],
+     [Xml.PCData "17"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_NOISE"); ("label", "CCD Noise"); ("format", "%4.0f");
+      ("min", "0"); ("max", "6000"); ("step", "500")],
+     [Xml.PCData "10"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_SKYGLOW"); ("label", "Sky Glow (magnitudes)");
+      ("format", "%4.1f"); ("min", "0"); ("max", "6000"); ("step", "500")],
+     [Xml.PCData "19.5"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_OAGOFFSET"); ("label", "Oag Offset (arcminutes)");
+      ("format", "%4.1f"); ("min", "0"); ("max", "6000"); ("step", "500")],
+     [Xml.PCData "0"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_POLAR"); ("label", "PAE (arcminutes)");
+      ("format", "%4.1f"); ("min", "-600"); ("max", "600"); ("step", "100")],
+     [Xml.PCData "0"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_POLARDRIFT"); ("label", "PAE Drift (minutes)");
+      ("format", "%4.1f"); ("min", "0"); ("max", "60"); ("step", "5")],
+     [Xml.PCData "0"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_PEPERIOD"); ("label", "PE Period (minutes)");
+      ("format", "%4.1f"); ("min", "0"); ("max", "60"); ("step", "5")],
+     [Xml.PCData "0"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_PEMAX"); ("label", "PE Max (arcsec)");
+      ("format", "%4.1f"); ("min", "0"); ("max", "6000"); ("step", "500")],
+     [Xml.PCData "0"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_TIME_FACTOR"); ("label", "Time Factor (x)");
+      ("format", "%.2f"); ("min", "0.010000000000000000208"); ("max", "100");
+      ("step", "10")],
+     [Xml.PCData "1"]);
+   Xml.Element
+    ("defNumber",
+     [("name", "SIM_ROTATION"); ("label", "CCD Rotation");
+      ("format", "%.2f"); ("min", "0"); ("max", "360"); ("step", "10")],
+     [Xml.PCData "0"])])
 
-let handle_message buf ix msg =
-    if check#active then print_endline ("msg["^string_of_int !ix^"] : "^string_of_int (int_of_char (msg)));
-    buf.(!ix) <- int_of_char (msg);
-    incr ix;
-    if (!ix >= 2) then
-        begin
-        let len = radix_256 buf 0 2 in
-        if false then print_endline ("msg len : "^string_of_int len);
-        if (!ix >= len) then
-            begin
-            let typ = radix_256 buf 2 2 in
-            if check#active then print_endline ("msg complete, typ = "^string_of_int typ);
-            ix := 0;
-            match typ with
-               | 0 -> (* goto *)
-                      let client_micros = radix_256 buf 4 8 in
-                      let ra_int = radix_256 buf 12 4 in
-                      let dec_int = radix_256 buf 16 4 in
-                      if check#active then print_endline ("ra="^string_of_int ra_int^", dec="^string_of_int dec_int^", us="^string_of_int client_micros);
-                      goto_rslt := Some (goto_received ra_int dec_int);
-               | oth -> print_endline ("Unknown typ: "^string_of_int oth);
-            ix := 0;
-            end;
-        end;
-    ""
+let mountxml =
+              Xml.Element
+               ("defNumberVector",
+                [("device", "Telescope Simulator"); ("name", "TELESCOPE_INFO");
+                 ("label", "Scope Properties"); ("group", "Options"); ("state", "Ok");
+                 ("perm", "rw"); ("timeout", "60"); ("timestamp", "2022-06-14T15:20:40")],
+                [Xml.Element
+                  ("defNumber",
+                   [("name", "TELESCOPE_APERTURE"); ("label", "Aperture (mm)");
+                    ("format", "%g"); ("min", "10"); ("max", "5000"); ("step", "0")],
+                   [Xml.PCData "120"]);
+                 Xml.Element
+                  ("defNumber",
+                   [("name", "TELESCOPE_FOCAL_LENGTH"); ("label", "Focal Length (mm)");
+                    ("format", "%g"); ("min", "10"); ("max", "10000"); ("step", "0")],
+                   [Xml.PCData "900"]);
+                 Xml.Element
+                  ("defNumber",
+                   [("name", "GUIDER_APERTURE"); ("label", "Guider Aperture (mm)");
+                    ("format", "%g"); ("min", "10"); ("max", "5000"); ("step", "0")],
+                   [Xml.PCData "120"]);
+                 Xml.Element
+                  ("defNumber",
+                   [("name", "GUIDER_FOCAL_LENGTH"); ("label", "Guider Focal Length (mm)");
+                    ("format", "%g"); ("min", "10"); ("max", "10000"); ("step", "0")],
+                   [Xml.PCData "900"])])
 
-let rec handle_connection ix buf ic oc () =
-    if check#active then print_endline "handle_conn";
-    Lwt_io.read_char_opt ic >>=
-    (function Some msg ->
-            let reply = handle_message buf ix msg in
-            Lwt_io.write_line oc reply >>= handle_connection ix buf ic oc
-              | None -> Logs_lwt.info (fun m -> m "Connection closed") >>= return)
+let connxml dev = Xml.Element
+ ("setSwitchVector",
+  [("device", dev); ("name", "CONNECTION"); ("state", "Ok");
+   ("timeout", "60"); ("timestamp", "2022-06-14T15:21:42")],
+  [Xml.Element ("oneSwitch", [("name", "CONNECT")], [Xml.PCData "On"]);
+   Xml.Element ("oneSwitch", [("name", "DISCONNECT")], [Xml.PCData "Off"])])
+
+let disconnxml dev = Xml.Element
+ ("setSwitchVector",
+  [("device", dev); ("name", "CONNECTION"); ("state", "Idle");
+   ("timeout", "60"); ("timestamp", "2022-06-14T15:21:42")],
+  [Xml.Element ("oneSwitch", [("name", "CONNECT")], [Xml.PCData "Off"]);
+   Xml.Element ("oneSwitch", [("name", "DISCONNECT")], [Xml.PCData "On"])])
+
+let msg dev txt =
+Xml.Element
+ ("message",
+  [("device", dev); ("timestamp", "2022-06-14T15:21:42");
+   ("message", txt)],
+  [])
+
+let xmlstr = function
+          | Xml.Element ("getProperties", [("version", _)], []) -> String.concat "" (List.map (fun itm -> Xml.to_string (devxml (itm^" Simulator"))) ["Telescope"; "CCD"; "Focuser"; "Rotator"])
+          | Xml.Element ("enableBLOB", [("device", dev)], [Xml.PCData "Never"]) -> print_endline "no blob"; Xml.to_string (blob dev)
+          | Xml.Element ("newSwitchVector", [("device", dev); ("name", "CONNECTION")], [Xml.Element ("oneSwitch", [("name", action)], [Xml.PCData on])]) ->
+             let txt = match action with "CONNECT" -> connxml dev | "DISCONNECT" -> disconnxml dev | oth -> msg dev ("[INFO] action "^oth^" ignored") in ignore on; Xml.to_string txt
+          | _ -> ignore (mountxml,ccdxml); Xml.to_string (msg "unknown" "unknown cmd")
+
+let handle_message buf =
+        if true then print_endline ("msg: "^ !buf);
+        let m = XmlParser.make() in
+        XmlParser.prove m false;
+        try let x = XmlParser.parse m (SString !buf) in buf := ""; print_endline "XML OK"; xmlstr x
+            with _ -> print_endline "XML not OK"; ""
+
+let rec handle_connection buf ic oc () =
+    if true then print_endline "handle_conn";
+    Lwt_io.read_line ic >>=
+    (fun msg -> buf := !buf ^ msg;
+            let reply = handle_message buf in
+            print_endline ("reply: "^reply);
+            Lwt_io.write_line oc reply >>= (fun () -> Lwt_io.flush oc) >>= handle_connection buf ic oc)
 
 let accept_connection conn =
     if check#active then print_endline "accept_conn";
-    let ix = ref 0 in
-    let buf = Array.init 256 (fun _ -> 0) in
     let fd, _ = conn in
     let ic = Lwt_io.of_fd ~mode:Lwt_io.Input fd in
     let oc = Lwt_io.of_fd ~mode:Lwt_io.Output fd in
-    Lwt.on_failure (handle_connection ix buf ic oc ()) (fun e -> Logs.err (fun m -> m "%s" (Printexc.to_string e) ));
+    Lwt.on_failure (handle_connection (ref "") ic oc ()) (fun e -> Logs.err (fun m -> m "%s" (Printexc.to_string e) ));
     Logs_lwt.info (fun m -> m "New connection") >>= return
  
 let create_socket () =
     let open Lwt_unix in
     let sock = socket PF_INET SOCK_STREAM 0 in
     let listen_address = Unix.inet_addr_loopback in
-    let port = 10000 in
+    let port = 7624 in
     let backlog = 10 in
     let rslt = bind sock @@ ADDR_INET(listen_address, port) in
     listen sock backlog;
