@@ -96,7 +96,7 @@ GEdit.entry ~max_length: 20 ~packing: fram_tim#add ())
 
 let datum () = fst (Unix.mktime {
        tm_year=int_of_string(tim.(0)#text) - 1900;
-       tm_mon=Utils.month (tim.(1)#text) - 1;
+       tm_mon=Astro_utils.month (tim.(1)#text) - 1;
        tm_mday=int_of_string(tim.(2)#text);
        tm_hour=int_of_string(tim.(3)#text);
        tm_min=int_of_string(tim.(4)#text);
@@ -388,18 +388,18 @@ let cnv' iter = fun s -> let lst = fun s ->
 
 let get1' () =
     let iter = fun s -> session' := session (cnv s) in
-    Utils.get' proto server params' headers pth (cnv' iter) hdrs
+    Astro_utils.get' proto server params' headers pth (cnv' iter) hdrs
 
 let post2' () =
     cookie := List.filter (function ("Content-Length", _) -> false | _ -> true) !hdrs;
     let params = (("sid", (!session').sid) :: params') in
     let time_ms_str = string_of_int (int_of_float (Unix.time() *. 1000.0)) in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server params headers pth (Quests.Request.Raw ("44:420[\"message\",\"setSystemTime\","^time_ms_str^"]")) (cnv' f)
+    Astro_utils.post' proto server params headers pth (Quests.Request.Raw ("44:420[\"message\",\"setSystemTime\","^time_ms_str^"]")) (cnv' f)
 
 let get3' () =
     let params = ("sid", (!session').sid) :: [ ("id", "OpenStellina"); ("name", name); ("EIO", eio); ("transport", "websocket") ] in
-    let headers = Utils.split ["Upgrade: websocket"; "Connection: Upgrade";
+    let headers = Astro_utils.split ["Upgrade: websocket"; "Connection: Upgrade";
       "User-Agent: Mozilla/5.0 (iPad; CPU OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
       "Origin: http://localhost:8080";
       "Accept-Encoding: gzip, deflate"; "Cache-Control: no-cache";
@@ -408,41 +408,41 @@ let get3' () =
       "Sec-WebSocket-Key: U3EsKacH/DvIMkbPXUr92Q=="; "Accept: */*";
       "Pragma: no-cache" (*; "Host: "^ipaddr^":8083" *) ] in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.get' proto server params headers pth (cnv' f) hdrs
+    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
 let get4' () =
     let params = (("sid", (!session').sid) :: params') in
-    let headers = Utils.split ["Accept-Encoding: gzip, deflate";
+    let headers = Astro_utils.split ["Accept-Encoding: gzip, deflate";
       "Referer: http://localhost:8080/";
       "Accept-Language: en-GB,en;q=0.9";
       "User-Agent: Mozilla/5.0 (iPad; CPU OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
       "Accept: application/json";
       "Connection: keep-alive"] in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.get' proto server params headers pth (cnv' f) hdrs
+    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
 let post5' () =
     let params = (("sid", (!session').sid) :: params') in
-    let headers = !cookie @ Utils.split [
+    let headers = !cookie @ Astro_utils.split [
       "Access-Control-Allow-Origin: http://localhost:8080";
       "Access-Control-Allow-Credentials: true";
       "Content-Encoding: gzip"] in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server params headers pth (Quests.Request.Raw ("31:421[\"message\",\"getStatus\",null]")) (cnv' f)
+    Astro_utils.post' proto server params headers pth (Quests.Request.Raw ("31:421[\"message\",\"getStatus\",null]")) (cnv' f)
 
 let get6' () =
     let params = (("sid", (!session').sid) :: params') in
-    let headers = Utils.split ["Accept-Encoding: gzip, deflate";
+    let headers = Astro_utils.split ["Accept-Encoding: gzip, deflate";
       "Referer: http://localhost:8080/";
       "Accept-Language: en-GB,en;q=0.9";
       "User-Agent: Mozilla/5.0 (iPad; CPU OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
       "Accept: */*"; "Connection: keep-alive"] in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.get' proto server params headers pth (cnv' f) hdrs
+    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
 let status' () =
     let params = [] in
-    let headers = Utils.split 
+    let headers = Astro_utils.split 
    ["Content-Type: application/json";
     "Origin: http://localhost:8080";
     "Accept-Encoding: gzip, deflate";
@@ -451,7 +451,7 @@ let status' () =
     "Accept-Language: en-GB,en;q=0.9"] in
     let pth = pth2'^"/v1//logs/consume" in
     let f = (fun s -> errchk' false (cnv s)) in
-    if !connecting then Utils.post' proto server params headers pth (Quests.Request.Raw ("{}")) (cnv' f) else Lwt.return_unit
+    if !connecting then Astro_utils.post' proto server params headers pth (Quests.Request.Raw ("{}")) (cnv' f) else Lwt.return_unit
 
 let obj_id = ref ""
 let obj_nam = ref ""
@@ -459,8 +459,8 @@ let mos_id  = ref ""
 let xflip = ref "BOTH"
 
 let xgain = ref 200
-let jpegh = Hashtbl.create 127
 (*
+let jpegh = Hashtbl.create 127
 let gain_int = ref 200
 let expos_us = ref 1000000
 let (prog_entries:Yojson.t list ref) = ref []
@@ -470,6 +470,7 @@ let ephem_data_lst = ref []
 let expos_us () = let e = try float_of_string entry_exp#text with _ -> 10.0 in entry_exp#set_text (string_of_float e); int_of_float (1000000.0 *. e)
 let gain_int () = let e = try float_of_string entry_gain#text with _ -> 20.0 in entry_gain#set_text (string_of_float e); int_of_float (10.0 *. e)
 
+(*
 let jpegadd s =
  let len = String.length s in
  let root = "/files/" in
@@ -487,6 +488,7 @@ let jpegadd s =
     status_jpeg#set_text s;
 *)
     end
+*)
 
 (*
 let fake = try int_of_string (Sys.getenv "FAKE_INIT") > 0 with _ -> false
@@ -501,7 +503,7 @@ let init' () =
     let lat_flt = float_of_string entry_lat#text in
     let long_flt = float_of_string entry_long#text in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("latitude", `Float lat_flt);
      ("longitude", `Float long_flt); ("time", `Int time_ms)] )) (cnv' f)
 
@@ -512,18 +514,18 @@ let manualinit' () =
     let lat_flt = float_of_string entry_lat#text in
     let long_flt = float_of_string entry_long#text in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("latitude", `Float lat_flt);
      ("longitude", `Float long_flt); ("time", `Int time_ms)] )) (cnv' f)
 
 let observe' () =
     let cmd = "general/startObservation" in
     let pth = pth2'^"/v1//"^cmd in
-    let ra_flt = Utils.cnv_ra entry_ra#text in
-    let dec_flt = Utils.cnv_dec entry_dec#text in
+    let ra_flt = Astro_utils.cnv_ra entry_ra#text in
+    let dec_flt = Astro_utils.cnv_dec entry_dec#text in
     if check#active then print_endline (string_of_float ra_flt^" "^string_of_float dec_flt);
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("ra", `Float ra_flt);
      ("de", `Float dec_flt);
      ("isJ2000", `Bool true);
@@ -544,7 +546,7 @@ let darks' () =
     let pth = pth2'^"/v1//expertMode/startStorageAcquisition" in
     let xpth = "expert-mode/gain"^string_of_int !xgain in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("path", `String xpth);
      ("overwrite", `Bool true);
      ("numExposures", `Int (int_of_string (entry_darkcnt#text)));
@@ -555,12 +557,12 @@ let darks' () =
 let focus' () =
     let pth = pth2'^"/v1//general/adjustObservationFocus" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
 let stopobs' () =
     let pth = pth2'^"/v1//general/stopObservation" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
 (*
 let status'' () =
@@ -571,75 +573,59 @@ let status'' () =
 let openarm' () =
     let pth = pth2'^"/v1//general/openForMaintenance" in
     let f = (fun s -> errchk' true (cnv s)) in
-    let headers = Utils.split [
+    let headers = Astro_utils.split [
       "Accept: */*"; "Connection: keep-alive"] in
-    Utils.post' proto server [] headers pth (Quests.Request.Raw "{}") (cnv' f)
+    Astro_utils.post' proto server [] headers pth (Quests.Request.Raw "{}") (cnv' f)
 
 let motorstatus () =
     let pth = pth2'^"/v1//debug/motors/readAllStatusRegisters" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
 let motorgo () =
     let pth = pth2'^"/v1//motors/goAbsolute" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
-    [("ALT", `Float (Utils.cnv_dec entry_alt#text));
-     ("AZ", `Float (Utils.cnv_dec entry_az#text))] )) (cnv' f)
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [("ALT", `Float (Astro_utils.cnv_dec entry_alt#text));
+     ("AZ", `Float (Astro_utils.cnv_dec entry_az#text))] )) (cnv' f)
 
 let track () =
     let pth = pth2'^"/v1//motors/track" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("ALT", `Bool true);
      ("AZ", `Bool true)] )) (cnv' f)
 
 let trackoff () =
     let pth = pth2'^"/v1//motors/track" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("ALT", `Bool false);
      ("AZ", `Bool false)] )) (cnv' f)
 
 let singlefocus () =
     let pth = pth2'^"/v1//focus/singleFocus" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("algorithm", `String "DCT");
      ] )) (cnv' f)
 
 let autofocus () =
     let pth = pth2'^"/v1//focus/startAutoFocus" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("algorithm", `String "DCT");
      ] )) (cnv' f)
 
 let park' () =
     let pth = pth2'^"/v1//general/park" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
-
-let singleshot () =
-    let pth = pth2'^"/v1//camera/singleAcquisition" in
-    let f = (fun s -> errchk' true (cnv s)) in
-    jpegadd "/files/temp/acquisition/IMG_0001.fits";
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
-    [("type", `String "FITS"); (* or JPEG *)
-     ("wbr", `Int 50);
-     ("wbb", `Int 60);
-     ("flip", `Bool false);
-     ("gain", `Int (gain_int()));
-     ("binningType", `String "SOFT");
-     ("binning", `Int 1);
-     ("exposureMicroSec", `Int (expos_us()));
-     ("requestStats", `Bool false);
-     ("enableMoonStats", `Bool false)] )) (cnv' f)
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
 let astrometry () =
     let pth = pth2'^"/v1//astrometry/singleAstrometry" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("type", `String "JPEG");
      ("binning", `Int 2);
      ("gain", `Int (gain_int()));
@@ -649,15 +635,15 @@ let astrometry () =
 let readparams () =
     let pth = pth2'^"/v1//camera/debug_readParams" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [] )) (cnv' f)
 
 let mosaic () =
     mos_id := "mo"^string_of_int (int_of_float (Unix.time()) mod 1000000);
     let pth = pth2'^"/v1//automator/writeMosaicProgram" in
     let f = (fun s -> errchk' true (cnv s)) in
-    let ra_flt = Utils.cnv_ra entry_ra#text in
-    let dec_flt = Utils.cnv_dec entry_dec#text in
+    let ra_flt = Astro_utils.cnv_ra entry_ra#text in
+    let dec_flt = Astro_utils.cnv_dec entry_dec#text in
     let params = `Assoc [
       ("doStacking", `Bool true);
       ("gain", `Int (gain_int()));
@@ -668,7 +654,7 @@ let mosaic () =
       ("backgroundEnabled", `Bool true);
       ("exposureMicroSec", `Int (expos_us()));
       ("objectId", `String (entry_nam#text))] in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("programName", `String !mos_id);
      ("ra", `Float ra_flt);
      ("de", `Float dec_flt);
@@ -690,7 +676,7 @@ let obsprog () =
     let long_flt = float_of_string entry_long#text in
     let f = (fun s -> errchk' true (cnv s)) in
     print_endline !mos_id;
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
     [("programName", `String !mos_id);
      ("skipAutoInit", `Bool false);
      ("latitude", `Float lat_flt);
@@ -703,7 +689,7 @@ let samples () =
     let long_flt = float_of_string entry_long#text in
     let f = (fun s -> errchk' true (cnv s)) in
     let expos_lst = `Int (expos_us() / 4) :: `Int (expos_us() / 2) :: `Int (expos_us()) :: `Int (expos_us() * 2) :: `Int (expos_us() * 4) :: [] in
-    Utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
   [("onlyEstimate", `Bool true);
    ("latitude", `Float lat_flt);
    ("longitude", `Float long_flt);
@@ -732,24 +718,24 @@ let samples () =
 let abortall () =
     let pth = pth2'^"/v1//app/abortAllOperations" in
     let f = (fun s -> errchk' true (cnv s)) in
-    Utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Raw "{}") (cnv' f)
 
 let show_entries nam jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang ang_diam =
     if nam <> "" then entry_nam#set_text nam;
-    entry_ra#set_text (Utils.hms_of_float ra);
-    entry_dec#set_text (Utils.dms_of_float dec);
-    entry_alt#set_text (Utils.dms_of_float (alt_calc));
-    entry_az#set_text (Utils.dms_of_float (az_calc));
+    entry_ra#set_text (Astro_utils.hms_of_float ra);
+    entry_dec#set_text (Astro_utils.dms_of_float dec);
+    entry_alt#set_text (Astro_utils.dms_of_float (alt_calc));
+    entry_az#set_text (Astro_utils.dms_of_float (az_calc));
     entry_mag#set_text (Printf.sprintf "%.2f" apmag);
     entry_ang#set_text (Printf.sprintf "%.2f" ang_diam);
-    spare.(0)#set_text (Utils.dms_of_float (elev));
-    spare.(1)#set_text (Utils.dms_of_float (azi));
+    spare.(0)#set_text (Astro_utils.dms_of_float (elev));
+    spare.(1)#set_text (Astro_utils.dms_of_float (azi));
     spare.(2)#set_text (Printf.sprintf "%.4f" lst_calc);
     spare.(3)#set_text (Printf.sprintf "%.4f" hour_calc);
     spare.(4)#set_text (Printf.sprintf "%.4f" (sidt));
     spare.(5)#set_text (Printf.sprintf "%.4f" (hour_ang));
-    spare'.(0)#set_text (Utils.hms_of_float ra_now);
-    spare'.(1)#set_text (Utils.dms_of_float dec_now);
+    spare'.(0)#set_text (Astro_utils.hms_of_float ra_now);
+    spare'.(1)#set_text (Astro_utils.dms_of_float dec_now);
     spare'.(2)#set_text (string_of_float (jd_calc));
     spare'.(3)#set_text (string_of_float (jd));
     spare'.(4)#set_text (string_of_float ra);
@@ -778,7 +764,7 @@ let stellarium' () = if stellarium_enabled#active then
       let latitude = float_of_string entry_lat#text in
       let longitude = float_of_string entry_long#text in
       let yr,mon,dy,hr,min,sec = split_date() in
-      let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec attr.ra attr.dec latitude longitude in
+      let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec attr.ra attr.dec latitude longitude in
       show_entries attr.target jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc 0.0 attr.ra attr.dec attr.az attr.alt attr.sidt attr.vis_mag attr.hour_ang nan;
       targ_status#set_text ("Stellarium: "^attr.target) in
     let f = (fun s -> match s.[0] with '{' -> Stellarium.descend !sattr (Yojson.Basic.from_string s); debug !sattr | _ -> targ_status#set_text s ) in
@@ -859,9 +845,9 @@ let simbad_cnv = function
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
     let yr,mon,dy,hr,min,sec = split_date() in
-    let ra_flt = Utils.cnv_ra ra in
-    let dec_flt = Utils.cnv_dec dec in
-    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+    let ra_flt = Astro_utils.cnv_ra ra in
+    let dec_flt = Astro_utils.cnv_dec dec in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
     show_entries ident jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan (float_of_string mag) nan nan;
     targ_status#set_text ("SIMBAD found: "^ident)
 | Xml.Element
@@ -893,11 +879,11 @@ let messier' () =
     else (let (found,b,c,d) = Messier_catalogue.messier_array.(!ix - 1) in targ_status#set_text ("Messier found: " ^ found); (found,b,c,d)) in
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
-    let ra_flt = Utils.cnv_ra ra in
-    let dec_flt = Utils.cnv_dec dec in
+    let ra_flt = Astro_utils.cnv_ra ra in
+    let dec_flt = Astro_utils.cnv_dec dec in
     let mag = float_of_string mag in
     let yr,mon,dy,hr,min,sec = split_date() in
-    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
     show_entries found jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan nan;
     Lwt.return_unit
 
@@ -909,7 +895,7 @@ let ngc2000' () =
     let yr,mon,dy,hr,min,sec = split_date() in
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
-    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
     ignore (cnst,diam,mag,desc);
     show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan nan);
     print_endline ("Focus: "^sel);
@@ -938,7 +924,7 @@ let pgc' () =
     let yr,mon,dy,hr,min,sec = split_date() in
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
-    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
     show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan a);
     print_endline ("Focus: "^sel);
     stellarium_focus sel
@@ -963,7 +949,7 @@ let abell' () =
     let yr,mon,dy,hr,min,sec = split_date() in
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
-    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
     show_entries sel jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan nan);
     print_endline ("Focus: "^sel);
     stellarium_focus sel
@@ -986,7 +972,7 @@ let dso' () =
     let yr,mon,dy,hr,min,sec = split_date() in
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
-    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
     show_entries (List.hd id) jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan mag nan major;
     print_endline ("Focus: "^List.hd id);
     stellarium_focus (List.hd id))
@@ -1012,7 +998,7 @@ let simbad' () =
                                       output_string fd s;
                                       close_out fd;
                                       failwith "Xml.parse_string")) in
-    Utils.get' "http://" server params [] pth f hdrs
+    Astro_utils.get' "http://" server params [] pth f hdrs
 
 let show_ephem ix =
     let lst = !ephem_data_lst in
@@ -1024,7 +1010,7 @@ let show_ephem ix =
     let (yr,mon,dy,hr,min,jd,sun,ra,dec,azi,elev,daz,delv,sidt,apmag,sbrt,cnst,hour_ang) = scan in
     let latitude = float_of_string entry_lat#text in
     let longitude = float_of_string entry_long#text in
-    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr (Utils.month mon) dy hr min 0 ra dec latitude longitude in
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr (Astro_utils.month mon) dy hr min 0 ra dec latitude longitude in
     ignore (sun,daz,delv,sbrt,cnst); (* prevent complier error because we don't use these at the moment *)
     show_entries "" jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang nan
     with _ -> 
@@ -1094,7 +1080,7 @@ let horizons' () =
      ("QUANTITIES", "'1,4,5,7,9,29,42");
     ] in
     if check#active then List.iter (fun (k,x) -> print_endline (k^": "^x)) req;
-    Utils.get' "https://" server req [] pth f hdrs
+    Astro_utils.get' "https://" server req [] pth f hdrs
 
 type smdb = {
     jd: float;
@@ -1162,25 +1148,49 @@ let sort_diam a b =
   let (_, (_,_,_,diamb,_,_,_,_,_,_,_,_)) = b in
   if diama < diamb then 1 else -1
 
+let fitsref = ref "/files/temp/acquisition/IMG_0001.fits"
+
+let usleep t = ignore (Unix.select [] [] [] t)
+
+(*
+
+old version that seems unreliable
+
 let fetch' () =
-    let jhash = ref ("",ref false) in
-    Hashtbl.iter (fun k x -> if !x then () else jhash := (k,x)) jpegh;
-    snd !jhash := true;
-    let jpeg = fst !jhash in
-    if check#active then print_endline ("Fetching: "^ jpeg);
-    let pth = pth2'^jpeg in
-    let headers = Utils.split ["Accept-Encoding: gzip, deflate";
-      "Referer: http://localhost:8080/";
-      "Accept-Language: en-GB,en;q=0.9";
-      "User-Agent: Mozilla/5.0 (iPad; CPU OS 15_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
-      "Accept: */*"; "Connection: keep-alive"] in
-    let f = fun s -> let pth = String.rindex jpeg '/' in
-                     let pth' = String.sub jpeg (pth+1) (String.length jpeg - pth - 1) in
-                     if check#active then print_endline ("Dumping: "^pth');
-                     let fd = open_out (tmpdir^pth') in
-                     output_string fd s;
-                     close_out fd in
-    Utils.get' proto server [] headers pth (cnv' f) hdrs
+    if check#active then print_endline ("Fetching: "^ (!fitsref));
+    let pth = pth2'^(!fitsref) in
+    let headers = Astro_utils.split ["Accept-Encoding: identity";
+      "User-Agent: openstellina/0.0";
+      "Accept: */*";
+      "Connection: Keep-Alive"] in
+    Alpaca_lwt.rs := "";
+    let f = fun s -> print_endline ("Downloaded "^string_of_int (String.length s)); Alpaca_lwt.rs := !(Alpaca_lwt.rs)^s; usleep 0.1 in
+    Astro_utils.get' proto server [] headers pth (cnv' f) hdrs
+
+let dump' () =
+    let pth = String.rindex (!fitsref) '/' in
+    let pth' = String.sub (!fitsref) (pth+1) (String.length (!fitsref) - pth - 1) in
+    print_endline ("Dumping: "^tmpdir^pth'^" bytes = "^string_of_int (String.length !(Alpaca_lwt.rs)));
+    let fd = open_out (tmpdir^pth') in
+    output_string fd !(Alpaca_lwt.rs);
+    close_out fd;
+    Lwt.return_unit
+*)
+
+let fetch' () =
+    if check#active then print_endline ("Fetching: "^ (!fitsref));
+    Lwt.return_unit
+
+let dump' () =
+    let pth = String.rindex (!fitsref) '/' in
+    let pth' = String.sub (!fitsref) (pth+1) (String.length (!fitsref) - pth - 1) in
+    let url = "curl -s "^proto^server^pth2'^(!fitsref)^" >"^tmpdir^pth' in
+    print_endline url;
+    let rc = Sys.command url in
+    print_endline ("Dumping: "^tmpdir^pth'^" return code = "^string_of_int rc);
+    Alpaca_lwt.read_image (tmpdir^pth');
+    Alpaca_lwt.image_ready true;
+    Lwt.return_unit
 
 let quit' = ref false
 
@@ -1206,20 +1216,20 @@ let show_prog_entries prog_entries =
              ("debayerInterpolation", _)])] ->
          tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %32s" id);
          tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "%2d %4d" (ix+1) duration);
-         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Utils.hms_of_float ra_flt));
-         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Utils.dms_of_float dec_flt));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Astro_utils.hms_of_float ra_flt));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Astro_utils.dms_of_float dec_flt));
          tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "%8.3f" (float_of_int expos_us /. 1e6));
          tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %4.1f" (float_of_int gain /. 10.));
          tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf "   %4d" rot);
          let latitude = float_of_string entry_lat#text in
          let longitude = float_of_string entry_long#text in
          let yr,mon,dy,hr,min,sec = split_date() in
-         let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+         let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
          let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num nan) :: ("ang_diam", Calc.Num nan) :: [] in
-         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Utils.hms_of_float ra_now));
-         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Utils.dms_of_float dec_now));
-         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Utils.dms_of_float alt_calc));
-         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %10s" (Utils.dms_of_float az_calc));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Astro_utils.hms_of_float ra_now));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Astro_utils.dms_of_float dec_now));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %9s" (Astro_utils.dms_of_float alt_calc));
+         tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %10s" (Astro_utils.dms_of_float az_calc));
          tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %8.4f" lst_calc);
          tbuffer#insert ~tag_names:["monospace"] (Printf.sprintf " %8.4f " hour_calc);
          let stat = match Expr.simplify acclst acceptance with
@@ -1273,7 +1283,7 @@ let startprog () =
          ("startTime", `Int time_ms);
          ("observations", `List lst)] in
     print_endline !mos_id;
-    Utils.post' proto server [] [] pth (Quests.Request.Json prog') (cnv' f)
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json prog') (cnv' f)
 
 let rec cat'' cat_entries nentries lbl' =
   List.iteri (fun ix loc -> if loc=lbl' then
@@ -1285,6 +1295,42 @@ let rec cat'' cat_entries nentries lbl' =
       targ_status#set_text "";
       sm_jump "setfocus";
       end) nentries
+
+and singleshot () =
+    let pth = pth2'^"/v1//camera/singleAcquisition" in
+    let binning = match Hashtbl.find Alpaca_lwt.alpacah ("camera", [("connected","binx")]) with `Int size -> size | _ -> 1 in
+    let f = (fun s -> match cnv s with
+      | `Assoc
+  [("success", `Bool true);
+   ("result",
+    `Assoc
+      [("type", `String "FITS"); ("acqTime", `Int acqtime);
+       ("mean", `Int mean);
+       ("motors",
+        `Assoc
+          [("AZ", `Int az); ("ALT", `Float alt); ("DER", `Int der);
+           ("MAP", `Int map)]);
+       ("path", `String path);
+       ("url", `String fits)])] -> ignore (acqtime,mean,az,alt,der,map,path); fitsref := fits; sm_jump "fetch"
+  | `Assoc
+  [("success", `Bool false);
+   ("error",
+    `Assoc
+      [("name", `String "CAMERA.CAMERA_FAILURE");
+       ("chain", `List [`String ""])])] -> print_endline "failed"
+
+       | _ -> print_endline "response from singleshot not understood") in
+    Astro_utils.post' proto server [] [] pth (Quests.Request.Json (`Assoc
+    [("type", `String "FITS"); (* or JPEG *)
+     ("wbr", `Int 50);
+     ("wbb", `Int 60);
+     ("flip", `Bool false);
+     ("gain", `Int (gain_int()));
+     ("binningType", `String "HARD");
+     ("binning", `Int binning);
+     ("exposureMicroSec", `Int (expos_us()));
+     ("requestStats", `Bool false);
+     ("enableMoonStats", `Bool false)] )) (cnv' f)
 
 and sm_jump lbl' = 
   let target = ref (-1) in
@@ -1309,7 +1355,7 @@ and smdb'' sentries lbl' =
                         (fun yr mon dy hr min ->
                             (yr,mon,dy,hr,min)) in
       let (yr,mon,dy,hr,min) = scan in
-      update_date yr (Utils.month mon) dy hr min 0;
+      update_date yr (Astro_utils.month mon) dy hr min 0;
       tim.(6)#set_text (Printf.sprintf "%8.0f" (1.496e8 *. float_of_string dist_min));
       tim.(7)#set_text (string_of_float h);
       targ_entry#set_text lbl';
@@ -1346,7 +1392,7 @@ and smdb' () = if approach then
      ("date-max", Printf.sprintf "%d-%.2d-%.2d" (t'.tm_year+1900) (t'.tm_mon+1) t'.tm_mday);
     ] in
     if true then List.iter (fun (k,x) -> print_endline (k^": "^x)) req;
-    Utils.get' "https://" server req [] pth f hdrs
+    Astro_utils.get' "https://" server req [] pth f hdrs
     end
  else
     begin
@@ -1362,9 +1408,9 @@ and smdb' () = if approach then
         let mag = float_of_string mag in
         let diam = nan in
         let cnst = "" in
-        let ra_flt = Utils.cnv_ra ra in
-        let dec_flt = Utils.cnv_dec dec in
-        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+        let ra_flt = Astro_utils.cnv_ra ra in
+        let dec_flt = Astro_utils.cnv_dec dec in
+        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
         let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num mag) :: ("ang_diam", Calc.Num diam) :: [] in
         match Expr.simplify acclst acceptance with
           | Calc.Bool true ->
@@ -1383,7 +1429,7 @@ and smdb' () = if approach then
         let yr,mon,dy,hr,min,sec = split_date() in
         let latitude = float_of_string entry_lat#text in
         let longitude = float_of_string entry_long#text in
-        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
         let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num mag) :: ("ang_diam", Calc.Num diam) :: [] in
         match Expr.simplify acclst acceptance with
           | Calc.Bool true ->
@@ -1393,7 +1439,7 @@ and smdb' () = if approach then
       ) Pgchash.pgch;
         List.sort sort_diam !lst
       | 5 -> Hashtbl.iter (fun sel (ra_flt,dec_flt,cnst,diam,mag,desc)  ->
-        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
         ignore (cnst,diam,mag,desc);
         let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num mag) :: ("ang_diam", Calc.Num diam) :: [] in
         match Expr.simplify acclst acceptance with
@@ -1410,7 +1456,7 @@ and smdb' () = if approach then
         let ra_flt = float_of_int ra2000h *. 15.0 +. ra2000m /. 4.0 in
         let dec_flt = float_of_int de2000d +. float_of_int de2000m /. 60.0 in
         let dec_flt = if de2000s.[0] = '-' then -. dec_flt else dec_flt in
-        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
         ignore (aco,rah,ram,des,ded,dem,bmtype,count,xpos,ypos,glon,glat,redshift,rich,dclass,m10);
         let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num mag) :: ("ang_diam", Calc.Num diam) :: [] in
         match Expr.simplify acclst acceptance with
@@ -1422,7 +1468,7 @@ and smdb' () = if approach then
        List.sort sort_mag !lst
       | 7 -> Hashtbl.iter (fun _ (num,ra_flt,dec_flt,magb,mag,typ,morph,major,minor,orient,redshift,eredshift,parallax,eparallax,dist,edist,_,_,sel) ->
         let diam = major in
-        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
         ignore (num,magb,morph,major,minor,orient,redshift,eredshift,parallax,eparallax,dist,edist);
         let acclst = ("alt_calc", Calc.Num alt_calc) :: ("az_calc", Calc.Num az_calc) :: ("mag", Calc.Num mag) :: ("ang_diam", Calc.Num diam) :: [] in
         match Expr.simplify acclst acceptance with
@@ -1443,7 +1489,7 @@ and smdb' () = if approach then
                   let cnst = "" in
                   let ra_flt = (ra_flt' +. ra_flt'') /. 2. in
                   let dec_flt = (dec_flt' +. dec_flt'') /. 2. in
-                  let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+                  let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
                   lst' := (sel'^" + "^sel'', (ra_flt,dec_flt,cnst,diam,mag,jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc)) :: !lst';
                   dump_cat stdout a;
                   dump_cat stdout b;
@@ -1473,8 +1519,8 @@ and smdb' () = if approach then
     end
 
 and add_prog_entry () =
-    let ra_flt = Utils.cnv_ra entry_ra#text in
-    let dec_flt = Utils.cnv_dec entry_dec#text in
+    let ra_flt = Astro_utils.cnv_ra entry_ra#text in
+    let dec_flt = Astro_utils.cnv_dec entry_dec#text in
     let duration = int_of_string entry_duration#text in
     let obs = `Assoc
          [("duration", `Int duration);
@@ -1531,6 +1577,9 @@ and taskarray =
          ("", status');
          ("singleshot", singleshot);
          ("", status');
+         ("fetch", fetch');
+         ("dump", dump');
+         ("", status');
          ("astrometry", astrometry);
          ("", status');
          ("readparams", readparams);
@@ -1554,8 +1603,6 @@ and taskarray =
          ("abortall", abortall);
          ("", status');
          ("darks", darks');
-         ("", status');
-         ("fetch", fetch');
          ("", status');
          ("openarm", openarm');
          ("", status');
@@ -1609,9 +1656,8 @@ let update_status () =
 *)
   ()
 
-let usleep t = ignore (Unix.select [] [] [] t)
-
 let rec iter_a ix a =
+  if false then print_endline ("iter_a: "^string_of_int !ix);
   match a.(!ix) with
   | ("", x) ->
     if !quit' then
@@ -1622,7 +1668,6 @@ let rec iter_a ix a =
     else if not (Queue.is_empty start) then iter_a (ref (Queue.take start)) a
     else
         begin
-        Hashtbl.iter (fun _ x -> if !x then () else sm_jump "fetch") jpegh;
         update_status ();
         if !connecting then reset_date (Unix.gettimeofday());
         let waiting = true in
@@ -1738,9 +1783,208 @@ let gui () =
   targ_entry#set_text (try Sys.getenv "STELLINA_TARGET" with _ -> catdefaults.(defcat));
   search()
 
+let logf = open_out "alpaca.log"
+
+let goto_received ra_flt dec_flt =
+        let rahms = Astro_utils.hms_of_float ra_flt in
+        let decdms = Astro_utils.dms_of_float dec_flt in
+        let latitude = float_of_string entry_lat#text in
+        let longitude = float_of_string entry_long#text in
+        let yr,mon,dy,hr,min,sec = split_date() in
+        let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Astro_utils.altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
+        show_entries "Alpaca object" jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan nan nan nan;
+        if !connecting then sm_jump "motorgo";
+        output_string logf ("ra="^rahms^", dec="^decdms^", Az: "^string_of_float az_calc^", Alt: "^string_of_float alt_calc)
+
+let single_exposure exposure is_light =
+        output_string logf ("exposure="^string_of_float exposure);
+        Alpaca_lwt.image_ready false;
+        if is_light then 
+            begin
+            entry_exp#set_text (string_of_float exposure);
+            sm_jump "singleshot"
+            end
+        else
+            begin
+            entry_darkcnt#set_text "1";
+            sm_jump "darks"
+            end
+
+(** An example ASCOM alpaca API, somewhat as described in https://www.ascom-standards.org/Documentation/Index.htm#dev *)
+
+open Cohttp_lwt_unix
+open Lwt.Infix
+
+(* Apply the [Webmachine.Make] functor to the Lwt_unix-based IO module
+ * exported by cohttp. For added convenience, include the [Rd] module
+ * as well so you don't have to go reaching into multiple modules to
+ * access request-related information. *)
+module Wm = struct
+  module Rd = Webmachine.Rd
+  module UnixClock = struct
+    let now = fun () -> int_of_float (Unix.gettimeofday ())
+  end
+  include Webmachine.Make(Cohttp_lwt_unix__Io)(UnixClock)
+end
+
+class alpaca dev = object(self)
+  inherit [Cohttp_lwt.Body.t] Wm.resource
+
+  method private get_body rd id =
+(*
+    let lst' = Uri.query rd.Wm.Rd.uri in
+    let flatten = List.map (fun (itm,value) -> match itm with ("ClientTransactionID"|"ClientID") -> "(\"\",\"\")" | _ -> "(\""^itm^"\",[\""^String.concat "\";\"" value^"\"]") lst' in
+    let flatten' = ("["^String.concat ";" flatten^"],") in
+    ignore flatten';
+*)
+    let lst' = rd.Wm.Rd.path_info in
+    let info = List.map (fun (itm,value) -> "(\""^itm^"\",\""^value^"\")") lst' in
+    let info' = ("["^String.concat ";" info^"]") in
+    let value = match Hashtbl.find_opt Alpaca_lwt.alpacah (dev, lst') with
+        | Some contents ->
+            if false then output_string logf ("(* (\""^dev^"\", "^info'^") ("^Yojson.Basic.to_string contents^") *)\n");
+            contents
+        | None ->
+            print_endline ("let _ = Hashtbl.replace alpacah (\""^dev^"\", "^info'^") (`Int 2)");
+            `Int 2 in
+    let json = Yojson.Basic.to_string (`Assoc
+      [("Value", value); ("ClientTransactionID", `Int (int_of_string id));
+       ("ServerTransactionID", `Int !(Alpaca_lwt.serv_id)); ("ErrorNumber", `Int 0);
+       ("ErrorMessage", `String "")]) in
+    if true then output_string logf (json^"\n");
+    json
+
+  method private of_urlencoded rd =
+    Cohttp_lwt.Body.to_string rd.Wm.Rd.req_body >>= fun body ->
+      let lst = String.split_on_char '&' body in
+      let lst' = List.map (fun itm -> match String.split_on_char '=' itm with [a;b] -> (a,b) | _ -> ("","")) lst in
+      (match lst' with
+             | [("RightAscension", ra); ("Declination", dec); ("ClientID", _); ("ClientTransactionID", _)] ->
+                 let ra' = float_of_string ra in
+                 let dec' = float_of_string dec in
+                 Hashtbl.replace Alpaca_lwt.alpacah ("telescope", [("connected","rightascension")]) (`Float ra');
+                 Hashtbl.replace Alpaca_lwt.alpacah ("telescope", [("connected","declination")]) (`Float dec');
+                 List.iter (fun (itm,value) -> print_endline (dev^": "^itm^"="^value)) lst';
+                 goto_received ra' dec'
+             | [("Duration", exposure); ("Light", is_light); ("ClientID", _); ("ClientTransactionID", _)] ->
+             let exposure_flt = float_of_string exposure in
+             let light = bool_of_string is_light in
+             single_exposure exposure_flt light
+             | [("BinX", bin_x); ("ClientID", _); ("ClientTransactionID", _)] -> Hashtbl.replace Alpaca_lwt.alpacah ("camera", [("connected","binx")]) (`Int (int_of_string bin_x))
+             | [("BinY", bin_y); ("ClientID", _); ("ClientTransactionID", _)] -> Hashtbl.replace Alpaca_lwt.alpacah ("camera", [("connected","binx")]) (`Int (int_of_string bin_y))
+             | [("StartX", start_x); ("ClientID", _); ("ClientTransactionID", _)] -> Hashtbl.replace Alpaca_lwt.alpacah ("camera", [("connected","startx")]) (`Int (int_of_string start_x))
+             | [("StartY", start_y); ("ClientID", _); ("ClientTransactionID", _)] -> Hashtbl.replace Alpaca_lwt.alpacah ("camera", [("connected","starty")]) (`Int (int_of_string start_y))
+             | [("NumX", num_x); ("ClientID", _); ("ClientTransactionID", _)] -> Hashtbl.replace Alpaca_lwt.alpacah ("camera", [("connected","numx")]) (`Int (int_of_string num_x))
+             | [("NumY", num_y); ("ClientID", _); ("ClientTransactionID", _)] -> Hashtbl.replace Alpaca_lwt.alpacah ("camera", [("connected","numy")]) (`Int (int_of_string num_y))
+             | _ -> print_endline body);
+      incr Alpaca_lwt.serv_id;
+      let body = self#get_body rd (List.assoc "ClientTransactionID" lst') in
+      let resp_body = `String body in
+      Wm.continue true { rd with Wm.Rd.resp_body }
+
+  method private what rd =
+    try Wm.Rd.lookup_path_info_exn "what" rd with Not_found -> "world"
+
+  method private to_json rd =
+    let lst' = Uri.query rd.Wm.Rd.uri in
+    let json = self#get_body rd (String.concat "" (List.assoc "ClientTransactionID" lst')) in
+    if true then output_string logf ("to_json: "^string_of_int (String.length json)^"\n");
+    Wm.continue (`String json) rd
+
+  method private to_imagebytes rd =
+    let str = Alpaca_lwt.image_string() in
+      print_endline ("to_imagebytes: "^string_of_int (String.length str));
+    Wm.continue (`String str) rd
+
+  method! allowed_methods rd =
+    Wm.continue [`GET; `PUT; `POST] rd
+
+  method content_types_provided rd =
+    Wm.continue [
+      "application/json", self#to_json;
+      "application/imagebytes", self#to_imagebytes;
+    ] rd
+
+  method content_types_accepted rd =
+    Wm.continue [
+      "application/x-www-form-urlencoded", self#of_urlencoded;
+    ] rd
+
+(*
+
+  method! finish_request rd =
+    let lst' = Uri.query rd.Wm.Rd.uri in
+    let len = List.length lst' in
+    if true then print_endline ("finish_request: "^string_of_int len);
+    Wm.continue () rd
+
+  method! options rd =
+    print_endline "options";
+    Wm.continue [] rd
+
+  method! variances rd =
+    print_endline "variances";
+    let lst' = rd.Wm.Rd.path_info in
+    List.iter (fun (itm,value) -> print_endline ("process_get: "^dev^": "^itm^"="^value)) lst';
+    Wm.continue [] rd
+
+  method! valid_content_headers rd =
+    print_endline "valid_content_headers";
+    let lst' = rd.Wm.Rd.path_info in
+    List.iter (fun (itm,value) -> print_endline ("process_get: "^dev^": "^itm^"="^value)) lst';
+    Wm.continue true rd
+
+  method! malformed_request rd =
+    print_endline "malformed_request";
+    let lst' = Uri.query rd.Wm.Rd.uri in
+    List.iter (fun (itm,value) -> print_endline ("process_get: "^dev^": "^itm^"="^String.concat ";" value)) lst';
+    Wm.continue true rd
+*)
+
+end
+
+let alpaca_main () =
+  (* listen on port 11111 *)
+  let port = 11111 in
+  (* the route table *)
+  let routes = [
+    ("/api/v1/camera/0/:connected", fun () -> new alpaca "camera") ;
+    ("/api/v1/telescope/0/:connected", fun () -> new alpaca "telescope") ;
+    ("/api/v1/rotator/0/:connected", fun () -> new alpaca "rotator") ;
+    ("/api/v1/focuser/0/:interfaceversion", fun () -> new alpaca "focuser") ;
+  ] in
+  let callback (_ch, _conn) request body =
+    let open Cohttp in
+    (* Perform route dispatch. If [None] is returned, then the URI path did not
+     * match any of the route patterns. In this case the server should return a
+     * 404 [`Not_found]. *)
+    Wm.dispatch' routes ~body ~request
+    >|= begin function
+      | None        -> (`Not_found, Header.init (), `String "Not found", [])
+      | Some result -> result
+    end
+    >>= fun (status, headers, body, path) ->
+      (* Finally, send the response to the client *)
+      if true then output_string logf ("respond: "^String.concat ";" path^"\n");
+      flush logf;
+      Server.respond ~headers ~body ~status ()
+  in
+  (* create the server and handle requests with the function defined above *)
+  let conn_closed (ch, _conn) =
+    if false then Printf.printf "connection %s closed\n%!"
+      (Sexplib.Sexp.to_string_hum (Conduit_lwt_unix.sexp_of_flow ch))
+  in
+  let config = Server.make ~callback ~conn_closed () in
+  Server.create  ~mode:(`TCP(`Port port)) config
+  >>= (fun () -> Printf.eprintf "hello_lwt: listening on 0.0.0.0:%d%!" port;
+      Lwt.return_unit)
+
 let tasks = try
   gui();
-  iter_a (ref 0) taskarray;
+  Lwt.join [
+    alpaca_main();
+    iter_a (ref 0) taskarray;
+    ] >>= (fun () -> print_endline "join"; Lwt.return_unit)
   with Unix.Unix_error(Unix.ECONNREFUSED, _, _) -> Lwt.fail (Lwt.Canceled)
 
 let run () =

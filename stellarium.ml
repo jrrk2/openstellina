@@ -26,20 +26,20 @@ type attr =
   }
 
 let rec descend' attr = function
-| ("raJ2000", `Float f) -> attr.ra <- f; attr.ra_hms <- Utils.hms_of_float f
-| ("decJ2000", `Float f) -> attr.dec <- f; attr.dec_dms <- Utils.dms_of_float f
-| ("ra", `Float f) -> attr.ranow <- f; attr.ranow_hms <- Utils.hms_of_float f
-| ("dec", `Float f) -> attr.decnow <- f; attr.decnow_dms <- Utils.dms_of_float f
-| ("altitude", `Float f) -> attr.alt <- f; attr.alt_dms <- Utils.dms_of_float f
-| ("azimuth", `Float f) -> attr.az <- f; attr.az_dms <- Utils.dms_of_float f
-| ("rise-dhr", `Float f) -> attr.rise <- f; attr.rise_hms <- Utils.dms_of_float f
-| ("transit-dhr", `Float f) -> attr.transit <- f; attr.transit_hms <- Utils.dms_of_float f
-| ("set-dhr", `Float f) -> attr.set <- f; attr.set_hms <- Utils.dms_of_float f
+| ("raJ2000", `Float f) -> attr.ra <- f; attr.ra_hms <- Astro_utils.hms_of_float f
+| ("decJ2000", `Float f) -> attr.dec <- f; attr.dec_dms <- Astro_utils.dms_of_float f
+| ("ra", `Float f) -> attr.ranow <- f; attr.ranow_hms <- Astro_utils.hms_of_float f
+| ("dec", `Float f) -> attr.decnow <- f; attr.decnow_dms <- Astro_utils.dms_of_float f
+| ("altitude", `Float f) -> attr.alt <- f; attr.alt_dms <- Astro_utils.dms_of_float f
+| ("azimuth", `Float f) -> attr.az <- f; attr.az_dms <- Astro_utils.dms_of_float f
+| ("rise-dhr", `Float f) -> attr.rise <- f; attr.rise_hms <- Astro_utils.dms_of_float f
+| ("transit-dhr", `Float f) -> attr.transit <- f; attr.transit_hms <- Astro_utils.dms_of_float f
+| ("set-dhr", `Float f) -> attr.set <- f; attr.set_hms <- Astro_utils.dms_of_float f
 | ("vmag", `Float f) -> attr.vis_mag <- f
-| ("hourAngle-hms", `String s) -> attr.hour_ang <- Utils.mod_ha (Utils.cnv_hms s /. 15.)
+| ("hourAngle-hms", `String s) -> attr.hour_ang <- Astro_utils.mod_ha (Astro_utils.cnv_hms s /. 15.)
 | ("rise", `String _) -> ()
 | ("set", `String _) -> ()
-| ("appSidTm", `String s) -> attr.sidt <- Utils.cnv_hms s /. 15.
+| ("appSidTm", `String s) -> attr.sidt <- Astro_utils.cnv_hms s /. 15.
 | (str, `Bool b) -> output_string attr.logfile (str^": "^string_of_bool b^"\n"); flush attr.logfile
 | (str, `Float f) -> output_string attr.logfile (str^": "^string_of_float f^"\n"); flush attr.logfile
 | (str, `Int n) -> output_string attr.logfile (str^": "^string_of_int n^"\n"); flush attr.logfile
@@ -66,17 +66,17 @@ let debug attr =
     flush stdout
 
 let stellarium' attr cb =
-    let headers = Utils.split 
+    let headers = Astro_utils.split 
    ["Content-Type: application/json";
     "Accept: application/json"] in
     let server =  "127.0.0.1:8090" in
     let pth = "/api/objects/info" in
     let req = [("name", attr.target); ("format", "json")] in
     let hdrs = ref [] in
-    Utils.get' "http://" server req headers pth cb hdrs
+    Astro_utils.get' "http://" server req headers pth cb hdrs
 
 let focus resp target =
-    let headers = Utils.split 
+    let headers = Astro_utils.split 
    ["Content-Type: application/json";
     "Accept: application/json"] in
     let server =  "127.0.0.1:8090" in
@@ -84,7 +84,7 @@ let focus resp target =
     let cb = Quests.Request.Raw "{}" in
     let params = [ ("target", target); ("mode", "center") ] in (* notice: American spelling *)
     let f = (fun s -> resp s) in
-    Utils.post' "http://" server params headers pth cb f
+    Astro_utils.post' "http://" server params headers pth cb f
 
 (* only for testing *)
 let stellarium attr =
