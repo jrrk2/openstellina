@@ -25,7 +25,7 @@ let start = Queue.create ()
 let timezone = List.rev (String.split_on_char '/' (try Unix.readlink "/etc/localtime" with _ -> "/var/db/timezone/zoneinfo/Europe/London"))
 let tzcity = try Sys.getenv "TIME_ZONE" with _ -> List.hd (List.tl timezone)  ^ "/" ^ List.hd timezone
 let defcat = try int_of_string (Sys.getenv "OPENSTELLINA_DEFAULT_CATALOGUE") with _ -> 7
-let manual = try bool_of_string (Sys.getenv "OPENSTELLINA_MANUAL") with _ -> false
+let manual = try bool_of_string (Sys.getenv "OPENSTELLINA_MANUAL") with _ -> true
 let accstr = try Sys.getenv "OPENSTELLINA_ACCEPTANCE" with _ -> "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)"
 let acceptance = Expr.simplify [] (Expr.expr accstr)
 let tmpdir = (Filename.get_temp_dir_name ())^"/"
@@ -1308,8 +1308,7 @@ and singleshot () =
        ("mean", `Int mean);
        ("motors",
         `Assoc
-          [("AZ", `Int az); ("ALT", `Float alt); ("DER", `Int der);
-           ("MAP", `Int map)]);
+          [("AZ", az); ("ALT", alt); ("DER", der); ("MAP", map)]);
        ("path", `String path);
        ("url", `String fits)])] -> ignore (acqtime,mean,az,alt,der,map,path); fitsref := fits; sm_jump "fetch"
   | `Assoc

@@ -1,8 +1,6 @@
 (** An example ASCOM alpaca API, somewhat as described in https://www.ascom-standards.org/Documentation/Index.htm#dev *)
 
 let serv_id = ref 0
-let xsize = 3072
-let ysize = 2080
 let (alpacah:(string*(string*string) list,Yojson.Basic.t)Hashtbl.t) = Hashtbl.create 255
 
 let _ = Hashtbl.replace alpacah ("camera", [("connected","abortexposure")]) (`Int 2)
@@ -11,8 +9,8 @@ let _ = Hashtbl.replace alpacah ("camera", [("connected","bayeroffsety")]) (`Int
 let _ = Hashtbl.replace alpacah ("camera", [("connected","binx")]) (`Int 1)
 let _ = Hashtbl.replace alpacah ("camera", [("connected","biny")]) (`Int 1)
 let _ = Hashtbl.replace alpacah ("camera", [("connected","camerastate")]) (`Bool false)
-let _ = Hashtbl.replace alpacah ("camera", [("connected","cameraxsize")]) (`Int xsize)
-let _ = Hashtbl.replace alpacah ("camera", [("connected","cameraysize")]) (`Int ysize)
+let _ = Hashtbl.replace alpacah ("camera", [("connected","cameraxsize")]) (let xsize = 3072 in `Int xsize)
+let _ = Hashtbl.replace alpacah ("camera", [("connected","cameraysize")]) (let ysize = 2080 in `Int ysize)
 let _ = Hashtbl.replace alpacah ("camera", [("connected","canfastreadout")]) (`Bool false)
 let _ = Hashtbl.replace alpacah ("camera", [("connected","cangetcoolerpower")]) (`Bool false)
 let _ = Hashtbl.replace alpacah ("camera", [("connected","cansetccdtemperature")]) (`Bool false)
@@ -38,8 +36,8 @@ let _ = Hashtbl.replace alpacah ("camera", [("connected","biny")]) (`Int 1)
 let _ = Hashtbl.replace alpacah ("camera", [("connected","maxbinx")]) (`Int 2)
 let _ = Hashtbl.replace alpacah ("camera", [("connected","maxbiny")]) (`Int 2)
 let _ = Hashtbl.replace alpacah ("camera", [("connected","name")]) (`Int 2)
-let _ = Hashtbl.replace alpacah ("camera", [("connected","numx")]) (`Int xsize)
-let _ = Hashtbl.replace alpacah ("camera", [("connected","numy")]) (`Int ysize)
+let _ = Hashtbl.replace alpacah ("camera", [("connected","numx")]) (let xsize = 3072 in `Int xsize)
+let _ = Hashtbl.replace alpacah ("camera", [("connected","numy")]) (let ysize = 2080 in `Int ysize)
 let _ = Hashtbl.replace alpacah ("camera", [("connected","pixelsizex")]) (`Float 1.23799)
 let _ = Hashtbl.replace alpacah ("camera", [("connected","pixelsizey")]) (`Float 1.23799)
 let _ = Hashtbl.replace alpacah ("camera", [("connected","sensorname")]) (`String "SONY")
@@ -113,37 +111,21 @@ type image_bytes = {
     _Dimension3: int;              (* Bytes 40..43 - Length of image array third dimension (0 for 2D array) *)
 }
 
-let image_bytes xsize ysize = 
-{
-    _MetadataVersion=1;         (* Bytes 0..3 - Metadata version = 1 *)
-    _ErrorNumber=0;             (* Bytes 4..7 - Alpaca error number or zero for success *)
-    _ClientTransactionID=0;     (* Bytes 8..11 - Client's transaction ID *)
-    _ServerTransactionID=0;     (* Bytes 12..15 - Device's transaction ID *)
-    _DataStart=44;              (* Bytes 16..19 - Offset of the start of the data bytes = 36 for version 1 *)
-    _ImageElementType=2;        (* Bytes 20..23 - Element type of the source image array *)
-    _TransmissionElementType=8; (* Bytes 24..27 - Element type as sent over the network *)
-    _Rank=2;                    (* Bytes 28..31 - Image array rank *)
-    _Dimension1=xsize;           (* Bytes 32..35 - Length of image array first dimension *)
-    _Dimension2=ysize;           (* Bytes 36..39 - Length of image array second dimension *)
-    _Dimension3=0;              (* Bytes 40..43 - Length of image array third dimension (0 for 2D array) *)
-}
-
-let image_len = 12784320
 let rs = ref ""
 let read_image image =
     let fd = open_in_bin image in
-    try rs := really_input_string fd image_len with End_of_file -> close_in fd
+    try rs := really_input_string fd (in_channel_length fd) with End_of_file -> close_in fd
 
 let _ = read_image "stellina_default.fits"
 
-let read_pixel row col =
+let read_pixel xsize row col =
   let off = row * xsize + col in
   let byte0 = (255 land int_of_char (try (!rs).[off*2 + 2880] with _ -> ' ')) in
   let byte1 = (255 land int_of_char (try (!rs).[off*2 + 2881] with _ -> ' ')) in
   let bayer = byte0 * 256 + byte1 in
   if byte0 < 128 then bayer + 32768 else bayer - 32768
 
-let image_bytes_extract image_bytes = function
+let image_bytes_extract xsize ysize image_bytes = function
    | 0 -> image_bytes._MetadataVersion         (* Bytes 0..3 - Metadata version = 1 *)
    | 1 -> image_bytes._ErrorNumber;            (* Bytes 4..7 - Alpaca error number or zero for success *)
    | 2 -> image_bytes._ClientTransactionID     (* Bytes 8..11 - Client's transaction ID *)
@@ -158,22 +140,35 @@ let image_bytes_extract image_bytes = function
    | n -> let off = n-11 in
           let row = (ysize-1) - (off*2) mod ysize in
           let col = (off*2) / ysize in
-          let pix = read_pixel row col in
+          let pix = read_pixel xsize row col in
           let row' = (ysize-1) - (off*2+1) mod ysize in
           let col' = (off*2+1) / ysize in
-          let pix' = read_pixel row' col' in
+          let pix' = read_pixel xsize row' col' in
           pix + pix' * 65536
 
-let dump_bytes () =
+let dump_bytes xsize ysize =
   for row = 0 to ysize-1 do
     for col = 0 to xsize-1 do
-       let pixel = read_pixel row col in
+       let pixel = read_pixel xsize row col in
        Printf.printf "%4d, %4d, 0x%4X\n" row col pixel
     done
   done
 
 let image_string () =
-   let xsize = match Hashtbl.find alpacah ("camera", [("connected","numx")]) with `Int size -> size | _ -> xsize in
-   let ysize = match Hashtbl.find alpacah ("camera", [("connected","numy")]) with `Int size -> size | _ -> ysize in
-   let image_bytes = image_bytes xsize ysize in
-   String.init (image_bytes._DataStart + xsize*ysize*2) (fun ix -> char_of_int ( (255 land (image_bytes_extract image_bytes (ix/4)) lsr ((ix mod 4)*8))))
+   let xsize = match Hashtbl.find alpacah ("camera", [("connected","numx")]) with `Int size -> size | _ -> 1 in
+   let ysize = match Hashtbl.find alpacah ("camera", [("connected","numy")]) with `Int size -> size | _ -> 1 in
+   let image_bytes = 
+      {
+          _MetadataVersion=1;         (* Bytes 0..3 - Metadata version = 1 *)
+          _ErrorNumber=0;             (* Bytes 4..7 - Alpaca error number or zero for success *)
+          _ClientTransactionID=0;     (* Bytes 8..11 - Client's transaction ID *)
+          _ServerTransactionID=0;     (* Bytes 12..15 - Device's transaction ID *)
+          _DataStart=44;              (* Bytes 16..19 - Offset of the start of the data bytes = 36 for version 1 *)
+          _ImageElementType=2;        (* Bytes 20..23 - Element type of the source image array *)
+          _TransmissionElementType=8; (* Bytes 24..27 - Element type as sent over the network *)
+          _Rank=2;                    (* Bytes 28..31 - Image array rank *)
+          _Dimension1=xsize;          (* Bytes 32..35 - Length of image array first dimension *)
+          _Dimension2=ysize;          (* Bytes 36..39 - Length of image array second dimension *)
+          _Dimension3=0;              (* Bytes 40..43 - Length of image array third dimension (0 for 2D array) *)
+      } in
+   String.init (image_bytes._DataStart + xsize*ysize*2) (fun ix -> char_of_int ( (255 land (image_bytes_extract xsize ysize image_bytes (ix/4)) lsr ((ix mod 4)*8))))
