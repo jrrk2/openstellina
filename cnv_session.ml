@@ -117,8 +117,8 @@ and decode attr = function
 let http' req = function
 |   ("http.date", `String date) -> ()
 |   ("http.time", `String time) -> ()
-|   ("http.host", `String "10.0.0.1:8082") -> ()
-|   ("http.host", `String "10.0.0.1:8083") -> ()
+|   ("http.host", `String ""^ipaddr^":8082") -> ()
+|   ("http.host", `String ""^ipaddr^":8083") -> ()
 |   ("http.request.line", `String str) -> req.line := str :: !(req.line)
 |   ("http.connection", `String "keep-alive") -> ()
 |   ("http.accept", `String "*/*") -> ()

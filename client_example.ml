@@ -4,7 +4,7 @@ open Cohttp_lwt_unix
 open Yojson
 
 let body () =
-  Client.get (Uri.of_string "http://10.0.0.1:8082/v1/app/status") >>= fun (resp, body) ->
+  Client.get (Uri.of_string "http://"^ipaddr^":8082/v1/app/status") >>= fun (resp, body) ->
   let code = resp |> Response.status |> Code.code_of_status in
   Printf.printf "Response code: %d\n" code;
   Printf.printf "Headers: %s\n" (resp |> Response.headers |> Header.to_string);
