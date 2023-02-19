@@ -1,4 +1,3 @@
-open Stellinapp_session_full
 open Request
 
 let new_motor () = {pos=0.0;state=""; stopped=false; calib=false;}
@@ -60,6 +59,8 @@ http_method=ref "";
  fil=new_attr();
  key=ref "";
  sec=ref "";
+ port=ref "";
+ chunk=ref "";
 }
 
 let qtree' q = function
@@ -73,6 +74,10 @@ let qtree' q = function
 | oth -> failwith "qtree"
 
 let othr = ref None
+
+let rec cnv' x =
+  let len = String.length x in
+  try (Scanf.sscanf (String.sub x 0 3) "%x:" (fun itm -> itm) :: cnv' (String.sub x 3 (len - 3))) with _ -> []
 
 let req' req = function
 | ("_ws.expert", _) -> ()
@@ -89,6 +94,21 @@ let req' req = function
 | ("http.response.code.desc", `String code) -> req.rdesc := code
 | ("http.response.phrase", `String code) -> req.rdesc := code
 | ("http.content_length", `String len) -> req.len := int_of_string len
+| ("http.authbasic", `String auth) -> ()
+| (chunk, `Assoc json) when (String.length chunk > 10 && String.sub chunk 0 11 = "Data chunk ") ->
+    List.iter (function
+      | ("http.chunk_size", `String siz) -> ()
+      | ("http.chunk_data", `String data) ->
+          let lst = cnv' data in
+          let str' = String.init (List.length lst) (fun ix -> char_of_int (List.nth lst ix)) in
+          req.chunk := str'
+      | ("http.chunk_boundary", `String bounds) -> ()
+      | oth -> othr := Some oth; failwith "chunk") json
+| ("End of chunked encoding", `Assoc [("http.chunk_size", `String len)]) -> ()
+| ("data.data", `String str) -> if false then print_endline str
+| ("data.len", `String len) -> if false then print_endline len
+| ("data", `Assoc json) -> ()
+| ("\\r\\n", `String "") -> ()
 | oth -> othr := Some oth; failwith "req"
 
 let othd = ref `Null
@@ -114,20 +134,31 @@ and decode attr = function
 | `String str -> attr.unhandled := str :: !(attr.unhandled)
 | oth -> othd := oth; failwith "decode"
 
+let comparenocase (str1:string) (str2:string) = compare (String.uppercase_ascii str1) (String.uppercase_ascii str2)
+
 let http' req = function
 |   ("http.date", `String date) -> ()
 |   ("http.time", `String time) -> ()
-|   ("http.host", `String ""^ipaddr^":8082") -> ()
-|   ("http.host", `String ""^ipaddr^":8083") -> ()
-|   ("http.request.line", `String str) -> req.line := str :: !(req.line)
+|   ("http.host", `String ipaddr) -> let ix = String.index ipaddr ':' in req.port := String.sub ipaddr (ix+1) (String.length ipaddr - ix - 1)
+|   ("http.request.line", `String str) -> req.line := List.sort comparenocase (str :: !(req.line))
 |   ("http.connection", `String "keep-alive") -> ()
+|   ("http.connection", `String "Upgrade") -> ()
+|   ("http.connection", `String "Keep-Alive") -> ()
+|   ("http.connection", `String "close") -> ()
+|   ("http.connection", `String "keep-alive, Upgrade") -> ()
 |   ("http.accept", `String "*/*") -> ()
+|   ("http.accept", `String "application/json") -> ()
+|   ("http.accept", `String "application/json, text/*") -> ()
 |   ("http.accept", `String "application/json, text/plain, */*") -> ()
 |   ("http.user_agent", `String agent) -> ()
 |   ("http.accept_language", `String "en-gb") -> ()
+|   ("http.accept_language", `String "en-GB,en;q=0.5") -> ()
 |   ("http.accept_language", `String "en-GB,en;q=0.9") -> ()
 |   ("http.referer", `String "http://localhost:8080/") -> ()
+|   ("http.accept_encoding", `String "gzip,deflate") -> ()
 |   ("http.accept_encoding", `String "gzip, deflate") -> ()
+|   ("http.accept_encoding", `String "gzip") -> ()
+|   ("http.authorization", `String auth) -> ()
 |   ("\\r\\n", `String "") -> ()
 |   ("http.request.full_uri", `String full) -> ()
 |   ("http.request", `String "1") -> ()
@@ -143,14 +174,17 @@ let http' req = function
 |   ("http.content_type", `String "text/plain; charset=UTF-8") -> ()
 |   ("http.content_type", `String "text/html; charset=utf-8") -> ()
 |   ("http.content_type", `String "text/plain;charset=UTF-8") -> ()
+|   ("http.content_type", `String "text/plain; charset=utf-8") -> ()
 |   ("http.content_type", `String "text/html") -> ()
 |   ("http.content_type", `String "image/jpeg") -> ()
 |   ("http.content_type", `String "application/json") -> ()
 |   ("http.content_type", `String "application/json; charset=utf-8") -> ()
+|   ("http.content_type", `String "application/json; charset=UTF-8") -> ()
 |   ("http.response.line", `String "Content-Type: text/plain; charset=UTF-8\r\n") -> ()
 |   ("http.content_length_header", `String len) -> req.lenh := int_of_string len
 |   ("http.content_encoding", `String "gzip") -> ()
-|   ("http.response.line", `String rline) -> req.rline := rline :: !(req.rline)
+|   ("http.transfer_encoding", `String "chunked") -> ()
+|   ("http.response.line", `String rline) -> req.rline := List.sort comparenocase (rline :: !(req.rline))
 |   ("http.set_cookie", `String cookie) -> req.cookie := cookie :: !(req.cookie)
 |   ("http.response_for.uri", `String uri) -> req.ruri := uri
 |   ("http.file_data", `String j) -> (try decode req.fil (Yojson.Basic.from_string (let ix = String.index j '{' in String.sub j ix (String.length j - ix - ix))) with err -> req.fil.unhandled := j :: !(req.fil.unhandled))
@@ -160,25 +194,37 @@ let http' req = function
 |   ("http.sec_websocket_accept", `String str) -> req.sec := str
 |   ("http.cache_control", `String "no-cache") -> ()
 |   ("http.cache_control", `String "public, max-age=31536000, immutable") -> ()
-|   ("http.connection", `String "Upgrade") -> ()
 |   ("http.upgrade", `String "websocket") -> ()
 |   ("http.last_modified", `String date) -> ()
 |   (_, `Assoc lst) -> List.iter (req' req) lst
 |   (_, `String "") -> () (* Content-encoded entity body (gzip): X bytes -> Y bytes *)
 | oth -> othr := Some oth; failwith "http'"
 
+(* *)
+
 let lastitm = ref None
 let lastlst' = ref []
+let dbghttp = ref []
+let dbgsrc = ref []
 
-let filt1 lst = List.map (fun itm ->
+let filt1 lst = List.map (fun (itm:Yojson.Basic.t) ->
   lastitm := Some itm;
   let lst' = match itm with `Assoc lst -> List.filter (function ("_source", `Assoc lst) -> true | _ -> false) lst | _ -> failwith "lst'" in
   if lst' = [] then failwith "filt1'";
-  lastlst' := lst';
-  let lst'' = match List.hd lst' with ("_source", `Assoc [("layers", `Assoc lst)]) -> List.filter (function ("http", `Assoc _) -> true | _ -> false) lst | _ -> failwith "lst'" in
-  let pkt req = match List.hd lst'' with ("http", `Assoc httplst) -> List.iter (http' req) httplst  | _ -> failwith "lst''" in
+  lastlst' := lst' :: !lastlst';
+  let lst'' = match List.hd lst' with ("_source", `Assoc [("layers", `Assoc lst)]) ->
+    dbgsrc := lst :: !dbgsrc;
+    List.filter (function (("http"|"data-text-lines"), `Assoc _) -> true | _ -> false) lst | _ -> failwith "lst'" in
+  dbghttp := lst'' :: !dbghttp;
+  let pkt req = List.iter (function
+     | ("http", `Assoc httplst) -> List.iter (http' req) httplst
+     | ("data-text-lines", `Assoc [(oth, `String "")]) -> req.chunk := oth
+     | _ -> failwith "lst''") lst'' in
   let http = new_req() in
   if lst'' <> [] then pkt http;
   http) lst
+(* *)
 
-let filtered = match json with `List lst -> filt1 lst | _ -> failwith "json";;
+let filtered fil = match Yojson.Basic.from_file fil with
+| `List j -> filt1 j
+|  _ -> failwith "json104"

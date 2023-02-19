@@ -111,4 +111,6 @@ ruri: string ref;
 fil: attr;
 key: string ref;
 sec: string ref;
+port: string ref;
+chunk: string ref;
 }

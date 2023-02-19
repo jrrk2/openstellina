@@ -15,7 +15,7 @@ CATALOGUE ?= "29P/SW"
 RAHMS ?= "4 28 11"
 DECDMS ?= "+29 06 11"
 EXPOSURE ?= 30.0
-F = Request.mli stellinapp_session_full.ml cnv_session.ml
+F = Request.mli cnv_session.ml
 G = Request.mli filtered.ml replay_session.ml messier_catalogue.ml
 
 status: filtered.top
@@ -56,6 +56,3 @@ filtered.top: $G
 
 stellinapp_session_full.top: $F
 	ocamlfind ocamlmktop -linkpkg -thread -package yojson,cohttp-lwt-unix -g $F -o $@
-
-stellinapp_session_full.ml: stellinapp_session_full.ml.xz
-	xz -d < $< >$@
