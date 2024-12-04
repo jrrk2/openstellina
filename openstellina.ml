@@ -17,6 +17,7 @@ type action =
   | Init
   | Observe
   | Park
+  | Openarm
   | Preauth
   | Postauth
 
@@ -28,6 +29,7 @@ let action_func = function
   | Init -> Telescope.init' ()
   | Observe -> Telescope.observe' ()
   | Park -> Telescope.park' ()
+  | Openarm -> Telescope.openarm' ()
   | Preauth -> Telescope.preauth' ()
   | Postauth -> Telescope.postauth' ()
 
@@ -264,6 +266,7 @@ let onload _ =
     button true "init" main choose (fun () -> action := Init);
     button false "observe" main choose (fun () -> action := Observe);
     button false "park" main choose (fun () -> action := Park);
+    button false "openarm" main choose (fun () -> action := Openarm);
     button false "status" main choose (fun () -> action := Consume);
     button false "preauth" main choose (fun () -> action := Preauth);
     button false "postauth" main choose (fun () -> action := Postauth);
