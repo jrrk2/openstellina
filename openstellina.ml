@@ -251,23 +251,37 @@ let create_telescope_display doc =
     [system; environment; storage; motors; status; updates; observation];
   display
 
+let debug_mode = ref true
+
+let debug msg =
+  if !debug_mode then
+    begin 
+    print_endline ("DEBUG: " ^ msg);
+    show_info msg
+    end
+
 let update_display_value id value =
   match Dom_html.getElementById_opt id with
   | Some element -> element##.innerHTML := Js.string value
   | None -> ()
-
 let update_control_display () =
   (* Update status dot *)
   match Dom_html.getElementById_opt "control-status-dot" with
   | Some dot ->
       let status_class = match !control_state with
-      | `NoControl -> "status-dot no-control"
+      | `NoControl -> "status-dot no-control"  
       | `RequestingControl -> "status-dot requesting"
-      | `HasControl -> "status-dot has-control" 
+      | `HasControl -> "status-dot has-control"
       | `OtherHasControl _ -> "status-dot other-control"
       in
-      dot##.className := Js.string status_class
-  | None -> ();
+      dot##.className := Js.string status_class;
+      if !verbose' then debug ("Updating control display - state: " ^ 
+        (match !control_state with
+         | `NoControl -> "NoControl"
+         | `RequestingControl -> "RequestingControl" 
+         | `HasControl -> "HasControl"
+         | `OtherHasControl u -> "OtherHasControl:" ^ u));
+  | None -> debug "Could not find control-status-dot element";
 
   (* Update status text *)
   match Dom_html.getElementById_opt "control-status-text" with
@@ -279,7 +293,7 @@ let update_control_display () =
       | `OtherHasControl user -> "Controlled by " ^ user
       in
       text##.textContent := Js.some (Js.string status_msg)
-  | None -> ();
+  | None -> debug "Could not find control-status-text element";
 
   (* Update details *)
   match Dom_html.getElementById_opt "control-details" with
@@ -291,26 +305,33 @@ let update_control_display () =
       | `OtherHasControl user -> "Telescope is being controlled by " ^ user
       in
       details##.textContent := Js.some (Js.string details_msg)
+  | None -> debug "Could not find control-details element";
+
+  (* Force browser to re-render *)
+  match Dom_html.getElementById_opt "control-status-dot" with
+  | Some dot -> dot##.style##.display := Js.string "none";
+                let _ = dot##.offsetHeight in  (* Force reflow *)
+                dot##.style##.display := Js.string "block"
   | None -> ();
 
   (* Update button states *)
   match Dom_html.getElementById_opt "take-control-button" with
-  | Some btn ->
-      Js.Opt.iter (Dom_html.CoerceTo.input btn) (fun input ->
-          input##.disabled := Js.bool (match !control_state with
+  | Some element ->
+      Js.Opt.iter (Dom_html.CoerceTo.input element)
+        (fun btn ->
+          btn##.disabled := Js.bool (match !control_state with
             | `NoControl -> false
-            | _ -> true)
-      )
-  | None -> ();
+            | _ -> true))
+  | None -> debug "Could not find take-control-button";
 
   match Dom_html.getElementById_opt "release-control-button" with
-  | Some btn ->
-      Js.Opt.iter (Dom_html.CoerceTo.input btn) (fun input ->
-          input##.disabled := Js.bool (match !control_state with
+  | Some element ->
+      Js.Opt.iter (Dom_html.CoerceTo.input element)
+        (fun btn ->
+          btn##.disabled := Js.bool (match !control_state with
             | `HasControl -> false
-            | _ -> true)
-      )
-  | None -> ()
+            | _ -> true))
+  | None -> debug "Could not find release-control-button"
 
 let update_telescope_display () =
   update_display_value "status-ID" !Telescope.telescopeId;
@@ -323,14 +344,6 @@ let update_telescope_display () =
   update_display_value "status-Error" !Telescope.errorref
 
 let ws_action = ref None  (* Separate from main action *)
-let debug_mode = ref true
-
-let debug msg =
-  if !debug_mode then
-    begin 
-    print_endline ("DEBUG: " ^ msg);
-    show_info msg
-    end
 
 let rec ping_loop () =
   match !websocket with
