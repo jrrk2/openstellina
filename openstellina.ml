@@ -251,7 +251,7 @@ let create_telescope_display doc =
     [system; environment; storage; motors; status; updates; observation];
   display
 
-let debug_mode = ref true
+let debug_mode = ref false
 
 let debug msg =
   if !debug_mode then
@@ -356,23 +356,6 @@ let update_telescope_display () =
 
 let ws_action = ref None  (* Separate from main action *)
 
-let rec ping_loop () =
-  (match !websocket with
-  | Some ws ->
-      let* () = Lwt_js.sleep (25.0) in
-      if !connect then begin
-        debug "Ping loop: Sending ping probe";
-        ws##send (Js.string "2probe");
-        let* () = ping_loop () in
-        Lwt.return_unit
-      end else begin
-        debug "Ping loop: Connection not active, stopping";
-        Lwt.return_unit
-      end
-  | None -> 
-      debug "Ping loop: No websocket connection";
-      Lwt.return_unit)
-
 let handle_socketio msg =
   if false then print_endline ("socket.io: " ^ msg);
   (match msg with
@@ -402,10 +385,6 @@ let rec process_json path = function
        ping_timeout := ping_tim';
        if connect_websocket Telescope.proto Telescope.server Telescope.pth3' then
          begin
-	 (*
-          connect := true;
-          ignore (ping_loop ());
-	  *)
          print_endline "WebSocket connection successful"
          end
        else
@@ -716,7 +695,7 @@ and handle_frame msg =
       | None -> debug "Cannot send PONG - no websocket connection"
       end
   | '3' -> (* PONG received *)
-      debug "Received PONG response"
+      debug "Received PONG response";
   | '4' when String.length msg >= 2 -> 
     begin match msg.[1] with
     | '2' -> (* Socket.IO event *)
@@ -760,30 +739,32 @@ and handle_frame msg =
 end
 | c -> debug ("Unhandled frame type: " ^ String.make 1 c ^ "\nFull message: " ^ msg))
 
-and handle_socketio msg =
-  if !verbose' then print_endline ("socket.io: " ^ msg);
-  (match msg with
-  | "2" -> (* PING *)
-     show_info "ping";
-     begin match !websocket with
-     | Some ws -> ws##send (Js.string "3") (* PONG *)
-     | None -> ()
-     end
-  | "3" -> (* PONG *) 
-     show_info "pong"
-  | s when String.length s >= 2 && String.sub s 0 2 = "42" ->
-     show_info ("socket.io message: " ^ s)
-  | _ -> show_info ("other socket.io: " ^ msg))
-
-let errchklst' user = function
+and errchklst' user = function
   | (kw', `List [`String "message"; `String msg]) ->
       handle_socketio msg
   | (_, json) -> process_json [] json
 	
-let session (arg:Yojson.Safe.t) =
-  if false then print_endline "session";
+and session (arg:Yojson.Safe.t) =
+  if !verbose' then print_endline "session";
   errchklst' true ("R", arg);
   update_telescope_display ()
+
+and ping_loop () =
+  (match !websocket with
+  | Some ws ->
+      let* () = Lwt_js.sleep (25.0) in
+      if !connect then begin
+        debug "Ping loop: Sending ping probe";
+        ws##send (Js.string "2probe");
+        let* () = ping_loop () in
+        Lwt.return_unit
+      end else begin
+        debug "Ping loop: Connection not active, stopping";
+        Lwt.return_unit
+      end
+  | None -> 
+      debug "Ping loop: No websocket connection";
+      Lwt.return_unit)
 
 (* Update the take_control function to use the new state *)
 let take_control () =
@@ -858,6 +839,8 @@ let cnvauth s =
   try let auth = Telescope.cnv s in let authstr = Yojson.Safe.Util.to_string ( Yojson.Safe.Util.member "authorization" auth ) in show_info ("auth "^String.sub authstr 16 64^" ..."); Telescope.authref := authstr; 
   with _ -> Telescope.authref := "auth fail"
 
+let idlecnt = ref 0
+  
 let rec action_func pending = function
   | TakeControl -> 
       let* () = take_control () in
@@ -870,7 +853,7 @@ let rec action_func pending = function
         Js_of_ocaml_lwt.Lwt_js.sleep 0.1
       else if !has_control then begin
         (match !action with
-        | Idle -> Js_of_ocaml_lwt.Lwt_js.sleep 0.1
+        | Idle -> incr idlecnt; if !idlecnt < 30 then Js_of_ocaml_lwt.Lwt_js.sleep 0.1 else (idlecnt := 0; Telescope.status_fun session)
         | a -> action_func pending a)
       end else
         Js_of_ocaml_lwt.Lwt_js.sleep 0.1
