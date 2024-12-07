@@ -4,6 +4,7 @@ open Astro_utils
 open Cookie
 open Telescope
 open Lwt.Infix
+open Js_of_ocaml_lwt
 
 (* Control state type definition *)
 type control_state = [
@@ -255,6 +256,62 @@ let update_display_value id value =
   | Some element -> element##.innerHTML := Js.string value
   | None -> ()
 
+let update_control_display () =
+  (* Update status dot *)
+  match Dom_html.getElementById_opt "control-status-dot" with
+  | Some dot ->
+      let status_class = match !control_state with
+      | `NoControl -> "status-dot no-control"
+      | `RequestingControl -> "status-dot requesting"
+      | `HasControl -> "status-dot has-control" 
+      | `OtherHasControl _ -> "status-dot other-control"
+      in
+      dot##.className := Js.string status_class
+  | None -> ();
+
+  (* Update status text *)
+  match Dom_html.getElementById_opt "control-status-text" with
+  | Some text ->
+      let status_msg = match !control_state with
+      | `NoControl -> "No Control"
+      | `RequestingControl -> "Requesting Control"
+      | `HasControl -> "Has Control"
+      | `OtherHasControl user -> "Controlled by " ^ user
+      in
+      text##.textContent := Js.some (Js.string status_msg)
+  | None -> ();
+
+  (* Update details *)
+  match Dom_html.getElementById_opt "control-details" with
+  | Some details ->
+      let details_msg = match !control_state with
+      | `NoControl -> "The telescope is not being controlled"
+      | `RequestingControl -> "Attempting to take control..."
+      | `HasControl -> "You are controlling the telescope"
+      | `OtherHasControl user -> "Telescope is being controlled by " ^ user
+      in
+      details##.textContent := Js.some (Js.string details_msg)
+  | None -> ();
+
+  (* Update button states *)
+  match Dom_html.getElementById_opt "take-control-button" with
+  | Some btn ->
+      Js.Opt.iter (Dom_html.CoerceTo.input btn) (fun input ->
+          input##.disabled := Js.bool (match !control_state with
+            | `NoControl -> false
+            | _ -> true)
+      )
+  | None -> ();
+
+  match Dom_html.getElementById_opt "release-control-button" with
+  | Some btn ->
+      Js.Opt.iter (Dom_html.CoerceTo.input btn) (fun input ->
+          input##.disabled := Js.bool (match !control_state with
+            | `HasControl -> false
+            | _ -> true)
+      )
+  | None -> ()
+
 let update_telescope_display () =
   update_display_value "status-ID" !Telescope.telescopeId;
   update_display_value "status-Boot Count" (string_of_int !Telescope.bootCnt);
@@ -278,7 +335,7 @@ let debug msg =
 let rec ping_loop () =
   match !websocket with
   | Some ws ->
-      let* () = Js_of_ocaml_lwt.Lwt_js.sleep (25.0) in
+      let* () = Lwt_js.sleep (25.0) in
       if !connect then begin
         debug "Ping loop: Sending ping probe";
         ws##send (Js.string "2probe");
@@ -635,41 +692,46 @@ and handle_frame msg =
   | '3' -> (* PONG received *)
       debug "Received PONG response"
   | '4' when String.length msg >= 2 -> 
-      begin match msg.[1] with
-      | '2' -> (* Socket.IO event *)
-          if String.length msg > 2 then
-            let event_json = String.sub msg 2 (String.length msg - 2) in
-            debug ("Received Socket.IO event: " ^ (if String.length event_json < 80 then event_json else String.sub event_json 0 80 ^ " ..."));
-            begin try
-              let json = Yojson.Safe.from_string event_json in
-              match json with
-              | `List [`String "CONTROL_GRANTED"] ->
-                  control_state := `HasControl;
-                  control_owner := Some "openstellina";
-                  show_info "Control granted";
-                  has_control := true;
-                  control_pending := false
-              | `List [`String "CONTROL_DENIED"; `String reason] ->
-                  control_state := `NoControl;
-                  show_info ("Control denied: " ^ reason);
-                  has_control := false;
-                  control_pending := false
-              | `List [`String "CONTROL_RELEASED"] ->
-                  control_state := `NoControl;
-                  control_owner := None;
-                  show_info "Control released";
-                  has_control := false
-              | `List [`String "CONTROL_TAKEN"; `String user] ->
-                  control_state := `OtherHasControl user;
-                  control_owner := Some user;
-                  show_info ("Control taken by " ^ user);
-                  has_control := false
-              | _ -> process_json [] json
-            with e -> 
-              debug ("Failed to parse event: " ^ event_json ^ "\nError: " ^ Printexc.to_string e)
-            end
-      | _ -> debug ("Unknown type-4 message subtype: " ^ String.make 1 msg.[1] ^ "\nFull message: " ^ msg)
-      end
+    begin match msg.[1] with
+    | '2' -> (* Socket.IO event *)
+        if String.length msg > 2 then
+          let event_json = String.sub msg 2 (String.length msg - 2) in
+          if false then debug ("Received Socket.IO event: " ^ event_json);
+          begin try
+            let json = Yojson.Safe.from_string event_json in
+            match json with
+            | `List [`String "STATUS_UPDATED"; status] ->
+                (* Check masterDeviceId in status update *)
+                begin match Yojson.Safe.Util.(member "masterDeviceId" status |> to_string_option) with
+                | Some "openstellina-web" when !control_state <> `HasControl ->
+                    control_state := `HasControl;
+                    control_owner := Some "openstellina";
+                    show_info "Control granted (via status)";
+                    print_endline "Control granted (via status)";
+                    has_control := true;
+                    control_pending := false;
+                    update_control_display ()
+                | _ -> process_json [] json
+                end
+            | `List [`String "CONTROL_GRANTED"] ->
+                control_state := `HasControl;
+                control_owner := Some "openstellina";
+                show_info "Control granted";
+                has_control := true;
+                control_pending := false;
+                update_control_display ()
+            | `List [`String "CONTROL_DENIED"; `String reason] ->
+                control_state := `NoControl;
+                show_info ("Control denied: " ^ reason);
+                has_control := false;
+                control_pending := false;
+                update_control_display ()
+            | _ -> process_json [] json
+          with e -> 
+            debug ("Failed to parse event: " ^ event_json ^ "\nError: " ^ Printexc.to_string e)
+          end
+    | _ -> debug ("Unknown type-4 message subtype: " ^ String.make 1 msg.[1] ^ "\nFull message: " ^ msg)
+end
 | c -> debug ("Unhandled frame type: " ^ String.make 1 c ^ "\nFull message: " ^ msg)
 
 and handle_socketio msg =
@@ -871,7 +933,6 @@ let create_connection_status doc =
   update_status ();
   status_div
 
-(* Create the control status widget *)
 let create_control_status_widget doc =
   let widget = create_styled_div doc "control-status-widget" in
   
@@ -879,26 +940,73 @@ let create_control_status_widget doc =
   let header = create_styled_div doc "control-status-header" in
   let indicator = create_styled_div doc "control-indicator" in
   let status_dot = create_styled_div doc "status-dot" in
+  status_dot##.id := Js.string "control-status-dot";
   let status_text = Dom_html.createDiv doc in
+  status_text##.id := Js.string "control-status-text";
+  status_text##.textContent := Js.some (Js.string "No Control");
   
   (* Create details section *)
   let details = create_styled_div doc "control-details" in
   details##.id := Js.string "control-details";
+  details##.textContent := Js.some (Js.string "The telescope is not being controlled");
   
   (* Create action buttons *)
   let actions = create_styled_div doc "control-actions" in
-  let take_button = create_button doc "Take Control" (fun _ ->
-    action := TakeControl;
-    Js._false
-  ) in
-  let release_button = create_button doc "Release Control" (fun _ ->
-    action := ReleaseControl;
-    Js._false
-  ) in
   
+  (* Create Take Control button *)
+  let take_button = Dom_html.createInput ~_type:(Js.string "button") doc in
+  take_button##.value := Js.string "Take Control";
+  take_button##.id := Js.string "take-control-button";
   take_button##.className := Js.string "control-button take";
+  
+  (* Use Js.Opt.iter for proper input element handling *)
+  let set_take_button_state disabled =
+    Js.Opt.iter (Dom_html.CoerceTo.input take_button) (fun input ->
+      input##.disabled := Js.bool disabled
+    )
+  in
+  
+  (* Create Release Control button *) 
+  let release_button = Dom_html.createInput ~_type:(Js.string "button") doc in
+  release_button##.value := Js.string "Release Control";
+  release_button##.id := Js.string "release-control-button";
   release_button##.className := Js.string "control-button release";
   
+  let set_release_button_state disabled =
+    Js.Opt.iter (Dom_html.CoerceTo.input release_button) (fun input ->
+      input##.disabled := Js.bool disabled
+    )
+  in
+
+  (* Initialize button states *)
+  set_take_button_state (match !control_state with
+    | `NoControl -> false
+    | _ -> true);
+    
+  set_release_button_state (match !control_state with
+    | `HasControl -> false 
+    | _ -> true);
+
+  (* Add click handlers *)
+  take_button##.onclick := Dom_html.handler (fun _ ->
+    if !control_state = `NoControl then begin
+      control_state := `RequestingControl;
+      show_info "Requesting Control";
+      details##.textContent := Js.some (Js.string "Attempting to take control of the telescope...");
+      action := TakeControl;
+    end;
+    Js._false
+  );
+
+  release_button##.onclick := Dom_html.handler (fun _ ->
+    if !control_state = `HasControl then begin
+      show_info "Releasing control";
+      details##.textContent := Js.some (Js.string "Releasing telescope control...");
+      action := ReleaseControl;
+    end;
+    Js._false
+  );
+
   (* Add everything to the DOM *)
   Dom.appendChild indicator status_dot;
   Dom.appendChild indicator status_text;
@@ -908,48 +1016,7 @@ let create_control_status_widget doc =
   Dom.appendChild widget header;
   Dom.appendChild widget details;
   Dom.appendChild widget actions;
-  
-  (* Create update function *)
-  let update_widget () =
-    let (status_class, status_msg, details_msg, can_take, can_release) = 
-      match !control_state with
-      | `NoControl -> 
-          ("no-control", 
-           "No Control",
-           "The telescope is not being controlled",
-           true, false)
-      | `RequestingControl ->
-          ("requesting",
-           "Requesting Control",
-           "Attempting to take control of the telescope...",
-           false, false)
-      | `HasControl ->
-          ("has-control",
-           "Has Control",
-           "You are controlling the telescope",
-           false, true)
-      | `OtherHasControl user ->
-          ("other-control",
-           "Other User",
-           Printf.sprintf "Telescope is being controlled by %s" user,
-           false, false)
-    in
-    
-    status_dot##.className := Js.string ("status-dot " ^ status_class);
-    status_text##.textContent := Js.some (Js.string status_msg);
-    details##.textContent := Js.some (Js.string details_msg);
-    take_button##.disabled := Js.bool (not can_take);
-    release_button##.disabled := Js.bool (not can_release)
-  in
-  
-  (* Set up periodic updates *)
-  let rec update_loop () =
-    update_widget ();
-    let%lwt () = Js_of_ocaml_lwt.Lwt_js.sleep 0.5 in
-    update_loop ()
-  in
-  ignore (update_loop ());
-  
+
   widget
 
 (* Modified control panel *)
@@ -1222,6 +1289,14 @@ let handle_action action_type _ =
   action := action_type;
   Js._false
 
+(* Add periodic updates *)
+let start_control_updates () =
+  let rec update_loop () =
+    let%lwt () = Lwt_js.sleep 0.5 in
+    update_control_display ();
+    update_loop ()
+  in
+  ignore (update_loop ())
   
 let modern_gui doc =
   apply_styles doc;
@@ -1229,15 +1304,14 @@ let modern_gui doc =
   let control_panel = create_control_panel doc (fun connected -> connect := connected) in
   let message_panel = create_message_panel doc in
   Dom.appendChild control_panel message_panel;
-(*
-  Dom.appendChild control_panel (create_connection_status doc);
-*)
   let status_display = create_status_display doc in
   let object_select = create_styled_div doc "input-group" in
   let input = Dom_html.createInput ~_type:(Js.string "text") doc in
   input##.className := Js.string "input-field";
   input##.placeholder := Js.string "Enter Messier object (e.g., M31)";
   Dom.appendChild object_select input;
+  
+  start_control_updates ();  (* Start periodic updates *)
   
   create_tabs doc [
     ("Control", control_panel);
