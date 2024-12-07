@@ -251,7 +251,7 @@ let create_telescope_display doc =
     [system; environment; storage; motors; status; updates; observation];
   display
 
-let debug_mode = ref true
+let debug_mode = ref false
 
 let debug msg =
   if !debug_mode then
@@ -264,9 +264,21 @@ let update_display_value id value =
   match Dom_html.getElementById_opt id with
   | Some element -> element##.innerHTML := Js.string value
   | None -> ()
+
+let last_ctrl = ref (`OtherHasControl "")
+let last_class = ref ""
+
 let update_control_display () =
+  let debug_msg s = if !verbose then debug ("Control update: " ^ s) in
+  if !control_state <> !last_ctrl then debug_msg (match !control_state with
+    | `NoControl -> "State: NoControl"
+    | `RequestingControl -> "State: RequestingControl" 
+    | `HasControl -> "State: HasControl"
+    | `OtherHasControl u -> "State: OtherHasControl - " ^ u);
+  last_ctrl := !control_state;
+
   (* Update status dot *)
-  match Dom_html.getElementById_opt "control-status-dot" with
+  (match Dom_html.getElementById_opt "control-status-dot" with
   | Some dot ->
       let status_class = match !control_state with
       | `NoControl -> "status-dot no-control"  
@@ -274,17 +286,13 @@ let update_control_display () =
       | `HasControl -> "status-dot has-control"
       | `OtherHasControl _ -> "status-dot other-control"
       in
-      dot##.className := Js.string status_class;
-      if !verbose' then debug ("Updating control display - state: " ^ 
-        (match !control_state with
-         | `NoControl -> "NoControl"
-         | `RequestingControl -> "RequestingControl" 
-         | `HasControl -> "HasControl"
-         | `OtherHasControl u -> "OtherHasControl:" ^ u));
-  | None -> debug "Could not find control-status-dot element";
+      if !last_class <> status_class then debug_msg ("Setting dot class to: " ^ status_class);
+      last_class := status_class;
+      dot##.className := Js.string status_class
+  | None -> debug_msg "Could not find status dot");
 
   (* Update status text *)
-  match Dom_html.getElementById_opt "control-status-text" with
+  (match Dom_html.getElementById_opt "control-status-text" with
   | Some text ->
       let status_msg = match !control_state with
       | `NoControl -> "No Control"
@@ -292,46 +300,49 @@ let update_control_display () =
       | `HasControl -> "Has Control"
       | `OtherHasControl user -> "Controlled by " ^ user
       in
+      debug_msg ("Setting status text to: " ^ status_msg);
       text##.textContent := Js.some (Js.string status_msg)
-  | None -> debug "Could not find control-status-text element";
+  | None -> debug_msg "Could not find status text");
 
-  (* Update details *)
-  match Dom_html.getElementById_opt "control-details" with
+  (* Update detailed message *)
+  (match Dom_html.getElementById_opt "control-details" with
   | Some details ->
-      let details_msg = match !control_state with
+      let msg = match !control_state with
       | `NoControl -> "The telescope is not being controlled"
       | `RequestingControl -> "Attempting to take control..."
       | `HasControl -> "You are controlling the telescope"
       | `OtherHasControl user -> "Telescope is being controlled by " ^ user
       in
-      details##.textContent := Js.some (Js.string details_msg)
-  | None -> debug "Could not find control-details element";
+      debug_msg ("Setting details to: " ^ msg);
+      details##.textContent := Js.some (Js.string msg)
+  | None -> debug_msg "Could not find details element");
 
-  (* Force browser to re-render *)
-  match Dom_html.getElementById_opt "control-status-dot" with
-  | Some dot -> dot##.style##.display := Js.string "none";
-                let _ = dot##.offsetHeight in  (* Force reflow *)
-                dot##.style##.display := Js.string "block"
-  | None -> ();
-
-  (* Update button states *)
-  match Dom_html.getElementById_opt "take-control-button" with
+  (* Update buttons *)
+  (match Dom_html.getElementById_opt "take-control-button" with
   | Some element ->
       Js.Opt.iter (Dom_html.CoerceTo.input element)
         (fun btn ->
-          btn##.disabled := Js.bool (match !control_state with
+          let should_disable = match !control_state with
             | `NoControl -> false
-            | _ -> true))
-  | None -> debug "Could not find take-control-button";
+            | _ -> true
+          in
+          debug_msg ("Setting take button disabled: " ^ string_of_bool should_disable);
+          btn##.disabled := Js.bool should_disable)
+  | None -> debug_msg "Could not find take button");
 
-  match Dom_html.getElementById_opt "release-control-button" with
+  (match Dom_html.getElementById_opt "release-control-button" with
   | Some element ->
       Js.Opt.iter (Dom_html.CoerceTo.input element)
         (fun btn ->
-          btn##.disabled := Js.bool (match !control_state with
+          let should_disable = match !control_state with
             | `HasControl -> false
-            | _ -> true))
-  | None -> debug "Could not find release-control-button"
+            | _ -> true
+          in
+          debug_msg ("Setting release button disabled: " ^ string_of_bool should_disable);
+          btn##.disabled := Js.bool should_disable)
+  | None -> debug_msg "Could not find release button");
+
+  debug_msg "Update complete"
 
 let update_telescope_display () =
   update_display_value "status-ID" !Telescope.telescopeId;
@@ -385,7 +396,7 @@ let rec process_json path = function
      ("pingTimeout", `Int ping_tim')] ->
      if !sid = "" then
        begin
-       show_info ("sid: " ^ sid');
+       if !verbose then show_info ("sid: " ^ sid');
        sid := sid';
        ping_interval := ping_int';
        ping_timeout := ping_tim';
@@ -624,7 +635,7 @@ and connect_websocket proto server port =
   let device_info = {|id=openstellina-web&name=openstellina-wb|} in
   let ws_url = (if proto = "https://" then "wss://" else "ws://") ^ server' ^ port ^
     "/socket.io/?EIO=3&transport=websocket&" ^ device_info in
-  show_info ("Connecting WebSocket to: " ^ ws_url);
+  if !verbose then show_info ("Connecting WebSocket to: " ^ ws_url);
   let connected = ref false in
   let open Js_of_ocaml.WebSockets in
   try
@@ -648,7 +659,7 @@ and connect_websocket proto server port =
 
       ws##.onmessage := Dom.handler (fun e ->
       let msg = Js.to_string e##.data in
-      if String.length msg < 80 then show_info ("WS received: " ^ msg);
+      if String.length msg < 80 && !verbose then show_info ("WS received: " ^ msg);
       handle_frame msg;
       connected := true;
       Js._true
@@ -945,20 +956,22 @@ let create_connection_status doc =
   in
   update_status ();
   status_div
-
+  
 let create_control_status_widget doc =
   let widget = create_styled_div doc "control-status-widget" in
   
-  (* Create header with status indicator *)
+  (* Create control panel *)
   let header = create_styled_div doc "control-status-header" in
   let indicator = create_styled_div doc "control-indicator" in
-  let status_dot = create_styled_div doc "status-dot" in
+  
+  let status_dot = create_styled_div doc "status-dot no-control" in
   status_dot##.id := Js.string "control-status-dot";
+  
   let status_text = Dom_html.createDiv doc in
   status_text##.id := Js.string "control-status-text";
+  status_text##.className := Js.string "status-text";
   status_text##.textContent := Js.some (Js.string "No Control");
   
-  (* Create details section *)
   let details = create_styled_div doc "control-details" in
   details##.id := Js.string "control-details";
   details##.textContent := Js.some (Js.string "The telescope is not being controlled");
@@ -966,70 +979,28 @@ let create_control_status_widget doc =
   (* Create action buttons *)
   let actions = create_styled_div doc "control-actions" in
   
-  (* Create Take Control button *)
   let take_button = Dom_html.createInput ~_type:(Js.string "button") doc in
   take_button##.value := Js.string "Take Control";
   take_button##.id := Js.string "take-control-button";
   take_button##.className := Js.string "control-button take";
   
-  (* Use Js.Opt.iter for proper input element handling *)
-  let set_take_button_state disabled =
-    Js.Opt.iter (Dom_html.CoerceTo.input take_button) (fun input ->
-      input##.disabled := Js.bool disabled
-    )
-  in
-  
-  (* Create Release Control button *) 
   let release_button = Dom_html.createInput ~_type:(Js.string "button") doc in
   release_button##.value := Js.string "Release Control";
   release_button##.id := Js.string "release-control-button";
   release_button##.className := Js.string "control-button release";
   
-  let set_release_button_state disabled =
-    Js.Opt.iter (Dom_html.CoerceTo.input release_button) (fun input ->
-      input##.disabled := Js.bool disabled
-    )
-  in
-
-  (* Initialize button states *)
-  set_take_button_state (match !control_state with
-    | `NoControl -> false
-    | _ -> true);
-    
-  set_release_button_state (match !control_state with
-    | `HasControl -> false 
-    | _ -> true);
-
-  (* Add click handlers *)
-  take_button##.onclick := Dom_html.handler (fun _ ->
-    if !control_state = `NoControl then begin
-      control_state := `RequestingControl;
-      show_info "Requesting Control";
-      details##.textContent := Js.some (Js.string "Attempting to take control of the telescope...");
-      action := TakeControl;
-    end;
-    Js._false
-  );
-
-  release_button##.onclick := Dom_html.handler (fun _ ->
-    if !control_state = `HasControl then begin
-      show_info "Releasing control";
-      details##.textContent := Js.some (Js.string "Releasing telescope control...");
-      action := ReleaseControl;
-    end;
-    Js._false
-  );
-
-  (* Add everything to the DOM *)
+  (* Assemble the widget *)
   Dom.appendChild indicator status_dot;
   Dom.appendChild indicator status_text;
   Dom.appendChild header indicator;
-  Dom.appendChild actions take_button;
-  Dom.appendChild actions release_button;
   Dom.appendChild widget header;
   Dom.appendChild widget details;
+  Dom.appendChild actions take_button;
+  Dom.appendChild actions release_button;
   Dom.appendChild widget actions;
 
+  (* Add debug logging *)
+  if !verbose' then debug "Control widget created";
   widget
 
 (* Modified control panel *)
