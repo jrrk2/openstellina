@@ -267,19 +267,30 @@ let update_telescope_display () =
   update_display_value "status-Error" !Telescope.errorref
 
 let ws_action = ref None  (* Separate from main action *)
+let debug_mode = ref true
+
+let debug msg =
+  if !debug_mode then
+    begin 
+    print_endline ("DEBUG: " ^ msg);
+    show_info msg
+    end
 
 let rec ping_loop () =
   match !websocket with
   | Some ws ->
-      let* () = Js_of_ocaml_lwt.Lwt_js.sleep (25.0) in (* 25 seconds *)
+      let* () = Js_of_ocaml_lwt.Lwt_js.sleep (25.0) in
       if !connect then begin
-        show_info "Sending ping probe";
-        ws##send (Js.string "2probe"); (* v3 ping probe *)
+        debug "Ping loop: Sending ping probe";
+        ws##send (Js.string "2probe");
         let* () = ping_loop () in
         Lwt.return_unit
-      end else
+      end else begin
+        debug "Ping loop: Connection not active, stopping";
         Lwt.return_unit
+      end
   | None -> 
+      debug "Ping loop: No websocket connection";
       Lwt.return_unit
 
 let handle_socketio msg =
@@ -566,7 +577,7 @@ and connect_websocket proto server port =
 false
 
 and handle_frame msg =
-  if String.length msg < 80 then show_info ("Received frame: " ^ msg);
+  debug ("Received WebSocket frame: " ^ msg);
   match msg.[0] with
   | '0' -> (* Socket.IO handshake *)
       begin try
@@ -576,35 +587,38 @@ and handle_frame msg =
         sid := member "sid" handshake |> to_string;
         ping_interval := member "pingInterval" handshake |> to_int;
         ping_timeout := member "pingTimeout" handshake |> to_int;
-        show_info ("Handshake complete, sid: " ^ !sid);
-        connect := true; (* Mark as connected after successful handshake *)
-        (* Start ping loop after handshake *)
+        debug (Printf.sprintf "Handshake complete - SID: %s, Ping interval: %dms, Timeout: %dms" 
+          !sid !ping_interval !ping_timeout);
+        connect := true;
         ignore (ping_loop ())
       with e ->
-        show_info ("Handshake parse failed: " ^ Printexc.to_string e)
+        debug ("Handshake parse failed: " ^ Printexc.to_string e ^ "\nMessage was: " ^ msg)
       end
   | '2' -> (* PING *)
+      debug "Received PING, sending PONG";
       begin match !websocket with
-      | Some ws -> ws##send (Js.string "3") (* PONG *)
-      | None -> ()
+      | Some ws -> ws##send (Js.string "3")
+      | None -> debug "Cannot send PONG - no websocket connection"
       end
   | '3' -> (* PONG received *)
-      show_info "Pong received"
+      debug "Received PONG response"
   | '4' when String.length msg >= 2 -> 
       begin match msg.[1] with
-      | '0' -> (* Socket.IO connection established *)
-          show_info "Socket.IO connected"
+      | '0' -> 
+          debug "Socket.IO connection established"
       | '2' -> (* Socket.IO event *)
           if String.length msg > 2 then
             let event_json = String.sub msg 2 (String.length msg - 2) in
+            debug ("Received Socket.IO event: " ^ event_json);
             begin try
               let json = Yojson.Safe.from_string event_json in
               process_json [] json
-            with _ -> show_info ("Failed to parse event: " ^ event_json)
+            with e -> 
+              debug ("Failed to parse event: " ^ event_json ^ "\nError: " ^ Printexc.to_string e)
             end
-      | _ -> show_info ("Unknown type-4 message: " ^ msg)
+      | c -> debug ("Unknown type-4 message subtype: " ^ String.make 1 c ^ "\nFull message: " ^ msg)
       end
-| _ -> show_info ("Unhandled frame type: " ^ msg)
+  | c -> debug ("Unhandled frame type: " ^ String.make 1 c ^ "\nFull message: " ^ msg)
 
 and handle_socketio msg =
   if !verbose' then print_endline ("socket.io: " ^ msg);
@@ -623,71 +637,108 @@ and handle_socketio msg =
 show_info ("other socket.io: " ^ msg)
 
 let establish_websocket () : bool Lwt.t = 
-  if !sid = "" then
+  if !sid = "" then begin
+    debug "Cannot establish websocket - no session ID";
     Lwt.return false
-  else
+  end else begin
     let server' = if String.length server > 0 && server.[0] = '/' then 
       String.sub server 1 (String.length server - 1) else server in
     let ws_url = (if proto = "https://" then "wss://" else "ws://") ^ server' ^ pth3' ^
       "/socket.io/?EIO=3&transport=websocket&sid=" ^ !sid ^ 
       "&id=" ^ !version ^ "&name=" ^ !version in
-    show_info ("Connecting WebSocket to: " ^ ws_url);
+    debug ("Attempting WebSocket connection to: " ^ ws_url);
     try
       let ws = new%js WebSockets.webSocket (Js.string ws_url) in
       websocket := Some ws;
+      
+      ws##.onopen := Dom.handler (fun _ ->
+        debug "WebSocket connection opened";
+        Js._true
+      );
+      
+      ws##.onclose := Dom.handler (fun _ ->
+        debug "WebSocket connection closed";
+        connect := false;
+        Js._true
+      );
+      
+      ws##.onerror := Dom.handler (fun _ ->
+        debug "WebSocket error occurred";
+        Js._true
+      );
+      
       ws##.onmessage := Dom.handler (fun e ->
         let msg = Js.to_string e##.data in
         handle_frame msg;
         Js._true
       );
-      ws##send (Js.string "40"); (* Connection ack *)
+      
+      debug "Sending initial connection acknowledgment";
+      ws##send (Js.string "40");
       Lwt.return true
     with e ->
-      show_info ("WebSocket connection failed: " ^ Printexc.to_string e);
+      debug ("WebSocket connection failed: " ^ Printexc.to_string e);
       Lwt.return false
+  end
 
 let take_control () =
+  debug "Initiating take control sequence";
   if !sid = "" then begin
-    (* Get session ID first *)
-    let* _ = get_session_id (fun s -> Lwt.return_unit) in
+    debug "No session ID - requesting new session";
+    let* _ = get_session_id (fun s -> 
+      debug ("Session ID callback received: " ^ s);
+      Lwt.return_unit
+    ) in
     let* established = establish_websocket () in
     if established then begin
       control_pending := true;
       match !websocket with
       | Some ws ->
           let msg = {|42["message","takeControl"]|} in
+          debug ("Sending take control message: " ^ msg);
           ws##send (Js.string msg);
-          show_info "Requesting control";
           Lwt.return_unit
       | None -> 
+          debug "Cannot take control - websocket connection lost";
           control_pending := false;
-          show_info "No websocket connection";
           Lwt.return_unit
-    end else Lwt.return_unit
-  end else if not !has_control && not !control_pending then
+    end else begin
+      debug "WebSocket establishment failed";
+      Lwt.return_unit
+    end
+  end else if not !has_control && not !control_pending then begin
+    debug "Have session ID but no control - requesting control";
     match !websocket with
     | Some ws ->
         control_pending := true;
         let msg = {|42["message","takeControl"]|} in
+        debug ("Sending take control message: " ^ msg);
         ws##send (Js.string msg);
-        show_info "Requesting control";
         Lwt.return_unit
     | None ->
+        debug "No websocket connection - attempting to establish";
         let* established = establish_websocket () in
         if established then begin
           control_pending := true;
           match !websocket with
           | Some ws ->
               let msg = {|42["message","takeControl"]|} in
+              debug ("Sending take control message: " ^ msg);
               ws##send (Js.string msg);
-              show_info "Requesting control";
               Lwt.return_unit
           | None -> 
+              debug "Lost websocket connection after establishment";
               control_pending := false;
-              show_info "No websocket connection";
               Lwt.return_unit
-        end else Lwt.return_unit
-  else Lwt.return_unit
+        end else begin
+          debug "Failed to establish websocket connection";
+          Lwt.return_unit
+        end
+  end else begin
+    debug (Printf.sprintf "Take control blocked - has_control: %b, control_pending: %b" 
+      !has_control !control_pending);
+    Lwt.return_unit
+  end
 
 let errchklst' user = function
   | (kw', `List [`String "message"; `String msg]) ->
