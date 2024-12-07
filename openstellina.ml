@@ -706,6 +706,30 @@ and handle_frame msg =
             let json = Yojson.Safe.from_string event_json in
             match json with
             | `List [`String "STATUS_UPDATED"; status] ->
+		begin match Yojson.Safe.Util.(member "telescopeId" status |> to_string_option) with 
+		| Some id when id <> !Telescope.telescopeId ->
+		    new_challenge := true;
+		    show_info ("New telescope ID: " ^ id);
+		    Telescope.telescopeId := id
+		| _ -> ()
+		end;
+
+		begin match Yojson.Safe.Util.(member "bootCount" status |> to_int_option) with
+		| Some count when count <> !Telescope.bootCnt ->
+		    new_challenge := true;
+		    show_info ("New boot count: " ^ string_of_int count);
+		    Telescope.bootCnt := count
+		| _ -> ()
+		end;
+
+                (* Process challenge updates from status message *)
+                begin match Yojson.Safe.Util.(member "challenge" status |> to_string_option) with
+                | Some challenge when challenge <> !Telescope.challengeref ->
+		    new_challenge := true;
+                    show_info ("New challenge received: " ^ challenge);
+                    Telescope.challengeref := challenge;
+                | _ -> ()
+                end;
                 (* Check masterDeviceId in status update *)
                 begin match Yojson.Safe.Util.(member "masterDeviceId" status |> to_string_option) with
                 | Some "openstellina-web" when !control_state <> `HasControl ->
@@ -839,8 +863,6 @@ let cnvauth s =
   try let auth = Telescope.cnv s in let authstr = Yojson.Safe.Util.to_string ( Yojson.Safe.Util.member "authorization" auth ) in show_info ("auth "^String.sub authstr 16 64^" ..."); Telescope.authref := authstr; 
   with _ -> Telescope.authref := "auth fail"
 
-let idlecnt = ref 0
-  
 let rec action_func pending = function
   | TakeControl -> 
       let* () = take_control () in
@@ -853,7 +875,7 @@ let rec action_func pending = function
         Js_of_ocaml_lwt.Lwt_js.sleep 0.1
       else if !has_control then begin
         (match !action with
-        | Idle -> incr idlecnt; if !idlecnt < 30 then Js_of_ocaml_lwt.Lwt_js.sleep 0.1 else (idlecnt := 0; Telescope.status_fun session)
+        | Idle -> Js_of_ocaml_lwt.Lwt_js.sleep 0.1
         | a -> action_func pending a)
       end else
         Js_of_ocaml_lwt.Lwt_js.sleep 0.1
@@ -965,11 +987,19 @@ let create_control_status_widget doc =
   take_button##.value := Js.string "Take Control";
   take_button##.id := Js.string "take-control-button";
   take_button##.className := Js.string "control-button take";
-  
+  take_button##.onclick := Dom_html.handler (fun _ -> 
+    action := TakeControl;
+    Js._false
+  );
+    
   let release_button = Dom_html.createInput ~_type:(Js.string "button") doc in
   release_button##.value := Js.string "Release Control";
   release_button##.id := Js.string "release-control-button";
   release_button##.className := Js.string "control-button release";
+  release_button##.onclick := Dom_html.handler (fun _ ->
+    action := ReleaseControl;
+    Js._false
+  );
   
   (* Assemble the widget *)
   Dom.appendChild indicator status_dot;
@@ -994,8 +1024,10 @@ let create_control_panel doc callback =
   Dom.appendChild panel control_status;
   
   let buttons = [
+(*
     ("Take Control", (fun _ -> action := TakeControl; Js._false));
     ("Release Control", (fun _ -> action := ReleaseControl; Js._false));
+*)
     ("Initialize", (fun _ -> action := Init; Js._false));
     ("Observe", (fun _ -> action := Observe; Js._false));
     ("Park", (fun _ -> action := Park; Js._false));
