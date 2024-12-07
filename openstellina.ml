@@ -26,6 +26,15 @@ type action =
   | Park
   | Openarm
 
+(*
+type motor_update = {
+  position: float;
+  state: string;
+  calibrated: bool;
+  at_stop: bool option; (* Only AZ has atStop *)
+}
+*)
+
 (* Control state tracking variables *)
 let control_state = ref (`NoControl:control_state)
 let control_owner = ref None
@@ -188,6 +197,18 @@ let process_json_value path = function
 let create_telescope_display doc =
   let display = create_styled_div doc "telescope-display" in
 
+  (* Move Motors section to the top since it's more important for control *)
+  let motors = create_status_section doc "Motors" [
+    ("AZ Position", az_posref);
+    ("AZ State", ref !motor_state_ref);
+    ("ALT Position", alt_posref);
+    ("ALT State", ref !motor_state_ref);
+    ("DER Position", der_posref);
+    ("DER State", ref !motor_state_ref);
+    ("MAP Position", map_posref);
+    ("MAP State", ref !motor_state_ref)
+  ] in
+
   let system = create_status_section doc "System" [
     ("ID", Telescope.telescopeId);
     ("Model", Telescope.model_ref);
@@ -264,6 +285,33 @@ let update_display_value id value =
   (match Dom_html.getElementById_opt id with
   | Some element -> element##.innerHTML := Js.string value
   | None -> ())
+
+(* Process motor updates from status message *)
+let process_motors status =
+  let open Yojson.Safe.Util in
+  try 
+    let motors = member "motors" status in
+    (try
+      let az = member "AZ" motors in
+      let az_pos = member "position" az |> to_float in
+      let az_state = member "state" az |> to_string in
+      let az_stop = member "atStop" az |> to_bool_option in
+      let az_cal = member "calibrated" az |> to_bool in
+      debug ("AZ: " ^ string_of_float az_pos ^ " " ^ az_state);
+      update_display_value "status-AZ Position" (Printf.sprintf "%.2f°" az_pos);
+      update_display_value "status-AZ State" az_state;
+    with _ -> ());
+    
+    (try
+      let alt = member "ALT" motors in  
+      let alt_pos = member "position" alt |> to_float in
+      let alt_state = member "state" alt |> to_string in
+      let alt_cal = member "calibrated" alt |> to_bool in
+      debug ("ALT: " ^ string_of_float alt_pos ^ " " ^ alt_state);
+      update_display_value "status-ALT Position" (Printf.sprintf "%.2f°" alt_pos);
+      update_display_value "status-ALT State" alt_state;
+    with _ -> ());
+  with _ -> ()
 
 let last_ctrl = ref (`OtherHasControl "")
 let last_class = ref ""
@@ -706,6 +754,9 @@ and handle_frame msg =
             let json = Yojson.Safe.from_string event_json in
             match json with
             | `List [`String "STATUS_UPDATED"; status] ->
+
+                process_motors status;
+
 		begin match Yojson.Safe.Util.(member "telescopeId" status |> to_string_option) with 
 		| Some id when id <> !Telescope.telescopeId ->
 		    new_challenge := true;
@@ -1022,7 +1073,20 @@ let create_control_panel doc callback =
   let control_status = create_control_status_widget doc in
 
   Dom.appendChild panel control_status;
+
+  (* Add a motor status section *)
+  let motor_status = create_styled_div doc "motor-status" in
+  motor_status##.className := Js.string "status-section"; (* Style similar to other sections *)
   
+  let motor_info = create_status_section doc "Motor Status" [
+    ("AZ Position", az_posref);
+    ("AZ State", ref !motor_state_ref);
+    ("ALT Position", alt_posref);
+    ("ALT State", ref !motor_state_ref);
+  ] in
+  Dom.appendChild motor_status motor_info;
+  Dom.appendChild panel motor_status;
+
   let buttons = [
 (*
     ("Take Control", (fun _ -> action := TakeControl; Js._false));
@@ -1108,6 +1172,7 @@ let create_tabs doc content_list =
   Dom.appendChild tabs_container tab_buttons;
   Dom.appendChild tabs_container tab_content;
   tabs_container
+
 let apply_styles doc =
   let style = Dom_html.createStyle doc in
   style##.innerHTML := Js.string {|
@@ -1269,6 +1334,25 @@ let apply_styles doc =
       opacity: 0.5;
       cursor: not-allowed;
     }
+    .motor-status {
+      margin: 12px 0;
+      padding: 12px;
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    .motor-status .status-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-family: monospace;
+    }
+
+    .motor-status .status-value {
+      font-weight: bold;
+    }
+
   |};
 Dom.appendChild doc##.head style
 
