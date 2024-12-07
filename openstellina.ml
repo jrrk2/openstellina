@@ -315,29 +315,62 @@ let process_motors status =
 
 let last_ctrl = ref (`OtherHasControl "")
 let last_class = ref ""
+(* Add button refs to track panel buttons *)
+let panel_buttons = ref [] 
+let panel_warning = ref None
+let last_display_state = ref (`NoControl:control_state)
 
 let update_control_display () =
+  if !control_state <> !last_display_state then begin
+    show_info (Printf.sprintf "Control state changed from %s to %s"
+      (match !last_display_state with
+       | `NoControl -> "NoControl"
+       | `RequestingControl -> "RequestingControl"
+       | `HasControl -> "HasControl" 
+       | `OtherHasControl u -> "OtherHasControl:" ^ u)
+      (match !control_state with
+       | `NoControl -> "NoControl"
+       | `RequestingControl -> "RequestingControl"
+       | `HasControl -> "HasControl"
+       | `OtherHasControl u -> "OtherHasControl:" ^ u));
+    last_display_state := !control_state;
+    (* Rest of display update code *)
+  end;
   let debug_msg s = if !verbose then debug ("Control update: " ^ s) in
-  if !control_state <> !last_ctrl then debug_msg (match !control_state with
-    | `NoControl -> "State: NoControl"
-    | `RequestingControl -> "State: RequestingControl" 
-    | `HasControl -> "State: HasControl"
-    | `OtherHasControl u -> "State: OtherHasControl - " ^ u);
-  last_ctrl := !control_state;
 
   (* Update status dot *)
   (match Dom_html.getElementById_opt "control-status-dot" with
-  | Some dot ->
+  | Some dot -> 
       let status_class = match !control_state with
       | `NoControl -> "status-dot no-control"  
       | `RequestingControl -> "status-dot requesting"
       | `HasControl -> "status-dot has-control"
       | `OtherHasControl _ -> "status-dot other-control"
       in
-      if !last_class <> status_class then debug_msg ("Setting dot class to: " ^ status_class);
-      last_class := status_class;
       dot##.className := Js.string status_class
   | None -> debug_msg "Could not find status dot");
+
+  (* Update control panel buttons *)
+  List.iter (fun btn ->
+    btn##.disabled := Js.bool (match !control_state with
+      | `HasControl -> false 
+      | `NoControl -> btn##.value <> Js.string "Take Control"
+      | `RequestingControl -> true
+      | `OtherHasControl _ -> btn##.value = Js.string "Release Control"
+    )
+  ) !panel_buttons;
+
+  (* Update warning display *)
+  (match !panel_warning with
+  | Some warning ->
+      warning##.style##.display := Js.string (
+        match !control_state with
+        | `OtherHasControl device -> 
+            warning##.innerHTML := Js.string ("Telescope is being controlled by: " ^ device);
+            "block"
+        | _ -> "none"
+      )
+  | None -> ());
 
   (* Update status text *)
   (match Dom_html.getElementById_opt "control-status-text" with
@@ -749,12 +782,12 @@ and handle_frame msg =
     | '2' -> (* Socket.IO event *)
         if String.length msg > 2 then
           let event_json = String.sub msg 2 (String.length msg - 2) in
-          if false then debug ("Received Socket.IO event: " ^ event_json);
+          print_endline ("Received Socket.IO event: " ^ event_json);
           begin try
             let json = Yojson.Safe.from_string event_json in
             match json with
             | `List [`String "STATUS_UPDATED"; status] ->
-
+                show_info "status updated";
                 process_motors status;
 
 		begin match Yojson.Safe.Util.(member "telescopeId" status |> to_string_option) with 
@@ -783,15 +816,40 @@ and handle_frame msg =
                 end;
                 (* Check masterDeviceId in status update *)
                 begin match Yojson.Safe.Util.(member "masterDeviceId" status |> to_string_option) with
+                | Some device_id when device_id <> "openstellina-web" && !control_state = `HasControl ->
+                    (* We lost control to another device *)
+                    control_state := `OtherHasControl device_id;
+                    control_owner := Some device_id;
+                    show_info ("Control taken by: " ^ device_id);
+                    has_control := false;
+                    control_pending := false;
+                    update_control_display ()
                 | Some "openstellina-web" when !control_state <> `HasControl ->
+                    (* We got control *)
                     control_state := `HasControl;
                     control_owner := Some "openstellina";
-                    show_info "Control granted (via status)";
-                    print_endline "Control granted (via status)";
+                    show_info "Control granted";
                     has_control := true;
                     control_pending := false;
                     update_control_display ()
-                | _ -> process_json [] json
+                | None when !control_state <> `NoControl ->
+                    (* No one has control *)
+                    control_state := `NoControl;
+                    control_owner := None;
+                    show_info "Control released";
+                    has_control := false;
+                    control_pending := false;
+                    update_control_display ()
+		| _ -> 
+		    let device_str = match Yojson.Safe.Util.(member "masterDeviceId" status |> to_string_option) with
+		    | Some id -> "masterDeviceId: " ^ id
+		    | None -> "masterDeviceId: None" in
+		    show_info ("Other change - " ^ device_str ^ ", current state: " ^ 
+		      (match !control_state with
+		       | `NoControl -> "NoControl"
+		       | `RequestingControl -> "RequestingControl"
+		       | `HasControl -> "HasControl"
+		       | `OtherHasControl u -> "OtherHasControl:" ^ u))
                 end
             | `List [`String "CONTROL_GRANTED"] ->
                 control_state := `HasControl;
@@ -1074,6 +1132,12 @@ let create_control_panel doc callback =
 
   Dom.appendChild panel control_status;
 
+  (* Add warning when someone else has control *)
+  let warning = create_styled_div doc "control-warning" in
+  warning##.style##.display := Js.string "none";
+  panel_warning := Some warning;
+  Dom.appendChild panel warning;
+  
   (* Add a motor status section *)
   let motor_status = create_styled_div doc "motor-status" in
   motor_status##.className := Js.string "status-section"; (* Style similar to other sections *)
@@ -1087,28 +1151,26 @@ let create_control_panel doc callback =
   Dom.appendChild motor_status motor_info;
   Dom.appendChild panel motor_status;
 
-  let buttons = [
-(*
+  (* Create buttons and store refs *)
+  panel_buttons := List.map (fun (text, onclick) ->
+    let btn = create_button doc text onclick in
+    btn##.disabled := Js._false;
+    Dom.appendChild panel btn;
+    btn
+  ) [
     ("Take Control", (fun _ -> action := TakeControl; Js._false));
     ("Release Control", (fun _ -> action := ReleaseControl; Js._false));
-*)
     ("Initialize", (fun _ -> action := Init; Js._false));
     ("Observe", (fun _ -> action := Observe; Js._false));
     ("Park", (fun _ -> action := Park; Js._false));
     ("Open arm", (fun _ -> action := Openarm; Js._false));
     ("Status", (fun _ -> action := Status; Js._false));
     ("Consume", (fun _ -> action := Consume; Js._false));
-  ] in
+  ];
 
-  List.iter
-    (fun (text, onclick) ->
-      let btn = create_button doc text onclick in
-      btn##.disabled := Js._false;
-      Dom.appendChild panel btn)
-    buttons;
   panel
 
-  let create_message_panel doc =
+let create_message_panel doc =
   let panel = create_styled_div doc "message-panel" in
   panel##.id := Js.string "telescope-messages";
   panel
@@ -1350,6 +1412,15 @@ let apply_styles doc =
     }
 
     .motor-status .status-value {
+      font-weight: bold;
+    }
+
+    .control-warning {
+      margin: 8px 0;
+      padding: 8px 12px;
+      background: #fee2e2;
+      color: #991b1b;
+      border-radius: 4px;
       font-weight: bold;
     }
 
