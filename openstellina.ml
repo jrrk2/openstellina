@@ -5,6 +5,14 @@ open Cookie
 open Telescope
 open Lwt.Infix
 
+(* Control state type definition *)
+type control_state = [
+  | `NoControl          (* No one has control *)
+  | `RequestingControl  (* We are requesting control *)
+  | `HasControl        (* We have control *)
+  | `OtherHasControl of string  (* Another client has control *)
+]
+
 type action =
   | Idle
   | TakeControl
@@ -18,6 +26,11 @@ type action =
   | Openarm
   | Get1
   | Post1
+
+(* Control state tracking variables *)
+let control_state = ref (`NoControl:control_state)
+let control_owner = ref None
+let control_request_time = ref 0.0
 
 let websocket = ref None
 
@@ -584,8 +597,9 @@ and connect_websocket proto server port =
     show_info ("WebSocket connection failed: " ^ Printexc.to_string e);
 false
 
+(* Update handle_frame to handle control messages *)
 and handle_frame msg =
-  debug ("Received WebSocket frame: " ^ (if String.length msg < 80 then msg else String.sub msg 0 80 ^" ..."));
+  debug ("Received WebSocket frame: " ^ (if String.length msg < 80 then msg else String.sub msg 0 80 ^ " ..."));
   match msg.[0] with
   | '0' -> (* Socket.IO handshake *)
       begin try
@@ -598,14 +612,16 @@ and handle_frame msg =
         debug (Printf.sprintf "Handshake complete - SID: %s, Ping interval: %dms, Timeout: %dms" 
           !sid !ping_interval !ping_timeout);
         connect := true;
-	(match !websocket with
-	| Some ws ->
-	    let msg = {|42["message","takeControl"]|} in
-	    debug ("Sending take control message: " ^ msg);
-	    ws##send (Js.string msg);
-	| None -> 
-	    debug "Cannot take control - websocket connection lost";
-	    control_pending := false);
+        if !control_state = `RequestingControl then
+          (match !websocket with
+          | Some ws ->
+              let msg = {|42["message","takeControl"]|} in
+              debug ("Sending take control message: " ^ msg);
+              ws##send (Js.string msg)
+          | None -> 
+              debug "Cannot take control - websocket connection lost";
+              control_state := `NoControl;
+              control_pending := false);
         ignore (ping_loop ())
       with e ->
         debug ("Handshake parse failed: " ^ Printexc.to_string e ^ "\nMessage was: " ^ msg)
@@ -620,21 +636,41 @@ and handle_frame msg =
       debug "Received PONG response"
   | '4' when String.length msg >= 2 -> 
       begin match msg.[1] with
-      | '0' -> 
-          debug "Socket.IO connection established"
       | '2' -> (* Socket.IO event *)
           if String.length msg > 2 then
             let event_json = String.sub msg 2 (String.length msg - 2) in
-            debug ("Received Socket.IO event: " ^  (if String.length event_json < 80 then event_json else String.sub event_json 0 80 ^" ..."));
+            debug ("Received Socket.IO event: " ^ (if String.length event_json < 80 then event_json else String.sub event_json 0 80 ^ " ..."));
             begin try
               let json = Yojson.Safe.from_string event_json in
-              process_json [] json
+              match json with
+              | `List [`String "CONTROL_GRANTED"] ->
+                  control_state := `HasControl;
+                  control_owner := Some "openstellina";
+                  show_info "Control granted";
+                  has_control := true;
+                  control_pending := false
+              | `List [`String "CONTROL_DENIED"; `String reason] ->
+                  control_state := `NoControl;
+                  show_info ("Control denied: " ^ reason);
+                  has_control := false;
+                  control_pending := false
+              | `List [`String "CONTROL_RELEASED"] ->
+                  control_state := `NoControl;
+                  control_owner := None;
+                  show_info "Control released";
+                  has_control := false
+              | `List [`String "CONTROL_TAKEN"; `String user] ->
+                  control_state := `OtherHasControl user;
+                  control_owner := Some user;
+                  show_info ("Control taken by " ^ user);
+                  has_control := false
+              | _ -> process_json [] json
             with e -> 
               debug ("Failed to parse event: " ^ event_json ^ "\nError: " ^ Printexc.to_string e)
             end
-      | c -> debug ("Unknown type-4 message subtype: " ^ String.make 1 c ^ "\nFull message: " ^ msg)
+      | _ -> debug ("Unknown type-4 message subtype: " ^ String.make 1 msg.[1] ^ "\nFull message: " ^ msg)
       end
-  | c -> debug ("Unhandled frame type: " ^ String.make 1 c ^ "\nFull message: " ^ msg)
+| c -> debug ("Unhandled frame type: " ^ String.make 1 c ^ "\nFull message: " ^ msg)
 
 and handle_socketio msg =
   if !verbose' then print_endline ("socket.io: " ^ msg);
@@ -662,17 +698,20 @@ let session (arg:Yojson.Safe.t) =
   errchklst' true ("R", arg);
   update_telescope_display ()
 
+(* Update the take_control function to use the new state *)
 let take_control () =
   debug "Initiating take control sequence";
   if !sid = "" then begin
     debug "No session ID - requesting new session";
+    control_state := `RequestingControl;
     let* _ = get_session_id session in
     control_pending := true;
     Lwt.return_unit
-  end else if not !has_control && not !control_pending then begin
+  end else if !control_state = `NoControl then begin
     debug "Have session ID but no control - requesting control";
     match !websocket with
     | Some ws ->
+        control_state := `RequestingControl;
         control_pending := true;
         let msg = {|42["message","takeControl"]|} in
         debug ("Sending take control message: " ^ msg);
@@ -682,6 +721,7 @@ let take_control () =
         debug "No websocket connection - attempting to establish";
         if connect_websocket Telescope.proto Telescope.server Telescope.pth3' then
         begin
+          control_state := `RequestingControl;
           control_pending := true;
           match !websocket with
           | Some ws ->
@@ -692,16 +732,40 @@ let take_control () =
           | None -> 
               debug "Lost websocket connection after establishment";
               control_pending := false;
+              control_state := `NoControl;
               Lwt.return_unit
         end else begin
           debug "Failed to establish websocket connection";
+          control_state := `NoControl;
           Lwt.return_unit
         end
   end else begin
-    debug (Printf.sprintf "Take control blocked - has_control: %b, control_pending: %b" 
-      !has_control !control_pending);
+    debug (Printf.sprintf "Take control blocked - current state: %s" 
+      (match !control_state with
+       | `NoControl -> "NoControl"
+       | `RequestingControl -> "RequestingControl"
+       | `HasControl -> "HasControl"
+       | `OtherHasControl user -> "OtherHasControl:" ^ user));
     Lwt.return_unit
   end
+
+(* Update release_control to use the new state *)
+let release_control () =
+  match !control_state with
+  | `HasControl ->
+      begin match !websocket with
+      | Some ws ->
+          let msg = {|42["message","releaseControl"]|} in
+          ws##send (Js.string msg);
+          control_state := `NoControl;
+          control_owner := None;
+          has_control := false;
+          show_info "Released control"
+      | None ->
+          show_info "Cannot release control - no websocket connection"
+      end
+  | _ ->
+      show_info "Cannot release control - do not have control"
 
 let cnvauth s =
   try let auth = Telescope.cnv s in let authstr = Yojson.Safe.Util.to_string ( Yojson.Safe.Util.member "authorization" auth ) in show_info ("auth "^String.sub authstr 16 64^" ..."); Telescope.authref := authstr; 
@@ -807,11 +871,93 @@ let create_connection_status doc =
   update_status ();
   status_div
 
+(* Create the control status widget *)
+let create_control_status_widget doc =
+  let widget = create_styled_div doc "control-status-widget" in
+  
+  (* Create header with status indicator *)
+  let header = create_styled_div doc "control-status-header" in
+  let indicator = create_styled_div doc "control-indicator" in
+  let status_dot = create_styled_div doc "status-dot" in
+  let status_text = Dom_html.createDiv doc in
+  
+  (* Create details section *)
+  let details = create_styled_div doc "control-details" in
+  details##.id := Js.string "control-details";
+  
+  (* Create action buttons *)
+  let actions = create_styled_div doc "control-actions" in
+  let take_button = create_button doc "Take Control" (fun _ ->
+    action := TakeControl;
+    Js._false
+  ) in
+  let release_button = create_button doc "Release Control" (fun _ ->
+    action := ReleaseControl;
+    Js._false
+  ) in
+  
+  take_button##.className := Js.string "control-button take";
+  release_button##.className := Js.string "control-button release";
+  
+  (* Add everything to the DOM *)
+  Dom.appendChild indicator status_dot;
+  Dom.appendChild indicator status_text;
+  Dom.appendChild header indicator;
+  Dom.appendChild actions take_button;
+  Dom.appendChild actions release_button;
+  Dom.appendChild widget header;
+  Dom.appendChild widget details;
+  Dom.appendChild widget actions;
+  
+  (* Create update function *)
+  let update_widget () =
+    let (status_class, status_msg, details_msg, can_take, can_release) = 
+      match !control_state with
+      | `NoControl -> 
+          ("no-control", 
+           "No Control",
+           "The telescope is not being controlled",
+           true, false)
+      | `RequestingControl ->
+          ("requesting",
+           "Requesting Control",
+           "Attempting to take control of the telescope...",
+           false, false)
+      | `HasControl ->
+          ("has-control",
+           "Has Control",
+           "You are controlling the telescope",
+           false, true)
+      | `OtherHasControl user ->
+          ("other-control",
+           "Other User",
+           Printf.sprintf "Telescope is being controlled by %s" user,
+           false, false)
+    in
+    
+    status_dot##.className := Js.string ("status-dot " ^ status_class);
+    status_text##.textContent := Js.some (Js.string status_msg);
+    details##.textContent := Js.some (Js.string details_msg);
+    take_button##.disabled := Js.bool (not can_take);
+    release_button##.disabled := Js.bool (not can_release)
+  in
+  
+  (* Set up periodic updates *)
+  let rec update_loop () =
+    update_widget ();
+    let%lwt () = Js_of_ocaml_lwt.Lwt_js.sleep 0.5 in
+    update_loop ()
+  in
+  ignore (update_loop ());
+  
+  widget
+
 (* Modified control panel *)
 let create_control_panel doc callback =
   let panel = create_styled_div doc "control-panel" in
-  let control_status = create_styled_div doc "control-status" in
-  control_status##.id := Js.string "control-status";
+  (* Add the control status widget at the top *)
+  let control_status = create_control_status_widget doc in
+
   Dom.appendChild panel control_status;
   
   let buttons = [
@@ -899,7 +1045,6 @@ let create_tabs doc content_list =
   Dom.appendChild tabs_container tab_buttons;
   Dom.appendChild tabs_container tab_content;
   tabs_container
-
 let apply_styles doc =
   let style = Dom_html.createStyle doc in
   style##.innerHTML := Js.string {|
@@ -994,8 +1139,75 @@ let apply_styles doc =
     .status-label {
       color: #666;
     }
+
+    /* Control Status Widget Styles */
+    .control-status-widget {
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+    
+    .control-status-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .control-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    
+    .status-dot.no-control { background-color: #666666; }
+    .status-dot.has-control { background-color: #10b981; }
+    .status-dot.requesting { background-color: #f59e0b; }
+    .status-dot.other-control { background-color: #ef4444; }
+    
+    .control-details {
+      font-size: 14px;
+      color: #666;
+    }
+
+    .control-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .control-button {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.2s;
+    }
+
+    .control-button.take {
+      background-color: #10b981;
+      color: white;
+    }
+
+    .control-button.release {
+      background-color: #ef4444;
+      color: white;
+    }
+
+    .control-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
   |};
-  Dom.appendChild doc##.head style
+Dom.appendChild doc##.head style
 
 let handle_connect callback status_div _ =
   callback true;
@@ -1010,6 +1222,7 @@ let handle_action action_type _ =
   action := action_type;
   Js._false
 
+  
 let modern_gui doc =
   apply_styles doc;
   
