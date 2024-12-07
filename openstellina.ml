@@ -2,10 +2,13 @@ open Js_of_ocaml
 open Lwt.Syntax
 open Astro_utils
 open Cookie
+open Telescope
+open Lwt.Infix
 
 type action =
   | Idle
-  | Connect
+  | TakeControl
+  | ReleaseControl  
   | Motor 
   | Status
   | Consume
@@ -30,22 +33,17 @@ let verbose = ref false
 let verbose' = ref true
 let poll_type = ref true
 
-let canvas =
-  let r = Dom_html.createCanvas Dom_html.document in
-  r##.width := int_of_float canvas_width;
-  r##.height := int_of_float canvas_height;
-  r
+(* Add control state tracking *)
+let has_control = ref false
+let control_pending = ref false
+let sid = ref ""
+let ping_interval = ref 25000
+let ping_timeout = ref 60000
 
 let create_styled_div doc class_name =
  let div = Dom_html.createDiv doc in
  div##.className := Js.string class_name;
 div
-
-type graphics =
-  | Empty
-  | Fill of string * float * float
-  | Font of string
-  | Stroke of float * float * float * float
 
 let add_message msg_type text =
   let doc = Dom_html.document in
@@ -61,6 +59,63 @@ let add_message msg_type text =
 let show_error text = add_message "error" text
 let show_info text = if false then print_endline text; add_message "info" text
 let new_challenge = ref false
+let get_session_id fn =
+  let headers = Astro_utils.split ["Accept: */*"] in
+  let params = [
+    ("EIO", "3");
+    ("transport", "polling");
+    ("id", !version);
+    ("name", !version)
+  ] in
+  let handle_session s hdrs =
+    try
+      (* Strip off the Socket.IO packet type (first character) *)
+      let json_str = String.sub s 1 (String.length s - 1) in
+      let json = Yojson.Safe.from_string json_str in
+      let open Yojson.Safe.Util in
+      sid := member "sid" json |> to_string;
+      ping_interval := member "pingInterval" json |> to_int;
+      ping_timeout := member "pingTimeout" json |> to_int;
+      show_info ("Got session ID: " ^ !sid);
+      fn s
+    with e -> 
+      show_info ("Session ID parse failed: " ^ Printexc.to_string e ^ "\nResponse was: " ^ s);
+      Lwt.return_unit
+  in
+  Astro_utils.get' proto server params headers 
+    (pth3'^"/socket.io/") handle_session hdrs
+
+(* Release control sequence *)
+let release_control () =
+  if !has_control then begin
+    match !websocket with
+    | Some ws ->
+        let msg = {|42["message","releaseControl"]|} in
+        ws##send (Js.string msg);
+        show_info "Releasing control"
+    | None ->
+        has_control := false;
+        show_info "No websocket connection"
+  end
+
+(* Add control message constructors *)
+let make_take_control_msg () =
+  {|42["message","takeControl"]|}
+
+let make_release_control_msg () =
+  {|42["message","releaseControl"]|}
+
+let canvas =
+  let r = Dom_html.createCanvas Dom_html.document in
+  r##.width := int_of_float canvas_width;
+  r##.height := int_of_float canvas_height;
+  r
+
+type graphics =
+  | Empty
+  | Fill of string * float * float
+  | Font of string
+  | Stroke of float * float * float * float
 
 let send_message msg =
   match !websocket with
@@ -518,20 +573,10 @@ and handle_frame msg =
         let json = String.sub msg 1 (String.length msg - 1) in
         let handshake = Yojson.Safe.from_string json in
         let open Yojson.Safe.Util in
-        let sid = member "sid" handshake |> to_string in
-        let ping_interval = member "pingInterval" handshake |> to_int in
-        let ping_timeout = member "pingTimeout" handshake |> to_int in
-        Telescope.session' := { Telescope.sid; ping_int=ping_interval; ping_tim=ping_timeout };
-        show_info ("Handshake complete, sid: " ^ sid);
-        match !websocket with
-        | Some ws ->
-            (* Send connection ack *)
-            ws##send (Js.string "40");
-            (* Then send identify message *)
-            let identify = Printf.sprintf {|42["sendUserName",{"device":"openstellina-2.003","name":"openstellina-2.003"}]|} in
-            show_info ("Sending identify: " ^ identify);
-            ws##send (Js.string identify)
-        | None -> ()
+        sid := member "sid" handshake |> to_string;
+        ping_interval := member "pingInterval" handshake |> to_int;
+        ping_timeout := member "pingTimeout" handshake |> to_int;
+        show_info ("Handshake complete, sid: " ^ !sid)
       with e ->
         show_info ("Handshake parse failed: " ^ Printexc.to_string e)
       end
@@ -541,10 +586,37 @@ and handle_frame msg =
           if String.length msg > 2 then
             let event_json = String.sub msg 2 (String.length msg - 2) in
             if String.length event_json < 80 then show_info ("Event: " ^ event_json);
-            process_json [] (Yojson.Safe.from_string event_json)
-      | '0' -> (* Connection established *)
-          show_info "Socket.IO connection established"
+            begin try
+              let json = Yojson.Safe.from_string event_json in
+              match json with
+              | `List [`String "message"; `String "takeControl"; 
+                       `Assoc [("success", `Bool true)]] ->
+                  has_control := true;
+                  control_pending := false;
+                  show_info "Successfully took control";
+                  let status = Dom_html.getElementById_opt "control-status" in
+                  Option.iter (fun div ->
+                    div##.innerHTML := Js.string "Control: Active";
+                    div##.className := Js.string "status-pill connected"
+                  ) status
+              | `List [`String "message"; `String "releaseControl";
+                       `Assoc [("success", `Bool true)]] ->
+                  has_control := false;
+                  show_info "Successfully released control";
+                  let status = Dom_html.getElementById_opt "control-status" in
+                  Option.iter (fun div ->
+                    div##.innerHTML := Js.string "Control: Inactive";
+                    div##.className := Js.string "status-pill disconnected"
+                  ) status
+              | _ -> process_json [] json
+            with _ -> process_json [] (Yojson.Safe.from_string event_json)
+            end
       | _ -> show_info ("Unknown type-4 message: " ^ msg)
+      end
+  | '2' -> (* PING *)
+      begin match !websocket with
+      | Some ws -> ws##send (Js.string "3") (* PONG *)
+      | None -> ()
       end
   | '3' -> show_info "Pong received"
   | _ -> show_info ("Unhandled frame type: " ^ msg)
@@ -564,6 +636,68 @@ and handle_socketio msg =
      show_info ("socket.io message: " ^ s)
   | _ -> 
 show_info ("other socket.io: " ^ msg)
+
+and establish_websocket () : bool Lwt.t = 
+  if !sid = "" then
+    Lwt.return false
+  else
+    let server' = if String.length server > 0 && server.[0] = '/' then 
+      String.sub server 1 (String.length server - 1) else server in
+    let ws_url = (if proto = "https://" then "wss://" else "ws://") ^ server' ^ pth3' ^
+      "/socket.io/?EIO=3&transport=websocket&sid=" ^ !sid ^ 
+      "&id=" ^ !version ^ "&name=" ^ !version in
+    show_info ("Connecting WebSocket to: " ^ ws_url);
+    try
+      let ws = new%js WebSockets.webSocket (Js.string ws_url) in
+      websocket := Some ws;
+      process_ws_messages ws;
+      ws##send (Js.string "40"); (* Connection ack *)
+      Lwt.return true
+    with e ->
+      show_info ("WebSocket connection failed: " ^ Printexc.to_string e);
+      Lwt.return false
+let take_control () =
+  if !sid = "" then begin
+    (* Get session ID first *)
+    let* _ = get_session_id (fun s -> Lwt.return_unit) in
+    let* established = establish_websocket () in
+    if established then begin
+      control_pending := true;
+      match !websocket with
+      | Some ws ->
+          let msg = {|42["message","takeControl"]|} in
+          ws##send (Js.string msg);
+          show_info "Requesting control";
+          Lwt.return_unit
+      | None -> 
+          control_pending := false;
+          show_info "No websocket connection";
+          Lwt.return_unit
+    end else Lwt.return_unit
+  end else if not !has_control && not !control_pending then
+    match !websocket with
+    | Some ws ->
+        control_pending := true;
+        let msg = {|42["message","takeControl"]|} in
+        ws##send (Js.string msg);
+        show_info "Requesting control";
+        Lwt.return_unit
+    | None ->
+        let* established = establish_websocket () in
+        if established then begin
+          control_pending := true;
+          match !websocket with
+          | Some ws ->
+              let msg = {|42["message","takeControl"]|} in
+              ws##send (Js.string msg);
+              show_info "Requesting control";
+              Lwt.return_unit
+          | None -> 
+              control_pending := false;
+              show_info "No websocket connection";
+              Lwt.return_unit
+        end else Lwt.return_unit
+  else Lwt.return_unit
 
 let errchklst' user = function
   | (kw', `List [`String "message"; `String msg]) ->
@@ -628,41 +762,37 @@ let connect_actions = let open Telescope in [|
 let cnvauth s =
   try let auth = Telescope.cnv s in let authstr = Yojson.Safe.Util.to_string ( Yojson.Safe.Util.member "authorization" auth ) in show_info ("auth "^String.sub authstr 16 64^" ..."); Telescope.authref := authstr; 
   with _ -> Telescope.authref := "auth fail"
-
 let rec action_func pending = function
-  | Get1 -> if !verbose' then print_endline "Get1"; Telescope.get1' session
-  | Post1 -> if !verbose' then print_endline "Post1"; Telescope.post1' session
-  | Park -> if !verbose then print_endline "Park"; Telescope.park' session
-  | Idle -> if !verbose then print_endline ("None: "^string_of_int !delay_seq); 
-    incr delay_seq;
-    if !delay_seq < 20 || !(Telescope.authref) = "" then Js_of_ocaml_lwt.Lwt_js.sleep 0.1 else
-    (delay_seq := 0; action_func 0 Consume)
-  | Connect -> if !verbose then print_endline "Connect"; 
-      if !action_seq < Array.length connect_actions then (
-        action := Connect;
-        print_endline (fst (connect_actions.(!action_seq))^" action "^
-          string_of_int !action_seq^"/"^string_of_int (Array.length connect_actions));
-        let* _ = snd (connect_actions.(pending)) () in
-        if !new_challenge then (
-          new_challenge := false;
-          let* _ = Telescope.postauth' cnvauth in
-          incr action_seq;
-          action_func !action_seq Connect
-        ) else (
-          incr action_seq;
-          action_func !action_seq Connect
-        )
-      ) else (
-        connect := true;
-        action := Idle;
+  | TakeControl -> 
+      let* () = take_control () in
+      Js_of_ocaml_lwt.Lwt_js.sleep 0.1
+  | ReleaseControl ->
+      release_control ();
+      Js_of_ocaml_lwt.Lwt_js.sleep 0.1
+  | Idle -> 
+      if !control_pending then
         Js_of_ocaml_lwt.Lwt_js.sleep 0.1
-      )
-  | Motor -> if !verbose then print_endline "Motorgo"; Telescope.motorgo session
-  | Status -> if !verbose' then print_endline "Status"; Telescope.status_fun session
-  | Consume -> if !verbose' then print_endline "Consume"; Telescope.status_fun' session
-  | Init -> if !verbose then print_endline "Init"; Telescope.init' session
-  | Observe -> if !verbose then print_endline "Observe"; Telescope.observe' session
-  | Openarm -> if !verbose' then print_endline "Openarm"; Telescope.openarm' session
+      else if !has_control then begin
+        match !action with
+        | Idle -> Js_of_ocaml_lwt.Lwt_js.sleep 0.1
+        | a -> action_func pending a
+      end else
+        Js_of_ocaml_lwt.Lwt_js.sleep 0.1
+  | a -> (* Other actions require control *)
+      if !has_control then
+        match a with
+        | Status -> Telescope.status_fun session
+        | Consume -> Telescope.status_fun' session
+        | Init -> Telescope.init' session
+        | Observe -> Telescope.observe' session
+        | Park -> Telescope.park' session
+        | Openarm -> Telescope.openarm' session
+        | Motor -> Telescope.motorgo session
+        | Get1 -> Telescope.get1' session
+        | Post1 -> Telescope.post1' session
+        | _ -> Js_of_ocaml_lwt.Lwt_js.sleep 0.1
+      else
+        Js_of_ocaml_lwt.Lwt_js.sleep 0.1
 
 let sel = ref 0
 
@@ -732,37 +862,33 @@ let create_connection_status doc =
   update_status ();
   status_div
 
+(* Modified control panel *)
 let create_control_panel doc callback =
   let panel = create_styled_div doc "control-panel" in
-  Dom.appendChild panel (create_connection_status doc);
+  let control_status = create_styled_div doc "control-status" in
+  control_status##.id := Js.string "control-status";
+  Dom.appendChild panel control_status;
+  
   let buttons = [
-    ("Connect", (fun _ -> 
-      callback true; 
-      let status_div = Dom_html.getElementById_opt "connection-status" in
-      Option.iter (fun div ->
-        div##.innerHTML := Js.string "Connected";
-        div##.className := Js.string "status-pill connected"
-      ) status_div;
-      action := Connect;
-      action_seq := 0;
-      Telescope.session' := { Telescope.sid=""; ping_int=0; ping_tim=0 };
-      Js._false
-    ));
+    ("Take Control", (fun _ -> action := TakeControl; Js._false));
+    ("Release Control", (fun _ -> action := ReleaseControl; Js._false));
     ("Initialize", (fun _ -> action := Init; Js._false));
     ("Observe", (fun _ -> action := Observe; Js._false));
     ("Park", (fun _ -> action := Park; Js._false));
     ("Open arm", (fun _ -> action := Openarm; Js._false));
     ("Status", (fun _ -> action := Status; Js._false));
     ("Consume", (fun _ -> action := Consume; Js._false));
-    ("Get1", (fun _ -> action := Get1; Js._false));
+    ("Get1", (fun _ -> action := Get1; Js._false)); 
     ("Post1", (fun _ -> action := Post1; Js._false));
   ] in
+
   List.iter
     (fun (text, onclick) ->
-      Dom.appendChild panel (create_button doc text onclick))
+      let btn = create_button doc text onclick in
+      btn##.disabled := Js._false;
+      Dom.appendChild panel btn)
     buttons;
   panel
-  ;;
 
   let create_message_panel doc =
   let panel = create_styled_div doc "message-panel" in
