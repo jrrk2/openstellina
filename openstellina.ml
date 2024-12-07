@@ -59,31 +59,17 @@ let add_message msg_type text =
 let show_error text = add_message "error" text
 let show_info text = if false then print_endline text; add_message "info" text
 let new_challenge = ref false
-let get_session_id fn =
+let get_session_id (fn:Yojson.Safe.t->unit) =
   let headers = Astro_utils.split ["Accept: */*"] in
   let params = [
     ("EIO", "3");
     ("transport", "polling");
-    ("id", !version);
-    ("name", !version)
-  ] in
-  let handle_session s hdrs =
-    try
-      (* Strip off the Socket.IO packet type (first character) *)
-      let json_str = String.sub s 1 (String.length s - 1) in
-      let json = Yojson.Safe.from_string json_str in
-      let open Yojson.Safe.Util in
-      sid := member "sid" json |> to_string;
-      ping_interval := member "pingInterval" json |> to_int;
-      ping_timeout := member "pingTimeout" json |> to_int;
-      show_info ("Got session ID: " ^ !sid);
-      fn s
-    with e -> 
-      show_info ("Session ID parse failed: " ^ Printexc.to_string e ^ "\nResponse was: " ^ s);
-      Lwt.return_unit
-  in
+    ("id", "openstellina-web");
+    ("name", "openstellina-web")
+] in
+  let iter = fun s -> fn (cnv s) in
   Astro_utils.get' proto server params headers 
-    (pth3'^"/socket.io/") handle_session hdrs
+    (pth3'^"/socket.io/") (cnv' iter) hdrs
 
 (* Release control sequence *)
 let release_control () =
@@ -311,16 +297,21 @@ let handle_socketio msg =
 
 let rec process_json path = function
   | `Assoc
-    [("sid", `String sid);
-     ("upgrades", `List [`String "websocket"]); ("pingInterval", `Int ping_int);
-     ("pingTimeout", `Int ping_tim)] ->
-     if !(Telescope.session').sid = "" then
+    [("sid", `String sid');
+     ("upgrades", `List [`String "websocket"]); ("pingInterval", `Int ping_int');
+     ("pingTimeout", `Int ping_tim')] ->
+     if !sid = "" then
        begin
-       show_info ("sid: " ^ sid);
-       Telescope.session' := { sid; ping_int; ping_tim };
+       show_info ("sid: " ^ sid');
+       sid := sid';
+       ping_interval := ping_int';
+       ping_timeout := ping_tim';
        if connect_websocket Telescope.proto Telescope.server Telescope.pth3' then
          begin
-         ignore (ping_loop ());
+	 (*
+          connect := true;
+          ignore (ping_loop ());
+	  *)
          print_endline "WebSocket connection successful"
          end
        else
@@ -547,15 +538,32 @@ and process_ws_messages ws =
 and connect_websocket proto server port =
   let server' = if String.length server > 0 && server.[0] = '/' then 
     String.sub server 1 (String.length server - 1) else server in
-  let device_info = {|id=openstellina2003&name=openstellina2003|} in
+  let device_info = {|id=openstellina-web&name=openstellina-wb|} in
   let ws_url = (if proto = "https://" then "wss://" else "ws://") ^ server' ^ port ^
     "/socket.io/?EIO=3&transport=websocket&" ^ device_info in
   show_info ("Connecting WebSocket to: " ^ ws_url);
   let connected = ref false in
   let open Js_of_ocaml.WebSockets in
   try
-    let ws = new%js webSocket (Js.string ws_url) in
-    ws##.onmessage := Dom.handler (fun e ->
+  let ws = new%js webSocket (Js.string ws_url) in
+    websocket := Some ws;
+      ws##.onopen := Dom.handler (fun _ ->
+        debug "WebSocket connection opened";
+        Js._true
+      );
+      
+      ws##.onclose := Dom.handler (fun _ ->
+        debug "WebSocket connection closed";
+        connect := false;
+        Js._true
+      );
+      
+      ws##.onerror := Dom.handler (fun _ ->
+        debug "WebSocket error occurred";
+        Js._true
+      );
+
+      ws##.onmessage := Dom.handler (fun e ->
       let msg = Js.to_string e##.data in
       if String.length msg < 80 then show_info ("WS received: " ^ msg);
       handle_frame msg;
@@ -577,7 +585,7 @@ and connect_websocket proto server port =
 false
 
 and handle_frame msg =
-  debug ("Received WebSocket frame: " ^ msg);
+  debug ("Received WebSocket frame: " ^ (if String.length msg < 80 then msg else String.sub msg 0 80 ^" ..."));
   match msg.[0] with
   | '0' -> (* Socket.IO handshake *)
       begin try
@@ -590,6 +598,14 @@ and handle_frame msg =
         debug (Printf.sprintf "Handshake complete - SID: %s, Ping interval: %dms, Timeout: %dms" 
           !sid !ping_interval !ping_timeout);
         connect := true;
+	(match !websocket with
+	| Some ws ->
+	    let msg = {|42["message","takeControl"]|} in
+	    debug ("Sending take control message: " ^ msg);
+	    ws##send (Js.string msg);
+	| None -> 
+	    debug "Cannot take control - websocket connection lost";
+	    control_pending := false);
         ignore (ping_loop ())
       with e ->
         debug ("Handshake parse failed: " ^ Printexc.to_string e ^ "\nMessage was: " ^ msg)
@@ -609,7 +625,7 @@ and handle_frame msg =
       | '2' -> (* Socket.IO event *)
           if String.length msg > 2 then
             let event_json = String.sub msg 2 (String.length msg - 2) in
-            debug ("Received Socket.IO event: " ^ event_json);
+            debug ("Received Socket.IO event: " ^  (if String.length event_json < 80 then event_json else String.sub event_json 0 80 ^" ..."));
             begin try
               let json = Yojson.Safe.from_string event_json in
               process_json [] json
@@ -636,76 +652,23 @@ and handle_socketio msg =
   | _ -> 
 show_info ("other socket.io: " ^ msg)
 
-let establish_websocket () : bool Lwt.t = 
-  if !sid = "" then begin
-    debug "Cannot establish websocket - no session ID";
-    Lwt.return false
-  end else begin
-    let server' = if String.length server > 0 && server.[0] = '/' then 
-      String.sub server 1 (String.length server - 1) else server in
-    let ws_url = (if proto = "https://" then "wss://" else "ws://") ^ server' ^ pth3' ^
-      "/socket.io/?EIO=3&transport=websocket&sid=" ^ !sid ^ 
-      "&id=" ^ !version ^ "&name=" ^ !version in
-    debug ("Attempting WebSocket connection to: " ^ ws_url);
-    try
-      let ws = new%js WebSockets.webSocket (Js.string ws_url) in
-      websocket := Some ws;
-      
-      ws##.onopen := Dom.handler (fun _ ->
-        debug "WebSocket connection opened";
-        Js._true
-      );
-      
-      ws##.onclose := Dom.handler (fun _ ->
-        debug "WebSocket connection closed";
-        connect := false;
-        Js._true
-      );
-      
-      ws##.onerror := Dom.handler (fun _ ->
-        debug "WebSocket error occurred";
-        Js._true
-      );
-      
-      ws##.onmessage := Dom.handler (fun e ->
-        let msg = Js.to_string e##.data in
-        handle_frame msg;
-        Js._true
-      );
-      
-      debug "Sending initial connection acknowledgment";
-      ws##send (Js.string "40");
-      Lwt.return true
-    with e ->
-      debug ("WebSocket connection failed: " ^ Printexc.to_string e);
-      Lwt.return false
-  end
+let errchklst' user = function
+  | (kw', `List [`String "message"; `String msg]) ->
+      handle_socketio msg
+  | (_, json) -> process_json [] json
+	
+let session (arg:Yojson.Safe.t) =
+  if false then print_endline "session";
+  errchklst' true ("R", arg);
+  update_telescope_display ()
 
 let take_control () =
   debug "Initiating take control sequence";
   if !sid = "" then begin
     debug "No session ID - requesting new session";
-    let* _ = get_session_id (fun s -> 
-      debug ("Session ID callback received: " ^ s);
-      Lwt.return_unit
-    ) in
-    let* established = establish_websocket () in
-    if established then begin
-      control_pending := true;
-      match !websocket with
-      | Some ws ->
-          let msg = {|42["message","takeControl"]|} in
-          debug ("Sending take control message: " ^ msg);
-          ws##send (Js.string msg);
-          Lwt.return_unit
-      | None -> 
-          debug "Cannot take control - websocket connection lost";
-          control_pending := false;
-          Lwt.return_unit
-    end else begin
-      debug "WebSocket establishment failed";
-      Lwt.return_unit
-    end
+    let* _ = get_session_id session in
+    control_pending := true;
+    Lwt.return_unit
   end else if not !has_control && not !control_pending then begin
     debug "Have session ID but no control - requesting control";
     match !websocket with
@@ -717,8 +680,8 @@ let take_control () =
         Lwt.return_unit
     | None ->
         debug "No websocket connection - attempting to establish";
-        let* established = establish_websocket () in
-        if established then begin
+        if connect_websocket Telescope.proto Telescope.server Telescope.pth3' then
+        begin
           control_pending := true;
           match !websocket with
           | Some ws ->
@@ -740,69 +703,10 @@ let take_control () =
     Lwt.return_unit
   end
 
-let errchklst' user = function
-  | (kw', `List [`String "message"; `String msg]) ->
-      handle_socketio msg
-  | (_, json) -> process_json [] json
-	
-let session (arg:Yojson.Safe.t) =
-  if false then print_endline "session";
-  errchklst' true ("R", arg);
-  update_telescope_display ()
-
-let connect_actions = let open Telescope in [|
-         ("Calling preauth'", preauth');
-         ("Calling get1'", (fun () -> get1' session));
-         ("Calling post1'", (fun () -> post1' session));
-         ("Calling get2'", (fun () -> get2' session));
-         ("Calling get3'", (fun () -> get3' session));
-         ("Calling get4'", (fun () -> get4' session));
-         ("Calling get5'", (fun () -> get5' session));
-         ("Calling get6'", (fun () -> get6' session));
-         ("Calling get7'", (fun () -> get7' session));
-         ("Calling get8'", (fun () -> get8' session));
-         ("Calling get9'", (fun () -> get9' session));
-         ("Calling post11'", (fun () -> post11' session));
-         ("Calling get12'", (fun () -> get12' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling post14'", (fun () -> post14' session));
-         ("Calling get15'", (fun () -> get15' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get16'", (fun () -> get16' session));
-         ("Calling get17'", (fun () -> get17' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get16'", (fun () -> get16' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get17'", (fun () -> get17' session));
-         ("Calling post27'", (fun () -> post27' session));
-         ("Calling post28'", (fun () -> post28' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get16'", (fun () -> get16' session));
-         ("Calling get17'", (fun () -> get17' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling post36'", (fun () -> post36' session));
-         ("Calling get15'", (fun () -> get15' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get16'", (fun () -> get16' session));
-         ("Calling get13'", (fun () -> get13' session));
-         ("Calling get16'", (fun () -> get16' session));
-|]
-
 let cnvauth s =
   try let auth = Telescope.cnv s in let authstr = Yojson.Safe.Util.to_string ( Yojson.Safe.Util.member "authorization" auth ) in show_info ("auth "^String.sub authstr 16 64^" ..."); Telescope.authref := authstr; 
   with _ -> Telescope.authref := "auth fail"
+
 let rec action_func pending = function
   | TakeControl -> 
       let* () = take_control () in
