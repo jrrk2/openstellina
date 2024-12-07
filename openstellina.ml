@@ -120,7 +120,7 @@ type graphics =
 let send_message msg =
   match !websocket with
   | Some ws ->
-      if !verbose then show_info ("WS sending: " ^ msg);
+      if !verbose' then show_info ("WS sending: " ^ msg);
       ws##send (Js.string msg);
       true
   | None ->
@@ -269,18 +269,18 @@ let update_telescope_display () =
 let ws_action = ref None  (* Separate from main action *)
 
 let rec ping_loop () =
-  let* () = Js_of_ocaml_lwt.Lwt_js.sleep (float !Telescope.session'.ping_int /. 1000.0) in
-  if !connect then begin
-    match !websocket with
-    | Some ws ->
+  match !websocket with
+  | Some ws ->
+      let* () = Js_of_ocaml_lwt.Lwt_js.sleep (25.0) in (* 25 seconds *)
+      if !connect then begin
+        show_info "Sending ping probe";
         ws##send (Js.string "2probe"); (* v3 ping probe *)
-        show_info "ping probe sent";
-        ping_loop ()
-    | None -> 
-        show_info "no websocket";
+        let* () = ping_loop () in
         Lwt.return_unit
-  end else
-    Lwt.return_unit
+      end else
+        Lwt.return_unit
+  | None -> 
+      Lwt.return_unit
 
 let handle_socketio msg =
   if false then print_endline ("socket.io: " ^ msg);
@@ -563,7 +563,7 @@ and connect_websocket proto server port =
     else false
   with e ->
     show_info ("WebSocket connection failed: " ^ Printexc.to_string e);
-  false
+false
 
 and handle_frame msg =
   if String.length msg < 80 then show_info ("Received frame: " ^ msg);
@@ -576,50 +576,35 @@ and handle_frame msg =
         sid := member "sid" handshake |> to_string;
         ping_interval := member "pingInterval" handshake |> to_int;
         ping_timeout := member "pingTimeout" handshake |> to_int;
-        show_info ("Handshake complete, sid: " ^ !sid)
+        show_info ("Handshake complete, sid: " ^ !sid);
+        connect := true; (* Mark as connected after successful handshake *)
+        (* Start ping loop after handshake *)
+        ignore (ping_loop ())
       with e ->
         show_info ("Handshake parse failed: " ^ Printexc.to_string e)
-      end
-  | '4' when String.length msg >= 2 -> 
-      begin match msg.[1] with
-      | '2' -> (* Socket.IO event *)
-          if String.length msg > 2 then
-            let event_json = String.sub msg 2 (String.length msg - 2) in
-            if String.length event_json < 80 then show_info ("Event: " ^ event_json);
-            begin try
-              let json = Yojson.Safe.from_string event_json in
-              match json with
-              | `List [`String "message"; `String "takeControl"; 
-                       `Assoc [("success", `Bool true)]] ->
-                  has_control := true;
-                  control_pending := false;
-                  show_info "Successfully took control";
-                  let status = Dom_html.getElementById_opt "control-status" in
-                  Option.iter (fun div ->
-                    div##.innerHTML := Js.string "Control: Active";
-                    div##.className := Js.string "status-pill connected"
-                  ) status
-              | `List [`String "message"; `String "releaseControl";
-                       `Assoc [("success", `Bool true)]] ->
-                  has_control := false;
-                  show_info "Successfully released control";
-                  let status = Dom_html.getElementById_opt "control-status" in
-                  Option.iter (fun div ->
-                    div##.innerHTML := Js.string "Control: Inactive";
-                    div##.className := Js.string "status-pill disconnected"
-                  ) status
-              | _ -> process_json [] json
-            with _ -> process_json [] (Yojson.Safe.from_string event_json)
-            end
-      | _ -> show_info ("Unknown type-4 message: " ^ msg)
       end
   | '2' -> (* PING *)
       begin match !websocket with
       | Some ws -> ws##send (Js.string "3") (* PONG *)
       | None -> ()
       end
-  | '3' -> show_info "Pong received"
-  | _ -> show_info ("Unhandled frame type: " ^ msg)
+  | '3' -> (* PONG received *)
+      show_info "Pong received"
+  | '4' when String.length msg >= 2 -> 
+      begin match msg.[1] with
+      | '0' -> (* Socket.IO connection established *)
+          show_info "Socket.IO connected"
+      | '2' -> (* Socket.IO event *)
+          if String.length msg > 2 then
+            let event_json = String.sub msg 2 (String.length msg - 2) in
+            begin try
+              let json = Yojson.Safe.from_string event_json in
+              process_json [] json
+            with _ -> show_info ("Failed to parse event: " ^ event_json)
+            end
+      | _ -> show_info ("Unknown type-4 message: " ^ msg)
+      end
+| _ -> show_info ("Unhandled frame type: " ^ msg)
 
 and handle_socketio msg =
   if !verbose' then print_endline ("socket.io: " ^ msg);
@@ -637,7 +622,7 @@ and handle_socketio msg =
   | _ -> 
 show_info ("other socket.io: " ^ msg)
 
-and establish_websocket () : bool Lwt.t = 
+let establish_websocket () : bool Lwt.t = 
   if !sid = "" then
     Lwt.return false
   else
@@ -650,12 +635,17 @@ and establish_websocket () : bool Lwt.t =
     try
       let ws = new%js WebSockets.webSocket (Js.string ws_url) in
       websocket := Some ws;
-      process_ws_messages ws;
+      ws##.onmessage := Dom.handler (fun e ->
+        let msg = Js.to_string e##.data in
+        handle_frame msg;
+        Js._true
+      );
       ws##send (Js.string "40"); (* Connection ack *)
       Lwt.return true
     with e ->
       show_info ("WebSocket connection failed: " ^ Printexc.to_string e);
       Lwt.return false
+
 let take_control () =
   if !sid = "" then begin
     (* Get session ID first *)
