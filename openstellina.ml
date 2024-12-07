@@ -25,8 +25,6 @@ type action =
   | Observe
   | Park
   | Openarm
-  | Get1
-  | Post1
 
 (* Control state tracking variables *)
 let control_state = ref (`NoControl:control_state)
@@ -61,14 +59,14 @@ div
 
 let add_message msg_type text =
   let doc = Dom_html.document in
-  match Dom_html.getElementById_opt "telescope-messages" with
+  (match Dom_html.getElementById_opt "telescope-messages" with
   | None -> ()
   | Some panel ->
       let msg = create_styled_div doc ("message " ^ msg_type) in
       msg##.innerHTML := Js.string text;
       Dom.appendChild panel msg;
       (* Auto-scroll to bottom *)
-      panel##.scrollTop := panel##.scrollHeight
+      panel##.scrollTop := panel##.scrollHeight)
 
 let show_error text = add_message "error" text
 let show_info text = if false then print_endline text; add_message "info" text
@@ -88,14 +86,14 @@ let get_session_id (fn:Yojson.Safe.t->unit) =
 (* Release control sequence *)
 let release_control () =
   if !has_control then begin
-    match !websocket with
+    (match !websocket with
     | Some ws ->
         let msg = {|42["message","releaseControl"]|} in
         ws##send (Js.string msg);
         show_info "Releasing control"
     | None ->
         has_control := false;
-        show_info "No websocket connection"
+        show_info "No websocket connection")
   end
 
 (* Add control message constructors *)
@@ -118,14 +116,14 @@ type graphics =
   | Stroke of float * float * float * float
 
 let send_message msg =
-  match !websocket with
+  (match !websocket with
   | Some ws ->
       if !verbose' then show_info ("WS sending: " ^ msg);
       ws##send (Js.string msg);
       true
   | None ->
       show_info "No websocket connection";
-false
+      false)
 
 let create_status_section doc title items =
   let section = create_styled_div doc "status-section" in
@@ -161,12 +159,13 @@ let process_json_value path = function
       | ["challenge"] -> 
           if !Telescope.challengeref <> s then (
 	    new_challenge := true;
-	    print_endline ("Challenge: "^s);						      
+	    show_info ("Challenge: "^s);
             Telescope.challengeref := s
           )
       | ["telescopeId"] -> 
           if !Telescope.telescopeId <> s then (
             new_challenge := true;
+	    show_info ("Telescope ID: "^s);
             Telescope.telescopeId := s
           )
       | ["currentOperation"; "type"] -> Telescope.debugref := s
@@ -179,6 +178,7 @@ let process_json_value path = function
       | ["bootCount"] ->
           if !Telescope.bootCnt <> i then (
             new_challenge := true;
+	    show_info ("Boot Count: "^string_of_int i);
             Telescope.bootCnt := i
           )
       | _ -> ()
@@ -251,7 +251,7 @@ let create_telescope_display doc =
     [system; environment; storage; motors; status; updates; observation];
   display
 
-let debug_mode = ref false
+let debug_mode = ref true
 
 let debug msg =
   if !debug_mode then
@@ -261,9 +261,9 @@ let debug msg =
     end
 
 let update_display_value id value =
-  match Dom_html.getElementById_opt id with
+  (match Dom_html.getElementById_opt id with
   | Some element -> element##.innerHTML := Js.string value
-  | None -> ()
+  | None -> ())
 
 let last_ctrl = ref (`OtherHasControl "")
 let last_class = ref ""
@@ -357,7 +357,7 @@ let update_telescope_display () =
 let ws_action = ref None  (* Separate from main action *)
 
 let rec ping_loop () =
-  match !websocket with
+  (match !websocket with
   | Some ws ->
       let* () = Lwt_js.sleep (25.0) in
       if !connect then begin
@@ -371,11 +371,11 @@ let rec ping_loop () =
       end
   | None -> 
       debug "Ping loop: No websocket connection";
-      Lwt.return_unit
+      Lwt.return_unit)
 
 let handle_socketio msg =
   if false then print_endline ("socket.io: " ^ msg);
-  match msg with
+  (match msg with
   | "2" -> (* PING *)
      show_info "ping";
      begin match !websocket with
@@ -387,7 +387,7 @@ let handle_socketio msg =
   | s when String.length s >= 2 && String.sub s 0 2 = "42" ->
      show_info ("socket.io message: " ^ s)
   | _ -> 
-     show_info ("other socket.io: " ^ msg)
+     show_info ("other socket.io: " ^ msg))
 
 let rec process_json path = function
   | `Assoc
@@ -413,7 +413,7 @@ let rec process_json path = function
      end;
   | `Assoc pairs -> List.iter (fun (k,v) -> process_json (k::path) v) pairs
   | `List items -> List.iteri (fun i v -> process_json (string_of_int i::path) v) items  
-  | v -> match List.rev path with
+  | v -> (match List.rev path with
          | "temperature"::"sensors"::_ -> process_json_value ["sensors"; "temperature"] v
          | "humidity"::"sensors"::_ -> process_json_value ["sensors"; "humidity"] v 
          | "humidityDelta"::"sensors"::_ -> process_json_value ["sensors"; "humidityDelta"] v
@@ -590,6 +590,7 @@ let rec process_json path = function
 	 | "1"::"motors"::"DER"::"calibrated"::_ -> ()
 	 | "1"::"motors"::"DER"::"position"::_ -> ()
 	 | "1"::"motors"::"DER"::"state"::_ -> ()
+	 | "1"::"motors"::"MAP"::"atStop"::_ -> ()
 	 | "1"::"motors"::"MAP"::"calibrated"::_ -> ()
 	 | "1"::"motors"::"MAP"::"position"::_ -> ()
 	 | "1"::"motors"::"MAP"::"state"::_ -> ()
@@ -620,7 +621,8 @@ let rec process_json path = function
 	 | "1"::"update"::"minimumCompatibleVersion"::_ -> ()
 	 | "1"::"update"::"state"::_ -> ()
          | "1"::"version"::_ -> ()
-         | oth -> print_endline ("Unhandled: "^String.concat "::" oth)
+	 | "0"::_ -> print_endline "zero process_json"
+         | oth -> print_endline ("Unhandled: "^String.concat "::" oth))
 
 and process_ws_messages ws =
   ws##.onmessage := Dom.handler (fun e ->
@@ -681,7 +683,7 @@ false
 (* Update handle_frame to handle control messages *)
 and handle_frame msg =
   debug ("Received WebSocket frame: " ^ (if String.length msg < 80 then msg else String.sub msg 0 80 ^ " ..."));
-  match msg.[0] with
+  (match msg.[0] with
   | '0' -> (* Socket.IO handshake *)
       begin try
         let json = String.sub msg 1 (String.length msg - 1) in
@@ -756,11 +758,11 @@ and handle_frame msg =
           end
     | _ -> debug ("Unknown type-4 message subtype: " ^ String.make 1 msg.[1] ^ "\nFull message: " ^ msg)
 end
-| c -> debug ("Unhandled frame type: " ^ String.make 1 c ^ "\nFull message: " ^ msg)
+| c -> debug ("Unhandled frame type: " ^ String.make 1 c ^ "\nFull message: " ^ msg))
 
 and handle_socketio msg =
   if !verbose' then print_endline ("socket.io: " ^ msg);
-  match msg with
+  (match msg with
   | "2" -> (* PING *)
      show_info "ping";
      begin match !websocket with
@@ -771,8 +773,7 @@ and handle_socketio msg =
      show_info "pong"
   | s when String.length s >= 2 && String.sub s 0 2 = "42" ->
      show_info ("socket.io message: " ^ s)
-  | _ -> 
-show_info ("other socket.io: " ^ msg)
+  | _ -> show_info ("other socket.io: " ^ msg))
 
 let errchklst' user = function
   | (kw', `List [`String "message"; `String msg]) ->
@@ -795,7 +796,7 @@ let take_control () =
     Lwt.return_unit
   end else if !control_state = `NoControl then begin
     debug "Have session ID but no control - requesting control";
-    match !websocket with
+    (match !websocket with
     | Some ws ->
         control_state := `RequestingControl;
         control_pending := true;
@@ -824,7 +825,7 @@ let take_control () =
           debug "Failed to establish websocket connection";
           control_state := `NoControl;
           Lwt.return_unit
-        end
+        end)
   end else begin
     debug (Printf.sprintf "Take control blocked - current state: %s" 
       (match !control_state with
@@ -837,9 +838,9 @@ let take_control () =
 
 (* Update release_control to use the new state *)
 let release_control () =
-  match !control_state with
+  (match !control_state with
   | `HasControl ->
-      begin match !websocket with
+      begin (match !websocket with
       | Some ws ->
           let msg = {|42["message","releaseControl"]|} in
           ws##send (Js.string msg);
@@ -848,10 +849,10 @@ let release_control () =
           has_control := false;
           show_info "Released control"
       | None ->
-          show_info "Cannot release control - no websocket connection"
+          show_info "Cannot release control - no websocket connection")
       end
   | _ ->
-      show_info "Cannot release control - do not have control"
+      show_info "Cannot release control - do not have control")
 
 let cnvauth s =
   try let auth = Telescope.cnv s in let authstr = Yojson.Safe.Util.to_string ( Yojson.Safe.Util.member "authorization" auth ) in show_info ("auth "^String.sub authstr 16 64^" ..."); Telescope.authref := authstr; 
@@ -868,14 +869,14 @@ let rec action_func pending = function
       if !control_pending then
         Js_of_ocaml_lwt.Lwt_js.sleep 0.1
       else if !has_control then begin
-        match !action with
+        (match !action with
         | Idle -> Js_of_ocaml_lwt.Lwt_js.sleep 0.1
-        | a -> action_func pending a
+        | a -> action_func pending a)
       end else
         Js_of_ocaml_lwt.Lwt_js.sleep 0.1
   | a -> (* Other actions require control *)
       if !has_control then
-        match a with
+        (match a with
         | Status -> Telescope.status_fun session
         | Consume -> Telescope.status_fun' session
         | Init -> Telescope.init' session
@@ -883,9 +884,7 @@ let rec action_func pending = function
         | Park -> Telescope.park' session
         | Openarm -> Telescope.openarm' session
         | Motor -> Telescope.motorgo session
-        | Get1 -> Telescope.get1' session
-        | Post1 -> Telescope.post1' session
-        | _ -> Js_of_ocaml_lwt.Lwt_js.sleep 0.1
+        | _ -> Js_of_ocaml_lwt.Lwt_js.sleep 0.1)
       else
         Js_of_ocaml_lwt.Lwt_js.sleep 0.1
 
@@ -1000,7 +999,7 @@ let create_control_status_widget doc =
   Dom.appendChild widget actions;
 
   (* Add debug logging *)
-  if !verbose' then debug "Control widget created";
+  if !verbose then debug "Control widget created";
   widget
 
 (* Modified control panel *)
@@ -1020,8 +1019,6 @@ let create_control_panel doc callback =
     ("Open arm", (fun _ -> action := Openarm; Js._false));
     ("Status", (fun _ -> action := Status; Js._false));
     ("Consume", (fun _ -> action := Consume; Js._false));
-    ("Get1", (fun _ -> action := Get1; Js._false)); 
-    ("Post1", (fun _ -> action := Post1; Js._false));
   ] in
 
   List.iter
