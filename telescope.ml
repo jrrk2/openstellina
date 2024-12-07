@@ -11,7 +11,9 @@ let pth3' = "8083"
 
 let verbose_flag = ref false
 
+(*
 let start = Queue.create ()
+*)
 
 let defcat = 7
 let accstr = "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)"
@@ -73,15 +75,9 @@ let cnv body =
   try if body <> "" then Yojson.Safe.from_string body else `String ""
   with err -> print_endline ("Exception: "^Printexc.to_string_default err^"\n"^body^"\n"^body^"\n"); `String body
 
-let session = function
-| `Assoc
-    [("sid", `String sid);
-     ("upgrades", `List [`String "websocket"]); ("pingInterval", `Int ping_int);
-     ("pingTimeout", `Int ping_tim)] -> { sid; ping_int; ping_tim }
-| oth -> failwith ("session: "^Yojson.Safe.to_string oth)
-
-let name = "sdk_gphone64_arm64"
-let id = "Android_Google_sdk_gphone64_arm64_1f3b69548ee48ae7bf11a5deaac6cd"
+let version = ref "openstellina-2.003"
+let name = !version
+let id = !version
 let polling = "polling"
 let eio = "3"
 let params' = [ ("name", name); ("EIO", eio); ("id", id); ("transport", polling)]
@@ -89,41 +85,41 @@ let pth = pth3'^"/socket.io/"
 let cookie = ref []
 let hdrs = ref []
 let authref = ref ""
-let version = ref "openstellina-2.003"
-let bootCnt = ref 717
-let telescopeId = ref "stellina-5df04c"
-let challengeref = ref "21GwPXmedXjWrQbv8w7IRflrtsXOuFvdF"
+let bootCnt = ref 0
+let telescopeId = ref "Unknown"
+let challengeref = ref "Unknown"
 let debugref = ref ""
 let errorref = ref "startup"
 let tempref = ref ""
 let humref = ref ""
+let defogref = ref "Unknown"
+let dewpointref = ref "Unknown" 
+let az_posref = ref "0.0"
+let alt_posref = ref "0.0"
+let motor_state_ref = ref "IDLE"
+let der_posref = ref "0.0"
+let map_posref = ref "0.0"
+let version_ref = ref "Unknown"
+let initialized_ref = ref "No"
+let shutting_down_ref = ref "No"
+let humidity_delta_ref = ref "0.0"
+let temperature_delta_ref = ref "0.0"
+let autofocus_ref = ref "0"
+let model_ref = ref "Unknown"
+let board_debug_ref = ref "No"
+let api_version_ref = ref "Unknown"
+let storage_system_size_ref = ref "0"  
+let storage_system_avail_ref = ref "0"
+let storage_data_size_ref = ref "0"
+let storage_data_avail_ref = ref "0"
+let storage_band_ref = ref "Unknown"
+let installed_version_ref = ref "Unknown"
+let min_compat_version_ref = ref "Unknown"
+let update_state_ref = ref "Unknown"
+let current_target_ref = ref "None"
+let position_lat_ref = ref "Unknown"
+let position_lon_ref = ref "Unknown"
 
-let rec errchklst' user (arg:string*Yojson.Safe.t) = match arg with
-| (kw', `List errlst) -> let errlst' = List.mapi (fun ix (itm) -> (kw'^"["^string_of_int ix^"]", itm)) errlst in List.iter (errchklst' user) errlst'
-| (kw', `Assoc lst) -> let lst' = List.map (fun (kw,itm) -> if false then print_endline kw; (kw' ^ "@" ^ kw, itm)) lst in List.iter (errchklst' user) lst'
-| ("R@result@challenge", `String challenge) ->
-    challengeref := challenge;
-    Astro_utils.set_dialog_value Astro_utils.Challenge ("challenge " ^ challenge);
-| ("R@result@bootCount", `Int bootcnt) ->
-    bootCnt := bootcnt;
-| ("R@result@telescopeId", `String id) ->
-    telescopeId := id;
-| ("R@sid", `String id) ->
-    Astro_utils.set_dialog_value Astro_utils.Sid ("sid " ^ id);
-    session' := {sid=id; ping_int=0; ping_tim=0};
-| ("R@result@currentOperation@type", `String s) -> debugref := s;
-| ("R@error@name", `String s) -> errorref := s;
-| ("R@result@previousOperations@autoInit@error@name", `String s) -> errorref := s;
-| ("R@result@sensors@temperature", `Float f) -> tempref := string_of_float f;
-| ("R@result@sensors@humidity", `Float f) -> humref := string_of_float f;
-| (kw', `String s) -> Storage.set (if user then kw' else "!"^kw') s;
-| (kw', `Bool b) -> Storage.set (if user then kw' else "!"^kw') (string_of_bool b)
-| (kw', `Null) -> Storage.set (if user then kw' else "!"^kw') "empty"
-| (kw', `Float f) -> Storage.set (if user then kw' else "!"^kw') (string_of_float f)
-| (kw', `Int i) -> Storage.set (if user then kw' else "!"^kw') (string_of_int i)
-| (kw', `Intlit i) -> Storage.set (if user then kw' else "!"^kw') (i)
-| (kw', (`Tuple _| `Variant _)) -> print_endline "tuple/variant"
-let errchk' user (arg:Yojson.Safe.t) = errchklst' user ("R", arg)
 let proto = "http://"
 
 let cnv' iter = fun s -> let lst = fun s ->
@@ -133,16 +129,6 @@ let cnv' iter = fun s -> let lst = fun s ->
                    if false then print_endline s) l;
     l in
     List.iter iter (lst s)
-
-(* *)
-let sec_websocket_key = [|
-"7sFf3C1/kNpYqHj1S9meQA==";
-"8PWNZaLmaTuM0ihI1ZRKaQ==";
-"BlDjn2aFjUL5UWxEz+/q+Q==";
-"7OyqyUfAXUQVCujf+zC7sg==";
-"YLfnVqqdRqyp3ftddCErvQ==";
-"WVn1O6hph+5HPvKu8WstAA=="
-|];;
 
 let rotate = ref 0
 
@@ -171,15 +157,11 @@ let preauth' () =
   let uri = Uri.of_string ("http://"^key_server^":"^key_port^"/generate-authorization") in
   Astro_utils.send_preflight_options_request uri handle_response
 
-let cnvauth s =
-  try let auth = cnv s in authref := Yojson.Safe.Util.to_string ( Yojson.Safe.Util.member "authorization" auth )
-  with _ -> authref := "auth fail"
-
-let postauth' () =
+let postauth' cnvauth =
     let server = key_server^":" in
     let params = [ ] in
     let headers = ["Content-Type", "application/json"] in
-    let f = (fun s -> cnvauth s; errchk' true (cnv s)) in
+    let f = (fun s -> cnvauth s) in
     let (json:Yojson.Safe.t) = (`Assoc [
       ("bootCount", `Int !bootCnt);
       ("telescopeId", `String !telescopeId);
@@ -188,200 +170,157 @@ let postauth' () =
   in
     Astro_utils.post' proto server params headers (key_port^"/generate-authorization") ((Yojson.Safe.to_string json)) (cnv' f)
 
-let get1' () =
-    let iter = fun s -> session' := session (cnv s) in
+let get1' fn =
+    let iter = fun s -> fn (cnv s) in
     let headers = [
-    ("Connection", "keep-alive");
     ("Accept", "*/*")] in
     Astro_utils.get' proto server params' headers pth (cnv' iter) hdrs
 
-let post1' () =
+let post1' fn =
     let params = params' @ ["sid", (!session').sid] in
     let headers = !cookie @ Astro_utils.split [] in
-(*
-      "Content-Encoding: gzip"
-*)
-    let f = (fun s -> errchk' true (cnv s)) in
-    let (json:Yojson.Safe.t) = `List [`String "message"; `String "setSystemTime"; `Int ( int_of_float (Unix.gettimeofday() *. 1000.0 ) )] in
+    let f = (fun s -> fn (cnv s)) in
+    let tim = Printf.sprintf "%10.0f" (Unix.gettimeofday() *. 1000.0) in
+    let (json:Yojson.Safe.t) = `List [`String "message"; `String "setSystemTime"; `Intlit tim] in
     Astro_utils.post' proto server params headers pth ((jwrap json)) (cnv' f)
 
-let get2' () =
+let get2' fn =
     let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "websocket") :: ("sid", (!session').sid) :: [] in
-    let headers = Astro_utils.split ["Upgrade: websocket";
-      "Connection: Upgrade";
-(*
-      "Accept-Encoding: gzip";
-*)
-      ("Sec-WebSocket-Key: "^sec_websocket_key.(!rotate mod (Array.length sec_websocket_key)));
-      "Sec-WebSocket-Version: 13";
-      "Sec-WebSocket-Extensions: permessage-deflate"] in
+    let headers = Astro_utils.split [
+] in
     incr rotate;
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
-let get3' () =
+let get3' fn =
     let params = ("id", id) :: ("name", name) :: ("EIO", eio) :: ("transport", "polling") :: ("sid", (!session').sid) :: [] in
-    let headers = Astro_utils.split ["Connection: Keep-Alive";
-(*
-      "Accept-Encoding: gzip";
-*)
+    let headers = Astro_utils.split [
       "Accept: */*" ] in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
-let get4' () =
+let get4' fn =
     let params = [] in
     let headers = [] in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers (pth2'^"/v1/app/status") (cnv' f) hdrs
 
-let get5' () =
+let get5' fn =
     let params = params' in
     let headers = Astro_utils.split [
-(*
-      "Accept-Encoding: gzip, deflate";
-*)
       "Accept-Language: en-GB,en;q=0.9";
-      "Accept: application/json";
-      "Connection: Keep-Alive"] in
-    let f = (fun s -> errchk' true (cnv s)) in
+      "Accept: application/json"] in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
-let get6' () =
+let get6' fn =
     let params = params' in
     let headers = Astro_utils.split [
-(*
-"Accept-Encoding: gzip, deflate";
-*)
       "Accept-Language: en-GB,en;q=0.9";
       "Accept: application/json";
-      "Connection: Keep-Alive"] in
-    let f = (fun s -> errchk' true (cnv s)) in
+] in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
-let get7' () =
+let get7' fn =
     let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "polling") :: ("sid", (!session').sid) :: [] in
     let headers = Astro_utils.split [
-(*
-"Accept-Encoding: gzip, deflate";
-*)
       "Accept-Language: en-GB,en;q=0.9";
       "Accept: application/json";
-      "Connection: Keep-Alive"] in
-    let f = (fun s -> errchk' true (cnv s)) in
+] in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
-let get8' () =
+let get8' fn =
     let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "websocket") :: ("sid", (!session').sid) :: [] in
     let headers = Astro_utils.split [
-(*
-"Accept-Encoding: gzip, deflate";
-*)
-      "Referer: http://localhost:8080/";
       "Accept-Language: en-GB,en;q=0.9";
       "Accept: application/json";
-      "Connection: Keep-Alive"] in
-    let f = (fun s -> errchk' true (cnv s)) in
+] in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
-let get9' () =
+let get9' fn =
     let params = [] in
     let headers = [] in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers (pth2'^"/v1/app/status") (cnv' f) hdrs
 
-let post11' () =
+let post11' fn =
     let params = (("sid", (!session').sid) :: params') in
     let headers = !cookie @ Astro_utils.split [] in
-(*
-      "Content-Encoding: gzip"
-*)
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     let body = senduser "null" in
     Astro_utils.post' proto server params headers pth (body) (cnv' f)
 
-let get12' () =
+let get12' fn =
     let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "polling") :: (* ("sid", (!session').sid) :: *) [] in
     let headers = Astro_utils.split [
-(*
-"Accept-Encoding: gzip, deflate";
-*)
       "Accept-Language: en-GB,en;q=0.9";
       "Accept: application/json";
-      "Connection: Keep-Alive"] in
-    let f = (fun s -> errchk' true (cnv s)) in
+] in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
-let get13' () =
+let get13' fn =
     let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "polling") ::  (* ("sid", (!session').sid) :: *) [] in
     let headers = Astro_utils.split [
-(*
-"Accept-Encoding: gzip, deflate";
-*)
       "Accept-Language: en-GB,en;q=0.9";
       "Accept: application/json";
-      "Connection: Keep-Alive"] in
-    let f = (fun s -> errchk' true (cnv s)) in
+] in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
-let post14' () =
+let post14' fn =
     let params = (("sid", (!session').sid) :: params') in
     let headers = !cookie @ Astro_utils.split [] in
-(*
-      "Content-Encoding: gzip"
-*)
-    let f = (fun s -> errchk' true (cnv s)) in
-    let (json:Yojson.Safe.t) = `List [`String "message"; `String "setSystemTime"; `Int ( int_of_float (Unix.gettimeofday() *. 1000.0 ) )] in
+    let f = (fun s -> fn (cnv s)) in
+    let tim = Printf.sprintf "%10.0f" (Unix.gettimeofday() *. 1000.0) in
+    let (json:Yojson.Safe.t) = `List [`String "message"; `String "setSystemTime"; `Intlit tim] in
     Astro_utils.post' proto server params headers pth ((jwrap json)) (cnv' f)
 
-let get15' () =
+let get15' fn =
     let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "polling") :: ("sid", (!session').sid) :: [] in
     let headers = Astro_utils.split [
-(*
-"Accept-Encoding: gzip, deflate";
-*)
       "Accept-Language: en-GB,en;q=0.9";
       "Accept: application/json";
-      "Connection: Keep-Alive"] in
-    let f = (fun s -> errchk' true (cnv s)) in
+] in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
-let get16' () =
+let get16' fn =
     let params = [] in
     let headers = [] in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers (pth2'^"/v1/app/status") (cnv' f) hdrs
 
-let get17' () =
+let get17' fn =
     let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "websocket") :: ("sid", (!session').sid) :: [] in
     let headers = Astro_utils.split [
-(*
-"Accept-Encoding: gzip, deflate";
-*)
       "Accept-Language: en-GB,en;q=0.9";
       "Accept: application/json";
-      "Connection: Keep-Alive"] in
-    let f = (fun s -> errchk' true (cnv s)) in
+] in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.get' proto server params headers pth (cnv' f) hdrs
 
-let post27' () =
+let post27' fn =
     let params = (("sid", (!session').sid) :: params') in
     let headers = !cookie @ Astro_utils.split [] in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     let body = senduser "null" in
     Astro_utils.post' proto server params headers pth (body) (cnv' f)
 
-let post28' () =
+let post28' fn =
     let params = (("sid", (!session').sid) :: params') in
     let headers = !cookie @ Astro_utils.split [] in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     let body = senduser "openstellina" in
     Astro_utils.post' proto server params headers pth (body) (cnv' f)
 
-let post36' () =
+let post36' fn =
     let params = (("sid", (!session').sid) :: params') in
     let headers = !cookie @ Astro_utils.split [] in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     let json = `List [`String "message"; `String "takeControl"] in
     Astro_utils.post' proto server params headers pth (( jwrap json )) (cnv' f)
 
@@ -392,11 +331,11 @@ Astro_utils.split (
 "Content-Type: application/json; charset=UTF-8" ::
 [])
 
-let status' () =
+let status_fun' fn =
     let params = [] in
     let headers = auth' () in
     let pth = pth2'^"/v1/logs/consume" in
-    let f = (fun s -> errchk' false (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server params headers pth (("{}")) (cnv' f)
 
 let mos_id  = ref ""
@@ -474,34 +413,34 @@ let rec to_ascii x =
 
 let time_ms() = to_ascii (Astro_utils.datum() *. 1000.0)
 
-let init' () =
+let init' fn =
     let cmd = "startAutoInit" in
     print_endline cmd;
     let pth = pth2'^"/v1/general/"^cmd in
     let lat_flt = Cookie.get' "latitude" in
     let long_flt = Cookie.get' "longitude" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Raw.to_string (`Assoc
     [("latitude", `Floatlit lat_flt);
      ("longitude", `Floatlit long_flt); ("time", `Intlit (time_ms()))] )^"\r\n")) (cnv' f)
 
-let manualinit' () =
+let manualinit' fn =
     let cmd = "startManualInit" in
     let pth = pth2'^"/v1/general/"^cmd in
     let lat_flt = latitude() in
     let long_flt = longitude() in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string (`Assoc
     [("latitude", `Float lat_flt);
      ("longitude", `Float long_flt); ("time", `Intlit (time_ms()))] ))) (cnv' f)
 
-let observe' () =
+let observe' fn =
     let cmd = "general/startObservation" in
     let pth = pth2'^"/v1/"^cmd in
     let ra_flt = Altaz.cnv_ra (entry_ra'()) in
     let dec_flt = Altaz.cnv_dec (entry_dec'()) in
     if!verbose_flag then print_endline (string_of_float ra_flt^" "^string_of_float dec_flt);
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string (`Assoc
     [("ra", `Float ra_flt);
      ("de", `Float dec_flt);
@@ -519,10 +458,10 @@ let observe' () =
      ("backgroundEnabled", `Bool true);
      ("backgroundPolyorder", `Int 4)]))) (cnv' f)
 
-let darks' () =
+let darks' fn =
     let pth = pth2'^"/v1/expertMode/startStorageAcquisition" in
     let xpth = "expert-mode/gain"^string_of_int !xgain in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string (`Assoc
     [("path", `String xpth);
      ("overwrite", `Bool true);
@@ -531,79 +470,79 @@ let darks' () =
      ("exposureMicroSec", `Int (expos_us()));
      ("flip", `String !xflip)]))) (cnv' f)
 
-let focus' () =
+let focus' fn =
     let pth = pth2'^"/v1/general/adjustObservationFocus" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ("{}") (cnv' f)
 
-let stopobs' () =
+let stopobs' fn =
     let pth = pth2'^"/v1/general/stopObservation" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ("{}") (cnv' f)
 
-let status'' () =
+let status_fun fn =
     let pth = pth2'^"/v1/app/status" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     let headers = Astro_utils.split [
       "Accept: */*";
     ] in
     Astro_utils.get' proto server [] headers pth (cnv' f) hdrs
 
-let openarm' () =
+let openarm' fn =
     let pth = pth2'^"/v1/general/openForMaintenance" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     let headers = auth' () in
     Astro_utils.post' proto server [] headers pth ("{}") (cnv' f)
 
-let motorstatus () =
+let motorstatus fn =
     let pth = pth2'^"/v1/debug/motors/readAllStatusRegisters" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ("{}") (cnv' f)
 
-let motorgo () =
+let motorgo fn =
     let pth = pth2'^"/v1/motors/goAbsolute" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string (`Assoc
     [("ALT", `Float (Altaz.cnv_dec (entry_alt'())));
      ("AZ", `Float (Altaz.cnv_dec (entry_az'())))] ))) (cnv' f)
 
-let track () =
+let track fn =
     let pth = pth2'^"/v1/motors/track" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string (`Assoc
     [("ALT", `Bool true);
      ("AZ", `Bool true)] ))) (cnv' f)
 
-let trackoff () =
+let trackoff fn =
     let pth = pth2'^"/v1/motors/track" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string (`Assoc
     [("ALT", `Bool false);
      ("AZ", `Bool false)] ))) (cnv' f)
 
-let singlefocus () =
+let singlefocus fn =
     let pth = pth2'^"/v1/focus/singleFocus" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string (`Assoc
     [("algorithm", `String "DCT");
      ] ))) (cnv' f)
 
-let autofocus () =
+let autofocus fn =
     let pth = pth2'^"/v1/focus/startAutoFocus" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string (`Assoc
     [("algorithm", `String "DCT");
      ] ))) (cnv' f)
 
-let park' () =
+let park' fn =
     print_endline "Park'";
     let pth = pth2'^"/v1/general/park" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ("{}") (cnv' f)
 
-let astrometry () =
+let astrometry fn =
     let pth = pth2'^"/v1/astrometry/singleAstrometry" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string (`Assoc
     [("type", `String "JPEG");
      ("binning", `Int 2);
@@ -611,16 +550,16 @@ let astrometry () =
      ("exposureMicroSec", `Int 500000);
      ("convertToDate", `Bool false)] ))) (cnv' f)
 
-let readparams () =
+let readparams fn =
     let pth = pth2'^"/v1/camera/debug_readParams" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string (`Assoc
     [] ))) (cnv' f)
 
-let mosaic () =
+let mosaic fn =
     mos_id := "mo"^string_of_int (int_of_float (Unix.time()) mod 1000000);
     let pth = pth2'^"/v1/automator/writeMosaicProgram" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     let ra_flt = Altaz.cnv_ra (entry_ra'()) in
     let dec_flt = Altaz.cnv_dec (entry_dec'()) in
     let params = `Assoc [
@@ -648,11 +587,11 @@ let mosaic () =
      ("heightPassOffset", `Float (float_of_string (entry_hpassof'())));
      ("observationParams", params)] ))) (cnv' f)
 
-let obsprog () =
+let obsprog fn =
     let pth = pth2'^"/v1/automator/runObservationProgram" in
     let lat_flt = latitude() in
     let long_flt = longitude() in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     print_endline !mos_id;
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string (`Assoc
     [("programName", `String !mos_id);
@@ -661,11 +600,11 @@ let obsprog () =
      ("longitude", `Float long_flt);
      ("startTime", `Intlit (time_ms()))] ))) (cnv' f)
 
-let samples () =
+let samples fn =
     let pth = pth2'^"/v1/automator/takeSamples" in
     let lat_flt = latitude() in
     let long_flt = longitude() in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     let expos_lst = `Int (expos_us() / 4) :: `Int (expos_us() / 2) :: `Int (expos_us()) :: `Int (expos_us() * 2) :: `Int (expos_us() * 4) :: [] in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string (`Assoc
   [("onlyEstimate", `Bool true);
@@ -693,9 +632,9 @@ let samples () =
    ("mapSampling2", `Int 0);
    ("mapRange2", `List [`Int 175000; `Int 225000])] ))) (cnv' f)
 
-let abortall () =
+let abortall fn =
     let pth = pth2'^"/v1/app/abortAllOperations" in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ("{}") (cnv' f)
 
 let show_entries nam jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang ang_diam =
@@ -998,11 +937,11 @@ let clearprog() =
 
 let app_quit' () = print_endline "quit flagged"; quit' := true; Lwt.return_unit
 
-let startprog () =
+let startprog fn =
     let pth = pth2'^"/v1/automator/startObservationProgram" in
     let lat_flt = latitude() in
     let long_flt = longitude() in
-    let f = (fun s -> errchk' true (cnv s)) in
+    let f = (fun s -> fn (cnv s)) in
     let lst = List.rev (load_prog_entries()) in
     dump_prog_entries [];
     print_endline ("Entries in program: "^string_of_int (List.length lst));
@@ -1015,7 +954,7 @@ let startprog () =
          ("observations", `List lst)] in
     print_endline !mos_id;
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Safe.to_string prog')) (cnv' f)
-
+(*
 let rec cat'' cat_entries nentries lbl' =
   List.iteri (fun ix loc -> if loc=lbl' then
       begin
@@ -1067,14 +1006,13 @@ and singleshot () =
 
 and sm_jump lbl' = 
   let target = ref (-1) in
-  Array.iteri (fun ix (lbl, _) -> if lbl=lbl' && !target==(-1) then (target := ix; if!verbose_flag then print_endline (string_of_int (ix+1)^": "^lbl'))) taskarray;
+  print_endline lbl';
+  Array.iteri (fun ix (lbl, _) -> if lbl=lbl' && !target==(-1) then (target := ix; if true || !verbose_flag then print_endline (string_of_int (ix+1)^": "^lbl'))) taskarray;
   if !target <> -1 then
     begin
     Queue.add !target start;
     if!verbose_flag then print_endline (fst taskarray.(!target))
     end
-
-(*
 
 and search () = 
     let s = (targ_entry'()) in
@@ -1286,129 +1224,6 @@ and add_prog_entry () =
     show_prog_entries prog_entries;
     Lwt.return_unit
 
-and taskarray =
-       [|
-         ("smdb", smdb');
-         ("connect", preauth');
-         ("get1", get1');
-         ("post1", post1');
-         ("get2", get2');
-         ("get3", get3');
-         ("get4", get4');
-         ("get5", get5');
-         ("get6", get6');
-         ("get7", get7');
-         ("get8", get8');
-         ("get9", get9');
-         ("post11", post11');
-         ("get12", get12');
-         ("get13", get13');
-         ("post14", post14');
-         ("get15", get15');
-         ("get13", get13');
-         ("get15", get13');
-         ("get15", get13');
-         ("get15", get13');
-         ("get15", get13');
-         ("get16", get16');
-         ("get15", get17');
-         ("get15", get13');
-         ("get15", get13');
-         ("get16", get16');
-         ("get15", get13');
-         ("get15", get17');
-         ("post27", post27');
-         ("post28", post28');
-         ("get15", get13');
-         ("get16", get16');
-         ("get15", get17');
-         ("get13", get13');
-         ("get15", get13');
-         ("get15", get13');
-         ("get15", get13');
-         ("post36", post36');
-         ("get15", get15');
-         ("get13", get13');
-         ("get15", get13');
-         ("get15", get13');
-         ("get15", get13');
-         ("get15", get13');
-         ("get16", get16');
-         ("sockio", get13');
-         ("get16", get16');
-         ("", status');
-         ("status", status');
-         ("", status');
-         ("observe", observe');
-         ("", status');
-         ("focus", focus');
-         ("", status');
-         ("stopobs", stopobs');
-         ("", status');
-         ("park", status');
-         ("park'", park');
-         ("", status');
-         ("manualinit", manualinit');
-         ("", status');
-         ("motorgo", motorgo);
-         ("motorstatus", motorstatus);
-         ("", status');
-         ("singlefocus", singlefocus);
-         ("", status');
-         ("autofocus", autofocus);
-         ("", status');
-         ("singleshot", singleshot);
-         ("", status');
-         ("fetch", fetch');
-         ("dump", dump');
-         ("", status');
-         ("astrometry", astrometry);
-         ("", status');
-         ("readparams", readparams);
-         ("", status');
-         ("mosaic", mosaic);
-         ("", status');
-         ("obsprog", obsprog);
-         ("", status');
-         ("addprog", add_prog_entry);
-         ("", status');
-         ("startprog", startprog);
-         ("", status');
-         ("clearprog", clearprog);
-         ("", status');
-         ("samples", samples);
-         ("", status');
-         ("abortall", abortall);
-         ("", status');
-         ("darks", darks');
-         ("", status');
-         ("openarm", status');
-         ("openarm'", openarm');
-         ("", status');
-         ("simbad", Astro_utils.simbad');
-         ("", status');
-         ("stellarium", Astro_utils.stellarium');
-         ("", status');
-         ("horizons", horizons');
-         ("", status');
-         ("messier", Astro_utils.messier');
-         ("", status');
-         ("ngc2000", Astro_utils.ngc2000');
-         ("", status');
-(*
-         ("pgc", Astro_utils.pgc');
-         ("", status');
-*)
-         ("abell", Astro_utils.abell');
-         ("", status');
-         ("dso", Dso_read.dso');
-         ("", status');
-         ("setfocus", Astro_utils.setfocus');
-         ("", status');
-         ("quit", app_quit');
-         ("", status');
-       |]
-
 let update_status () =
 (*
   update_status' "success" status_line.(0);
@@ -1421,8 +1236,9 @@ let update_status () =
 *)
   ()
 
+(*
 let rec iter_a ix a =
-  if!verbose_flag then print_endline ("iter_a: "^string_of_int !ix^" "^fst a.(!ix));
+  if true || !verbose_flag then print_endline ("iter_a: "^string_of_int !ix^" "^fst a.(!ix));
   match a.(!ix) with
   | ("", x) ->
     if !quit' then
@@ -1454,7 +1270,6 @@ let rec iter_a ix a =
         let f = fun f -> let cnt = string_of_int !ix in if!verbose_flag then print_endline (cnt^": "^lbl); f () in
         Lwt.apply f x >>= fun () -> iter_a ix a
         end
-
 let gui () = ()
 
 let goto_received ra_flt dec_flt =
@@ -1478,3 +1293,4 @@ let single_exposure exposure is_light =
             entry_darkcnt_set_text "1";
             sm_jump "darks"
             end
+*)

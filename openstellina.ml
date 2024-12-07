@@ -1,51 +1,34 @@
 open Js_of_ocaml
 open Lwt.Syntax
-open Cookie
 open Astro_utils
-
-type graphics =
-  | Empty
-  | Fill of string * float * float
-  | Font of string
-  | Stroke of float * float * float * float
+open Cookie
 
 type action =
-  | None
-  | Motor
+  | Idle
+  | Connect
+  | Motor 
   | Status
   | Consume
   | Init
   | Observe
   | Park
   | Openarm
-  | Preauth
-  | Postauth
+  | Get1
+  | Post1
 
-let action_func = function
-  | None -> Js_of_ocaml_lwt.Lwt_js.sleep 0.1
-  | Motor -> Telescope.motorgo ()
-  | Status -> Telescope.status'' ()
-  | Consume -> Telescope.status' ()
-  | Init -> Telescope.init' ()
-  | Observe -> Telescope.observe' ()
-  | Park -> Telescope.park' ()
-  | Openarm -> Telescope.openarm' ()
-  | Preauth -> Telescope.preauth' ()
-  | Postauth -> Telescope.postauth' ()
+let websocket = ref None
 
-let action = ref None
+let action = ref Idle
 let connect = ref false
 
 let canvas_width = 1280.
 let canvas_height = 480.
-let (sel:int ref) = ref 0
-let window_url = Js.to_string Dom_html.window##.location##.href
-let parent_url = Js.to_string Dom_html.window##.parent##.location##.href
-let window_protocol = Js.to_string Dom_html.window##.location##.protocol
-let parent_protocol = Js.to_string Dom_html.window##.parent##.location##.protocol
 
-let is_secure_session () =
-  Js.to_string Dom_html.window##.location##.protocol = "https:"
+let action_seq = ref 0
+let delay_seq = ref 0
+let verbose = ref false
+let verbose' = ref true
+let poll_type = ref true
 
 let canvas =
   let r = Dom_html.createCanvas Dom_html.document in
@@ -53,17 +36,646 @@ let canvas =
   r##.height := int_of_float canvas_height;
   r
 
-let tz_local () =
-    let dummy = (Js.Unsafe.obj [||]) in
-    let intl = Js.Unsafe.global##.Intl in
-    let date = intl##DateTimeFormat(dummy) in
-    let options = date##resolvedOptions(dummy) in
-    let tz = options##.timeZone in
-    Js.to_string tz
+let create_styled_div doc class_name =
+ let div = Dom_html.createDiv doc in
+ div##.className := Js.string class_name;
+div
 
-let split_date () =
-    let tm = Unix.gmtime (datum()) in
-    tm.tm_year+1900,tm.tm_mon+1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec
+type graphics =
+  | Empty
+  | Fill of string * float * float
+  | Font of string
+  | Stroke of float * float * float * float
+
+let add_message msg_type text =
+  let doc = Dom_html.document in
+  match Dom_html.getElementById_opt "telescope-messages" with
+  | None -> ()
+  | Some panel ->
+      let msg = create_styled_div doc ("message " ^ msg_type) in
+      msg##.innerHTML := Js.string text;
+      Dom.appendChild panel msg;
+      (* Auto-scroll to bottom *)
+      panel##.scrollTop := panel##.scrollHeight
+
+let show_error text = add_message "error" text
+let show_info text = if false then print_endline text; add_message "info" text
+let new_challenge = ref false
+
+let send_message msg =
+  match !websocket with
+  | Some ws ->
+      if !verbose then show_info ("WS sending: " ^ msg);
+      ws##send (Js.string msg);
+      true
+  | None ->
+      show_info "No websocket connection";
+false
+
+let create_status_section doc title items =
+  let section = create_styled_div doc "status-section" in
+  let title_div = create_styled_div doc "section-title" in
+  title_div##.innerHTML := Js.string title;
+  Dom.appendChild section title_div;
+  
+  List.iter (fun (label, value_ref) ->
+    let row = create_styled_div doc "status-row" in
+    let label_div = create_styled_div doc "status-label" in
+    let value_div = create_styled_div doc "status-value" in
+    label_div##.innerHTML := Js.string label;
+    value_div##.id := Js.string ("status-" ^ label);
+    value_div##.innerHTML := Js.string !value_ref;
+    Dom.appendChild row label_div;
+    Dom.appendChild row value_div;
+    Dom.appendChild section row
+  ) items;
+  section
+
+let process_json_value path = function
+  | `Float f -> 
+      begin match path with
+      | ["sensors"; "temperature"] -> Telescope.tempref := string_of_float f
+      | ["sensors"; "humidity"] -> Telescope.humref := string_of_float f
+      | ["dewpointDepression"] -> Telescope.dewpointref := string_of_float f
+      | ["motors"; "AZ"; "position"] -> Telescope.az_posref := string_of_float f
+      | ["motors"; "ALT"; "position"] -> Telescope.alt_posref := string_of_float f
+      | _ -> ()
+      end
+  | `String s ->
+      begin match path with
+      | ["challenge"] -> 
+          if !Telescope.challengeref <> s then (
+	    new_challenge := true;
+	    print_endline ("Challenge: "^s);						      
+            Telescope.challengeref := s
+          )
+      | ["telescopeId"] -> 
+          if !Telescope.telescopeId <> s then (
+            new_challenge := true;
+            Telescope.telescopeId := s
+          )
+      | ["currentOperation"; "type"] -> Telescope.debugref := s
+      | ["error"; "name"] -> Telescope.errorref := s
+      | ["defogStatus"] -> Telescope.defogref := s
+      | _ -> ()
+      end
+  | `Int i ->
+      begin match path with 
+      | ["bootCount"] ->
+          if !Telescope.bootCnt <> i then (
+            new_challenge := true;
+            Telescope.bootCnt := i
+          )
+      | _ -> ()
+      end
+| _ -> ()
+
+let create_telescope_display doc =
+  let display = create_styled_div doc "telescope-display" in
+
+  let system = create_status_section doc "System" [
+    ("ID", Telescope.telescopeId);
+    ("Model", Telescope.model_ref);
+    ("API Version", Telescope.api_version_ref);
+    ("Version", Telescope.version_ref);
+    ("Boot Count", ref (string_of_int !Telescope.bootCnt));
+    ("Auth", ref "Unknown");
+    ("Debug Mode", Telescope.board_debug_ref);
+    ("Autofocus", Telescope.autofocus_ref);
+    ("Challenge", Telescope.challengeref);
+    ("Initialized", Telescope.initialized_ref);
+    ("Shutting Down", Telescope.shutting_down_ref)
+  ] in
+
+  let environment = create_status_section doc "Environment" [
+    ("Temperature", Telescope.tempref);
+    ("Temp Delta", Telescope.temperature_delta_ref);
+    ("Humidity", Telescope.humref);
+    ("Humidity Delta", Telescope.humidity_delta_ref);
+    ("Dew Point", Telescope.dewpointref); 
+    ("Dew Point Depression", Telescope.dewpointref);
+    ("Defog Status", Telescope.defogref)
+  ] in
+
+  let motors = create_status_section doc "Motors" [
+    ("AZ Position", Telescope.az_posref);
+    ("AZ State", ref !Telescope.motor_state_ref);
+    ("ALT Position", Telescope.alt_posref);
+    ("ALT State", ref !Telescope.motor_state_ref);
+    ("DER Position", Telescope.der_posref);
+    ("DER State", ref !Telescope.motor_state_ref);
+    ("MAP Position", Telescope.map_posref);
+    ("MAP State", ref !Telescope.motor_state_ref)
+  ] in  
+
+  let status = create_status_section doc "Status" [
+    ("Operation", Telescope.debugref);
+    ("Error", Telescope.errorref)
+  ] in
+  let storage = create_status_section doc "Storage" [
+    ("System Size", Telescope.storage_system_size_ref);
+    ("System Available", Telescope.storage_system_avail_ref);
+    ("Data Size", Telescope.storage_data_size_ref);
+    ("Data Available", Telescope.storage_data_avail_ref);
+    ("Network Band", Telescope.storage_band_ref)
+  ] in
+
+  let updates = create_status_section doc "Updates" [
+    ("Installed Version", Telescope.installed_version_ref);
+    ("Min Compatible", Telescope.min_compat_version_ref); 
+    ("State", Telescope.update_state_ref)
+  ] in
+
+  let observation = create_status_section doc "Current Observation" [
+    ("Target", Telescope.current_target_ref);
+    ("Latitude", Telescope.position_lat_ref);
+    ("Longitude", Telescope.position_lon_ref) 
+  ] in
+
+  List.iter (fun section -> Dom.appendChild display section) 
+    [system; environment; storage; motors; status; updates; observation];
+  display
+
+let update_display_value id value =
+  match Dom_html.getElementById_opt id with
+  | Some element -> element##.innerHTML := Js.string value
+  | None -> ()
+
+let update_telescope_display () =
+  update_display_value "status-ID" !Telescope.telescopeId;
+  update_display_value "status-Boot Count" (string_of_int !Telescope.bootCnt);
+  update_display_value "status-Auth" (let auth = !Telescope.authref in if String.length auth > 80 then (String.sub auth 16 64^" ...") else "Unknown");
+  update_display_value "status-Challenge" !Telescope.challengeref;
+  update_display_value "status-Temperature" !Telescope.tempref;
+  update_display_value "status-Humidity" !Telescope.humref;
+  update_display_value "status-Operation" !Telescope.debugref;
+  update_display_value "status-Error" !Telescope.errorref
+
+let ws_action = ref None  (* Separate from main action *)
+
+let rec ping_loop () =
+  let* () = Js_of_ocaml_lwt.Lwt_js.sleep (float !Telescope.session'.ping_int /. 1000.0) in
+  if !connect then begin
+    match !websocket with
+    | Some ws ->
+        ws##send (Js.string "2probe"); (* v3 ping probe *)
+        show_info "ping probe sent";
+        ping_loop ()
+    | None -> 
+        show_info "no websocket";
+        Lwt.return_unit
+  end else
+    Lwt.return_unit
+
+let handle_socketio msg =
+  if false then print_endline ("socket.io: " ^ msg);
+  match msg with
+  | "2" -> (* PING *)
+     show_info "ping";
+     begin match !websocket with
+     | Some ws -> ws##send (Js.string "3") (* PONG *)
+     | None -> ()
+     end
+  | "3" -> (* PONG *) 
+     show_info "pong"
+  | s when String.length s >= 2 && String.sub s 0 2 = "42" ->
+     show_info ("socket.io message: " ^ s)
+  | _ -> 
+     show_info ("other socket.io: " ^ msg)
+
+let rec process_json path = function
+  | `Assoc
+    [("sid", `String sid);
+     ("upgrades", `List [`String "websocket"]); ("pingInterval", `Int ping_int);
+     ("pingTimeout", `Int ping_tim)] ->
+     if !(Telescope.session').sid = "" then
+       begin
+       show_info ("sid: " ^ sid);
+       Telescope.session' := { sid; ping_int; ping_tim };
+       if connect_websocket Telescope.proto Telescope.server Telescope.pth3' then
+         begin
+         ignore (ping_loop ());
+         print_endline "WebSocket connection successful"
+         end
+       else
+         print_endline "WebSocket connection failed"
+     end;
+  | `Assoc pairs -> List.iter (fun (k,v) -> process_json (k::path) v) pairs
+  | `List items -> List.iteri (fun i v -> process_json (string_of_int i::path) v) items  
+  | v -> match List.rev path with
+         | "temperature"::"sensors"::_ -> process_json_value ["sensors"; "temperature"] v
+         | "humidity"::"sensors"::_ -> process_json_value ["sensors"; "humidity"] v 
+         | "humidityDelta"::"sensors"::_ -> process_json_value ["sensors"; "humidityDelta"] v
+         | "temperatureDelta"::"sensors"::_ -> process_json_value ["sensors"; "temperatureDelta"] v
+         | "defogStatus"::"sensors"::_ -> process_json_value ["defogStatus"] v
+         | "dewpointDepression"::"sensors"::_ -> process_json_value ["dewpointDepression"] v 
+         | "challenge"::_ -> process_json_value ["challenge"] v
+         | "telescopeId"::_ -> process_json_value ["telescopeId"] v 
+         | "type"::"currentOperation"::_ -> process_json_value ["currentOperation"; "type"] v
+         | "name"::"error"::_ -> process_json_value ["error"; "name"] v
+         | "bootCount"::_ -> process_json_value ["bootCount"] v
+         | "position"::"AZ"::"motors"::_ -> process_json_value ["motors"; "AZ"; "position"] v
+         | "state"::"AZ"::"motors"::_ -> process_json_value ["motors"; "AZ"; "state"] v
+         | "position"::"ALT"::"motors"::_ -> process_json_value ["motors"; "ALT"; "position"] v
+         | "state"::"ALT"::"motors"::_ -> process_json_value ["motors"; "ALT"; "state"] v
+         | "position"::"DER"::"motors"::_ -> process_json_value ["motors"; "DER"; "position"] v
+         | "state"::"DER"::"motors"::_ -> process_json_value ["motors"; "DER"; "state"] v
+         | "position"::"MAP"::"motors"::_ -> process_json_value ["motors"; "MAP"; "position"] v
+         | "state"::"MAP"::"motors"::_ -> process_json_value ["motors"; "MAP"; "state"] v
+         | "shuttingDown"::_ -> process_json_value ["shuttingDown"] v
+         | "initialized"::_ -> process_json_value ["initialized"] v
+         | "version"::_ -> process_json_value ["version"] v
+         (* System info *)
+         | "apiVersion"::_ -> process_json_value ["apiVersion"] v
+         | "model"::_ -> process_json_value ["model"] v
+         | "version"::_ -> process_json_value ["version"] v
+         | "boardInDebugMode"::_ -> process_json_value ["boardDebug"] v
+         | "autofocusPosition"::_ -> process_json_value ["autofocus"] v
+
+         (* Storage *)
+         | "size"::"system"::"storage"::_ -> process_json_value ["storage"; "system"; "size"] v
+         | "available"::"system"::"storage"::_ -> process_json_value ["storage"; "system"; "available"] v
+         | "size"::"data"::"storage"::_ -> process_json_value ["storage"; "data"; "size"] v
+         | "available"::"data"::"storage"::_ -> process_json_value ["storage"; "data"; "available"] v
+         | "band"::"settings"::_ -> process_json_value ["settings"; "band"] v
+
+         (* Updates *)
+         | "installedVersion"::"update"::_ -> process_json_value ["update"; "installed"] v
+         | "minimumCompatibleVersion"::"update"::_ -> process_json_value ["update"; "mincompat"] v
+         | "state"::"update"::_ -> process_json_value ["update"; "state"] v
+
+         (* Current observation target *)
+         | "objectName"::"target"::_ -> process_json_value ["target"; "name"] v
+         | "latitude"::"position"::_ -> process_json_value ["position"; "lat"] v
+         | "longitude"::"position"::_ -> process_json_value ["position"; "lon"] v
+
+         | "result"::"data"::_ -> ()
+         | "result"::"apiVersion"::_ -> process_json_value ["apiVersion"] v
+         | "result"::"autofocusPosition"::_ -> process_json_value ["autofocus"] v
+         | "result"::"availableReports"::_ -> ()
+         | "result"::"boardInDebugMode"::_ -> ()
+         | "result"::"boardInitError"::_ -> ()
+         | "result"::"challenge"::_ -> process_json_value ["challenge"] v
+         | "result"::"currentOperation"::_ -> ()
+         | "result"::"elapsedTime"::_ -> ()
+         | "result"::"filter"::_ -> ()
+         | "result"::"initError"::_ -> ()
+         | "result"::"initialized"::_ -> ()
+         | "result"::"masterDeviceId"::_ -> ()
+	 | "result"::"connectedDevices"::n::"id"::_ -> ()
+	 | "result"::"connectedDevices"::n::"name"::_ -> ()
+	 | "result"::"connectedDevices"::n::"user"::_ -> ()
+         | "result"::"model"::_ -> process_json_value ["model"] v
+         | "result"::"telescopeId"::_ -> process_json_value ["telescopeId"] v 
+         | "result"::"bootCount"::_ -> process_json_value ["bootCount"] v
+         | "result"::"captureStore"::"storedCaptures"::_::"exposureMicroSec"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"filter"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"lastImage"::"cropHeight"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"lastImage"::"cropWidth"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"lastImage"::"cropX"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"lastImage"::"cropY"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"lastImage"::"index"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"lastImage"::"metadata"::"mosaic"::"turnCount"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"lastImage"::"metadata"::"mosaic"::"turnProgress"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"lastImage"::"stackingCount"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"lastImage"::"stackingErrorCount"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"lastImage"::"time"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"lastImage"::"url"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"mosaic"::"heightDegree"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"mosaic"::"widthDegree"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"startTime"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"storeId"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"target"::"de"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"target"::"objectId"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"target"::"objectName"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"target"::"ra"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"target"::"rot"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"target"::"type"::_ -> ()
+         | "result"::"captureStore"::"storedCaptures"::_::"totalStackingCount"::_ -> ()
+	 | "result"::"motors"::"ALT"::"atStop"::_ -> ()
+	 | "result"::"motors"::"AZ"::"atStop"::_ -> ()
+	 | "result"::"motors"::"DER"::"atStop"::_ -> ()
+         | "result"::"logs"::"bufferPosition"::_ -> ()
+         | "result"::"logs"::"bufferSize"::_ -> ()
+         | "result"::"logs"::"numFiles"::_ -> ()
+         | "result"::"message"::_ -> ()
+         | "result"::"motors"::"ALT"::"calibrated"::_ -> ()
+         | "result"::"motors"::"ALT"::"position"::_ -> ()
+         | "result"::"motors"::"ALT"::"state"::_ -> ()
+         | "result"::"motors"::"AZ"::"calibrated"::_ -> ()
+         | "result"::"motors"::"AZ"::"position"::_ -> ()
+         | "result"::"motors"::"AZ"::"state"::_ -> ()
+         | "result"::"motors"::"DER"::"calibrated"::_ -> ()
+         | "result"::"motors"::"DER"::"position"::_ -> ()
+         | "result"::"motors"::"DER"::"state"::_ -> ()
+         | "result"::"motors"::"MAP"::"calibrated"::_ -> ()
+         | "result"::"motors"::"MAP"::"position"::_ -> ()
+         | "result"::"motors"::"MAP"::"state"::_ -> ()
+         | "result"::"network"::"band"::_ -> ()
+         | "result"::"network"::"channel"::_ -> ()
+         | "result"::"previousBootError"::_ -> ()
+         | "result"::"previousOperations"::_::_ -> ()
+         | "result"::"sensors"::"defogStatus"::_ -> ()
+         | "result"::"sensors"::"dewpointDepression"::_ -> ()
+         | "result"::"sensors"::"humidity"::_ -> ()
+         | "result"::"sensors"::"humidityDelta"::_ -> ()
+         | "result"::"sensors"::"temperature"::_ -> ()
+         | "result"::"sensors"::"temperatureDelta"::_ -> ()
+         | "result"::"settings"::"band"::_ -> ()
+         | "result"::"settings"::"enableFullResolution"::_ -> ()
+         | "result"::"settings"::"enableLiveFocus"::_ -> ()
+         | "result"::"settings"::"storageFileCategories"::_::_ -> ()
+         | "result"::"settings"::"telescopeName"::_ -> ()
+         | "result"::"shuttingDown"::_ -> ()
+         | "result"::"storage"::"data"::"available"::_ -> ()
+         | "result"::"storage"::"data"::"size"::_ -> ()
+         | "result"::"storage"::"public"::_ -> ()
+         | "result"::"storage"::"system"::"available"::_ -> ()
+         | "result"::"storage"::"system"::"size"::_ -> ()
+         | "result"::"storage"::"usb"::_ -> ()
+         | "result"::"timestamp"::_ -> ()
+         | "result"::"update"::"installedVersion"::_ -> ()
+         | "result"::"update"::"minimumCompatibleVersion"::_ -> ()
+         | "result"::"update"::"state"::_ -> ()
+         | "result"::"version"::_ -> ()
+         | "Status"::_ -> ()
+         | "success"::_ -> ()
+         | "code"::_ -> ()
+         | "message"::_ -> ()
+         | "1"::"logs"::"bufferPosition"::_ -> ()
+         | "1"::"logs"::"bufferSize"::_ -> ()
+         | "1"::"logs"::"numFiles"::_ -> ()
+         | "1"::"previousOperations"::_::_ -> ()
+         | "1"::"captureStore"::"storedCaptures"::_ -> ()
+	 | "1"::"apiVersion"::_ -> ()
+	 | "1"::"autofocusPosition"::_ -> ()
+	 | "1"::"availableReports"::_ -> ()
+	 | "1"::"boardInDebugMode"::_ -> ()
+	 | "1"::"boardInitError"::_ -> ()
+	 | "1"::"bootCount"::_ -> ()
+	 | "1"::"challenge"::_ -> ()
+	 | "1"::"connectedDevices"::n::"id"::_ -> ()
+	 | "1"::"connectedDevices"::n::"name"::_ -> ()
+	 | "1"::"connectedDevices"::n::"user"::_ -> ()
+	 | "1"::"currentOperation"::_ -> ()
+	 | "1"::"elapsedTime"::_ -> ()
+	 | "1"::"filter"::_ -> ()
+	 | "1"::"initError"::_ -> ()
+	 | "1"::"initialized"::_ -> ()
+	 | "1"::"logs::bufferPosition"::_ -> ()
+	 | "1"::"logs::bufferSize"::_ -> ()
+	 | "1"::"logs::numFiles"::_ -> ()
+	 | "1"::"masterDeviceId"::_ -> ()
+	 | "1"::"model"::_ -> ()
+	 | "1"::"motors"::"ALT"::"atStop"::_ -> ()
+	 | "1"::"motors"::"ALT"::"calibrated"::_ -> ()
+	 | "1"::"motors"::"ALT"::"position"::_ -> ()
+	 | "1"::"motors"::"ALT"::"state"::_ -> ()
+	 | "1"::"motors"::"AZ"::"atStop"::_ -> ()
+	 | "1"::"motors"::"AZ"::"calibrated"::_ -> ()
+	 | "1"::"motors"::"AZ"::"position"::_ -> ()
+	 | "1"::"motors"::"AZ"::"state"::_ -> ()
+	 | "1"::"motors"::"DER"::"atStop"::_ -> ()
+	 | "1"::"motors"::"DER"::"calibrated"::_ -> ()
+	 | "1"::"motors"::"DER"::"position"::_ -> ()
+	 | "1"::"motors"::"DER"::"state"::_ -> ()
+	 | "1"::"motors"::"MAP"::"calibrated"::_ -> ()
+	 | "1"::"motors"::"MAP"::"position"::_ -> ()
+	 | "1"::"motors"::"MAP"::"state"::_ -> ()
+	 | "1"::"network"::"band"::_ -> ()
+	 | "1"::"network"::"channel"::_ -> ()
+	 | "1"::"previousBootError"::_ -> ()
+	 | "1"::"sensors"::"defogStatus"::_ -> ()
+	 | "1"::"sensors"::"dewpointDepression"::_ -> ()
+	 | "1"::"sensors"::"humidity"::_ -> ()
+	 | "1"::"sensors"::"humidityDelta"::_ -> ()
+	 | "1"::"sensors"::"temperature"::_ -> ()
+	 | "1"::"sensors"::"temperatureDelta"::_ -> ()
+	 | "1"::"settings"::"band"::_ -> ()
+	 | "1"::"settings"::"enableFullResolution"::_ -> ()
+	 | "1"::"settings"::"enableLiveFocus"::_ -> ()
+	 | "1"::"settings"::"storageFileCategories"::n::_ -> ()
+	 | "1"::"settings"::"telescopeName"::_ -> ()
+	 | "1"::"shuttingDown"::_ -> ()
+	 | "1"::"storage"::"data"::"available"::_ -> ()
+	 | "1"::"storage"::"data"::"size"::_ -> ()
+	 | "1"::"storage"::"public"::_ -> ()
+	 | "1"::"storage"::"system"::"available"::_ -> ()
+	 | "1"::"storage"::"system"::"size"::_ -> ()
+	 | "1"::"storage"::"usb"::_ -> ()
+	 | "1"::"telescopeId"::_ -> ()
+	 | "1"::"timestamp"::_ -> ()
+	 | "1"::"update"::"installedVersion"::_ -> ()
+	 | "1"::"update"::"minimumCompatibleVersion"::_ -> ()
+	 | "1"::"update"::"state"::_ -> ()
+         | "1"::"version"::_ -> ()
+         | oth -> print_endline ("Unhandled: "^String.concat "::" oth)
+
+and process_ws_messages ws =
+  ws##.onmessage := Dom.handler (fun e ->
+    let msg = Js.to_string e##.data in
+    handle_frame msg;
+    Js._true
+    )
+
+and connect_websocket proto server port =
+  let server' = if String.length server > 0 && server.[0] = '/' then 
+    String.sub server 1 (String.length server - 1) else server in
+  let device_info = {|id=openstellina2003&name=openstellina2003|} in
+  let ws_url = (if proto = "https://" then "wss://" else "ws://") ^ server' ^ port ^
+    "/socket.io/?EIO=3&transport=websocket&" ^ device_info in
+  show_info ("Connecting WebSocket to: " ^ ws_url);
+  let connected = ref false in
+  let open Js_of_ocaml.WebSockets in
+  try
+    let ws = new%js webSocket (Js.string ws_url) in
+    ws##.onmessage := Dom.handler (fun e ->
+      let msg = Js.to_string e##.data in
+      if String.length msg < 80 then show_info ("WS received: " ^ msg);
+      handle_frame msg;
+      connected := true;
+      Js._true
+    );
+    let rec wait_connect n =
+      if n <= 0 then false
+      else if !connected then true 
+      else (
+        ignore (Js_of_ocaml_lwt.Lwt_js.sleep 0.1);
+        wait_connect (n-1)
+      )
+    in
+    if wait_connect 50 then true
+    else false
+  with e ->
+    show_info ("WebSocket connection failed: " ^ Printexc.to_string e);
+  false
+
+and handle_frame msg =
+  if String.length msg < 80 then show_info ("Received frame: " ^ msg);
+  match msg.[0] with
+  | '0' -> (* Socket.IO handshake *)
+      begin try
+        let json = String.sub msg 1 (String.length msg - 1) in
+        let handshake = Yojson.Safe.from_string json in
+        let open Yojson.Safe.Util in
+        let sid = member "sid" handshake |> to_string in
+        let ping_interval = member "pingInterval" handshake |> to_int in
+        let ping_timeout = member "pingTimeout" handshake |> to_int in
+        Telescope.session' := { Telescope.sid; ping_int=ping_interval; ping_tim=ping_timeout };
+        show_info ("Handshake complete, sid: " ^ sid);
+        match !websocket with
+        | Some ws ->
+            (* Send connection ack *)
+            ws##send (Js.string "40");
+            (* Then send identify message *)
+            let identify = Printf.sprintf {|42["sendUserName",{"device":"openstellina-2.003","name":"openstellina-2.003"}]|} in
+            show_info ("Sending identify: " ^ identify);
+            ws##send (Js.string identify)
+        | None -> ()
+      with e ->
+        show_info ("Handshake parse failed: " ^ Printexc.to_string e)
+      end
+  | '4' when String.length msg >= 2 -> 
+      begin match msg.[1] with
+      | '2' -> (* Socket.IO event *)
+          if String.length msg > 2 then
+            let event_json = String.sub msg 2 (String.length msg - 2) in
+            if String.length event_json < 80 then show_info ("Event: " ^ event_json);
+            process_json [] (Yojson.Safe.from_string event_json)
+      | '0' -> (* Connection established *)
+          show_info "Socket.IO connection established"
+      | _ -> show_info ("Unknown type-4 message: " ^ msg)
+      end
+  | '3' -> show_info "Pong received"
+  | _ -> show_info ("Unhandled frame type: " ^ msg)
+
+and handle_socketio msg =
+  if !verbose' then print_endline ("socket.io: " ^ msg);
+  match msg with
+  | "2" -> (* PING *)
+     show_info "ping";
+     begin match !websocket with
+     | Some ws -> ws##send (Js.string "3") (* PONG *)
+     | None -> ()
+     end
+  | "3" -> (* PONG *) 
+     show_info "pong"
+  | s when String.length s >= 2 && String.sub s 0 2 = "42" ->
+     show_info ("socket.io message: " ^ s)
+  | _ -> 
+show_info ("other socket.io: " ^ msg)
+
+let errchklst' user = function
+  | (kw', `List [`String "message"; `String msg]) ->
+      handle_socketio msg
+  | (_, json) -> process_json [] json
+	
+let session (arg:Yojson.Safe.t) =
+  if false then print_endline "session";
+  errchklst' true ("R", arg);
+  update_telescope_display ()
+
+let connect_actions = let open Telescope in [|
+         ("Calling preauth'", preauth');
+         ("Calling get1'", (fun () -> get1' session));
+         ("Calling post1'", (fun () -> post1' session));
+         ("Calling get2'", (fun () -> get2' session));
+         ("Calling get3'", (fun () -> get3' session));
+         ("Calling get4'", (fun () -> get4' session));
+         ("Calling get5'", (fun () -> get5' session));
+         ("Calling get6'", (fun () -> get6' session));
+         ("Calling get7'", (fun () -> get7' session));
+         ("Calling get8'", (fun () -> get8' session));
+         ("Calling get9'", (fun () -> get9' session));
+         ("Calling post11'", (fun () -> post11' session));
+         ("Calling get12'", (fun () -> get12' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling post14'", (fun () -> post14' session));
+         ("Calling get15'", (fun () -> get15' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get16'", (fun () -> get16' session));
+         ("Calling get17'", (fun () -> get17' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get16'", (fun () -> get16' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get17'", (fun () -> get17' session));
+         ("Calling post27'", (fun () -> post27' session));
+         ("Calling post28'", (fun () -> post28' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get16'", (fun () -> get16' session));
+         ("Calling get17'", (fun () -> get17' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling post36'", (fun () -> post36' session));
+         ("Calling get15'", (fun () -> get15' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get16'", (fun () -> get16' session));
+         ("Calling get13'", (fun () -> get13' session));
+         ("Calling get16'", (fun () -> get16' session));
+|]
+
+let cnvauth s =
+  try let auth = Telescope.cnv s in let authstr = Yojson.Safe.Util.to_string ( Yojson.Safe.Util.member "authorization" auth ) in show_info ("auth "^String.sub authstr 16 64^" ..."); Telescope.authref := authstr; 
+  with _ -> Telescope.authref := "auth fail"
+
+let rec action_func pending = function
+  | Get1 -> if !verbose' then print_endline "Get1"; Telescope.get1' session
+  | Post1 -> if !verbose' then print_endline "Post1"; Telescope.post1' session
+  | Park -> if !verbose then print_endline "Park"; Telescope.park' session
+  | Idle -> if !verbose then print_endline ("None: "^string_of_int !delay_seq); 
+    incr delay_seq;
+    if !delay_seq < 20 || !(Telescope.authref) = "" then Js_of_ocaml_lwt.Lwt_js.sleep 0.1 else
+    (delay_seq := 0; action_func 0 Consume)
+  | Connect -> if !verbose then print_endline "Connect"; 
+      if !action_seq < Array.length connect_actions then (
+        action := Connect;
+        print_endline (fst (connect_actions.(!action_seq))^" action "^
+          string_of_int !action_seq^"/"^string_of_int (Array.length connect_actions));
+        let* _ = snd (connect_actions.(pending)) () in
+        if !new_challenge then (
+          new_challenge := false;
+          let* _ = Telescope.postauth' cnvauth in
+          incr action_seq;
+          action_func !action_seq Connect
+        ) else (
+          incr action_seq;
+          action_func !action_seq Connect
+        )
+      ) else (
+        connect := true;
+        action := Idle;
+        Js_of_ocaml_lwt.Lwt_js.sleep 0.1
+      )
+  | Motor -> if !verbose then print_endline "Motorgo"; Telescope.motorgo session
+  | Status -> if !verbose' then print_endline "Status"; Telescope.status_fun session
+  | Consume -> if !verbose' then print_endline "Consume"; Telescope.status_fun' session
+  | Init -> if !verbose then print_endline "Init"; Telescope.init' session
+  | Observe -> if !verbose then print_endline "Observe"; Telescope.observe' session
+  | Openarm -> if !verbose' then print_endline "Openarm"; Telescope.openarm' session
+
+let sel = ref 0
+
+let choose fn =
+  fn();
+  let (found, ra', dec', mag') = Messier_catalogue.messier_array.(!sel) in
+  let ra_flt = Altaz.cnv_ra ra' in
+  let dec_flt = Altaz.cnv_dec dec' in
+  let yr,mon,dy,hr,min,sec = split_date() in
+  let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = 
+    Altaz.altaz_calc yr mon dy hr min sec ra_flt dec_flt (latitude()) (longitude()) in
+Astro_utils.show_entries found jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan (float_of_string mag') nan nan;
+[Empty]
 
 let rec draw_things fn arg = 
   let context = canvas##getContext Dom_html._2d_ in
@@ -73,236 +685,293 @@ let rec draw_things fn arg =
     | Fill (str,x,y) -> context##fillText (Js.string str) x y
     | Stroke (x,y,w,h) -> context##strokeRect x y w h
     | Empty -> ()) (fn arg);
-  let* () = (Js_of_ocaml_lwt.Lwt_js.sleep 1.0) in
-  let* () = if !connect then Telescope.status'' () else (Js_of_ocaml_lwt.Lwt_js.sleep 0.1) in
-  let* () = if !connect then Telescope.postauth' () else (Js_of_ocaml_lwt.Lwt_js.sleep 0.1) in
-  let* () = action_func !action in
-  action := None;
+    let* () = (Js_of_ocaml_lwt.Lwt_js.sleep 0.1) in
+  let* () = if !new_challenge then (new_challenge := false; Telescope.postauth' cnvauth) else (Js_of_ocaml_lwt.Lwt_js.sleep 0.1) in
+  let pending = !action in
+  action := Idle;
+  let* () = action_func 0 pending in
   draw_things fn (fun _ -> ())
-
-let choose fn =
-  fn();
-  let (found, ra', dec', mag') = Messier_catalogue.messier_array.(!sel) in
-  let ra_flt = Altaz.cnv_ra ra' in
-  let dec_flt = Altaz.cnv_dec dec' in
-
-  let yr,mon,dy,hr,min,sec = split_date() in
-  let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = Altaz.altaz_calc yr mon dy hr min sec ra_flt dec_flt (latitude()) (longitude()) in
-  Astro_utils.show_entries found jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan (float_of_string mag') nan nan;
-  let both = [
-    Font "18px serif";
-    Fill ( (Printf.sprintf "UTC: %.2d:%.2d:%.2d %d %s %.4d" hr min sec dy (Altaz.from_month mon) yr), 150., 140.);
-    Fill ( ("GPS Status: "^ Cookie.get' "status"), 20., 180.);
-    Font "14px serif";
-    ] in
-  let secure = [
-    Font "18px serif";
-    Fill ( ("Lat: "^Altaz.dms_of_float (latitude())), 20., 120.);
-    Fill ( ("Long: "^Altaz.dms_of_float (longitude())), 150., 120.);
-    Fill ( ("City: "^ city() ^"/"^ area() ^" TZ "^ tz_local()), 20., 160.) ] in
-  let insecure = [
-    Font "24px serif";
-    Fill ( ("Messier Object: "^found), 20., 30.);
-    Stroke (0., 0., canvas_width, canvas_height);
-    Font "18px serif";
-    Fill ( ("RA: "^ !entry_ra_ref), 20., 60.);
-    Fill ( ("DEC: "^ !entry_dec_ref), 150., 60.);
-    Fill ( ("Alt: "^ !entry_alt_ref), 20., 80.);
-    Fill ( ("Az: "^ !entry_az_ref), 150., 80.); 
-    Fill ( ("HA: "^Altaz.dms_of_float hour_calc), 20., 100.);
-    Fill ( ("LST: "^Altaz.dms_of_float lst_calc), 150., 100.);
-    Fill ( ("Bootcnt: "^string_of_int !Telescope.bootCnt), 200., 180.);
-    Fill ( ("ID: "^ !Telescope.telescopeId), 20., 200.);
-    Fill ( ("Humidity: "^ !Telescope.humref), 200., 200.);
-    Font "10px serif";
-    Fill ( ("Challenge: "^ !Telescope.challengeref), 20., 220.);
-    Fill ( ("Auth: "^ !Telescope.authref), 20., 240.);
-    Fill ( ("Version: "^ !Telescope.version), 20., 260.);
-    Fill ( ("Temp: "^ !Telescope.tempref), 20., 280.);
-    ] in
-  insecure @ secure @ both
 
 let (promise:unit Lwt.t ref) = ref @@ draw_things choose (fun () -> ())
 
-let callback = fun main fn arg _ ->
-      let doc = Dom_html.window##.document in
-      let div = Dom_html.createDiv doc in
-      Dom.appendChild main div;
-      Lwt.cancel !promise;
-      promise := draw_things fn arg;
+let create_styled_div doc class_name =
+  let div = Dom_html.createDiv doc in
+  div##.className := Js.string class_name;
+  div
+
+let create_button doc text onclick =
+  let btn = Dom_html.createInput ~_type:(Js.string "button") doc in
+  btn##.value := Js.string text;
+  btn##.className := Js.string "btn";
+  btn##.onclick := Dom_html.handler onclick;
+  btn
+
+let create_card doc title content =
+  let card = create_styled_div doc "card" in
+  let header = create_styled_div doc "card-header" in
+  let title_div = Dom_html.createDiv doc in
+  title_div##.innerHTML := Js.string title;
+  title_div##.className := Js.string "card-title";
+  let content_div = create_styled_div doc "card-content" in
+  Dom.appendChild content_div content;
+  Dom.appendChild header title_div;
+  Dom.appendChild card header;
+  Dom.appendChild card content_div;
+  card
+
+let create_connection_status doc =
+  let status_div = create_styled_div doc "connection-status" in
+  let update_status () =
+    status_div##.innerHTML := Js.string (
+      if !connect then "Connected" else "Disconnected"
+    );
+    status_div##.className := Js.string (
+      "status-pill " ^ if !connect then "connected" else "disconnected"
+    )
+  in
+  update_status ();
+  status_div
+
+let create_control_panel doc callback =
+  let panel = create_styled_div doc "control-panel" in
+  Dom.appendChild panel (create_connection_status doc);
+  let buttons = [
+    ("Connect", (fun _ -> 
+      callback true; 
+      let status_div = Dom_html.getElementById_opt "connection-status" in
+      Option.iter (fun div ->
+        div##.innerHTML := Js.string "Connected";
+        div##.className := Js.string "status-pill connected"
+      ) status_div;
+      action := Connect;
+      action_seq := 0;
+      Telescope.session' := { Telescope.sid=""; ping_int=0; ping_tim=0 };
       Js._false
+    ));
+    ("Initialize", (fun _ -> action := Init; Js._false));
+    ("Observe", (fun _ -> action := Observe; Js._false));
+    ("Park", (fun _ -> action := Park; Js._false));
+    ("Open arm", (fun _ -> action := Openarm; Js._false));
+    ("Status", (fun _ -> action := Status; Js._false));
+    ("Consume", (fun _ -> action := Consume; Js._false));
+    ("Get1", (fun _ -> action := Get1; Js._false));
+    ("Post1", (fun _ -> action := Post1; Js._false));
+  ] in
+  List.iter
+    (fun (text, onclick) ->
+      Dom.appendChild panel (create_button doc text onclick))
+    buttons;
+  panel
+  ;;
 
-let menu br name main fn lst = 
-  let menu_showhide action =
-    let action' = Js.string (if action then "block" else "none") in
-    List.iter (fun itm -> itm##.style##.display := action') in
-  let doc = Dom_html.window##.document in
-  let res = doc##createDocumentFragment in
-  let menu = Dom_html.createInput  ~_type:(Js.string "block") doc in
-  menu##.value := Js.string (name^": ?");
-  let itmref = ref [] in
-  itmref := List.map (fun (itm,arg) ->
-  let input = Dom_html.createInput  ~_type:(Js.string "block") doc in
-  input##.value := Js.string itm;
-  input##.onclick := Dom_html.handler (fun _ -> 
-    menu_showhide false !itmref;
-    menu_showhide true [menu];
-    menu##.value := Js.string (name^": "^itm);
-    fn itm arg;
-    Js._false);
-  Dom.appendChild res input;
-  Dom.appendChild main res;
-  input
-  ) lst;
-  menu_showhide false !itmref;
-  menu##.onclick := Dom_html.handler (fun _ ->
-    menu_showhide true !itmref;
-    menu_showhide false [menu];
-    Js._false);
-  if br then Dom.appendChild res (Dom_html.createBr doc);
-  Dom.appendChild res menu;
-  Dom.appendChild main res
+  let create_message_panel doc =
+  let panel = create_styled_div doc "message-panel" in
+  panel##.id := Js.string "telescope-messages";
+  panel
 
-(* Generic button with text on input and an event gotten via onclick *)
+ let element i _ =
+  let elems = Dom_html.document##getElementsByClassName (Js.string "tab-content-item") in
+  for j = 0 to (elems##.length - 1) do
+    Js.Opt.iter (elems##item j) (fun el ->
+      Js.Opt.iter (Dom_html.CoerceTo.element el) (fun e ->
+        e##.style##.display := Js.string (if j = i then "block" else "none")
+      )
+    )
+  done;
+  let btns = Dom_html.document##getElementsByClassName (Js.string "tab-btn") in
+  for j = 0 to (btns##.length - 1) do
+    Js.Opt.iter (btns##item j) (fun el ->
+      Js.Opt.iter (Dom_html.CoerceTo.element el) (fun b ->
+        b##.className := Js.string ("tab-btn" ^ if j = i then " active" else "")
+      )
+    )
+  done;
+  Js._false
+;;	     
+let iterate doc tab_buttons tab_content i (title, content) =  
+    let btn = create_button doc title (element i) in
+    btn##.className := Js.string ("tab-btn" ^ if i = 0 then " active" else "");
+    Dom.appendChild tab_buttons btn;
+    
+    let content_div = create_styled_div doc ("tab-content-item" ^ if i = 0 then " active" else "") in
+    content_div##.style##.display := Js.string (if i = 0 then "block" else "none");
+    Dom.appendChild content_div content;
+    Dom.appendChild tab_content content_div
+;;
+let create_status_display doc =
+  let status_grid = create_styled_div doc "status-grid" in
+  let create_status_item label value =
+    let item = create_styled_div doc "status-item" in
+    let label_span = Dom_html.createDiv doc in
+    let value_span = Dom_html.createDiv doc in
+    label_span##.innerHTML := Js.string label;
+    value_span##.innerHTML := Js.string value;
+    Dom.appendChild item label_span;
+    Dom.appendChild item value_span;
+    item
+  in
+  List.iter
+    (fun (label, value) -> Dom.appendChild status_grid (create_status_item label value))
+    [ ("RA", !entry_ra_ref);
+      ("DEC", !entry_dec_ref);
+      ("Alt", !entry_alt_ref);
+      ("Az", !entry_az_ref) ];
+      status_grid
+      
+let create_tabs doc content_list =
+  let tabs_container = create_styled_div doc "tabs-container" in
+  let tab_buttons = create_styled_div doc "tab-buttons" in
+  let tab_content = create_styled_div doc "tab-content" in
+  
+  List.iteri (iterate doc tab_buttons tab_content) content_list;
+  
+  Dom.appendChild tabs_container tab_buttons;
+  Dom.appendChild tabs_container tab_content;
+  tabs_container
 
-let button br name main fn arg = 
-  let doc = Dom_html.window##.document in
-  let res = doc##createDocumentFragment in
-  let input = Dom_html.createInput  ~_type:(Js.string "button") doc in
-  input##.value := Js.string name;
-  input##.onclick := Dom_html.handler (callback main fn arg);
-  if br then Dom.appendChild res (Dom_html.createBr doc);
-  Dom.appendChild res input;
-  Dom.appendChild main res
+let apply_styles doc =
+  let style = Dom_html.createStyle doc in
+  style##.innerHTML := Js.string {|
+    .tabs-container {
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .tab-buttons {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid #ddd;
+      margin-bottom: 20px;
+    }
+    .tab-btn {
+      padding: 8px 16px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-radius: 4px 4px 0 0;
+      font-size: 14px;
+    }
+    .tab-btn.active {
+      background: #007bff;
+      color: white;
+    }
+    .tab-content-item {
+      display: none;
+    }
+    .tab-content-item.active {
+      display: block;
+    }
+    .status-pill {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .connected {
+      background: #10b981;
+      color: white;
+    }
+    .disconnected {
+      background: #ef4444;
+      color: white;
+    }
+    .message-panel {
+      height: 200px;
+      overflow-y: auto;
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 8px;
+      margin-top: 12px;
+    }
+    .message {
+      padding: 4px 8px;
+      margin: 4px 0;
+      border-radius: 4px;
+    }
+    .error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    .info {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+    .telescope-display {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      padding: 1rem;
+    }
+    .status-section {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 1rem;
+    }
+    .section-title {
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+    }
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.25rem 0;
+    }
+    .status-label {
+      color: #666;
+    }
+  |};
+  Dom.appendChild doc##.head style
 
-let keyb br main =
-  let shift = ref false in
-  let doc = Dom_html.window##.document in
-  let preview = Dom_html.createTextarea doc in
-      preview##.readOnly := Js._false;
-      preview##.cols := 16;
-      preview##.rows := 2;
-      preview##.style##.border := Js.string "1px black solid";
-      preview##.style##.padding := Js.string "5px";
-      preview##.style##.visibility := Js.string "visible";
-      preview##.value := Js.string "";
-  ignore
-      (Dom_html.addEventListener
-         Dom_html.document
-         Dom_html.Event.keydown
-         (Dom_html.handler (fun ev ->
-           let cod = ev##.keyCode in
-           let chr = char_of_int cod in
-           match cod,chr  with
-           | 13,_ ->
-               shift := false;
-               let sel' = Js.to_string preview##.value in
-               preview##.value := Js.string "";
-               let len = Array.length Messier_catalogue.messier_array in
-               let ix = ref (try int_of_string (String.sub sel' 1 (String.length sel' - 1)) with _ -> 0) in
-               if sel'.[0] <> 'M' || !ix = 0 || !ix > len then Array.iteri (fun i (a,_,_,_) -> if sel' = a then ix := i+1) Messier_catalogue.messier_array;
-               if !ix = 0 || !ix > len
-               then preview##.value := Js.string ("Messier: " ^ sel' ^ ": not found")
-               else sel := !ix - 1;
-               Js._false
-           | 8,_ ->
-               shift := false;
-               let old = Js.to_string preview##.value in
-               let len = String.length old in
-               preview##.value := Js.string (String.sub old 0 (if len > 0 then len-1 else 0));
-               Js._false
-           | 16,_ ->
-               shift := true;
-               Js._false
-           | num, '0' .. '9' ->
-               let num' = if !shift then ")!@#$%^&*(".[num-(int_of_char '0')] else char_of_int num in
-               shift := false;
-               preview##.value := Js.string ((Js.to_string preview##.value) ^ String.make 1 (num'));
-               Js._false
-           | alpha, 'A' .. 'Z' ->
-               let alpha' = if !shift then alpha else alpha+32 in
-               shift := false;
-               preview##.value := Js.string ((Js.to_string preview##.value) ^ String.make 1 (char_of_int alpha'));
-               Js._false
-           | 37,_ ->
-               preview##.value := Js.string (" left ");
-               Js._false
-           | 38,_ ->
-               preview##.value := Js.string (" up ");
-               Js._false
-           | 39,_ ->
-               preview##.value := Js.string (" right ");
-               Js._false
-           | 40,_ ->
-               preview##.value := Js.string (" down ");
-               Js._false
-           | cod,chr -> 
-               preview##.value := Js.string (Js.to_string preview##.value^"\n"^string_of_int cod^": \""^String.make 1 chr^"\"");
-               Js._true)) Js._true);
-  if false then ignore
-      (Dom_html.addEventListener
-         Dom_html.document
-         Dom_html.Event.click
-         (Dom_html.handler (fun ev -> let codx,cody = ev##.screenX,ev##.screenY in if !verbose then print_endline (string_of_int codx^":"^string_of_int cody); preview##focus; Js._true)) Js._true);
-  if br then Dom.appendChild preview (Dom_html.createBr doc);
-  Dom.appendChild main preview
+let handle_connect callback status_div _ =
+  callback true;
+  let status_div = Dom_html.getElementById_opt "connection-status" in
+  Option.iter (fun div ->
+    div##.innerHTML := Js.string "Connected";
+    div##.className := Js.string "status-pill connected"
+  ) status_div;
+  Js._false
 
-let catalogues = ["Simbad"; "Stellarium"; "Horizons"; "Messier"; "PGC"; "NGC2000"; "Abell"; "DSO"]
+let handle_action action_type _ =
+  action := action_type;
+  Js._false
 
+let modern_gui doc =
+  apply_styles doc;
+  
+  let control_panel = create_control_panel doc (fun connected -> connect := connected) in
+  let message_panel = create_message_panel doc in
+  Dom.appendChild control_panel message_panel;
 (*
-let timezone = Js.to_string @@ Js.Unsafe.get Js.Unsafe.global (Js.string "Intl")##.DateTimeFormat##.resolvedOptions##.timeZone
+  Dom.appendChild control_panel (create_connection_status doc);
 *)
+  let status_display = create_status_display doc in
+  let object_select = create_styled_div doc "input-group" in
+  let input = Dom_html.createInput ~_type:(Js.string "text") doc in
+  input##.className := Js.string "input-field";
+  input##.placeholder := Js.string "Enter Messier object (e.g., M31)";
+  Dom.appendChild object_select input;
+  
+  create_tabs doc [
+    ("Control", control_panel);
+    ("Telescope", create_telescope_display doc);
+    ("Position", status_display);
+    ("Object", object_select)
+  ]
+    
+let is_secure_session () = 
+Js.to_string Dom_html.window##.location##.protocol = "https:"
 
 let onload _ =
   let doc = Dom_html.window##.document in
+  let main = Js.Opt.get (doc##getElementById (Js.string "openstellina"))
+  (fun () -> assert false) in
   Dom.appendChild doc##.body canvas;
-  let main = Js.Opt.get (doc##getElementById (Js.string "openstellina")) (fun () -> assert false) in
-  keyb false main;
-  if not (is_secure_session ()) then 
-    begin
-    button true "connect" main choose (fun () -> connect := true);
-    button true "Up" main choose (fun () -> incr sel; if !sel >= Array.length Messier_catalogue.messier_array then sel := Array.length Messier_catalogue.messier_array - 1);
-    button false "Down" main choose (fun () -> decr sel; if !sel < 0 then sel := 0);
-    button true "init" main choose (fun () -> action := Init);
-    button false "observe" main choose (fun () -> action := Observe);
-    button false "park" main choose (fun () -> action := Park);
-    button false "openarm" main choose (fun () -> action := Openarm);
-    button false "status" main choose (fun () -> action := Consume);
-    button false "preauth" main choose (fun () -> action := Preauth);
-    button false "postauth" main choose (fun () -> action := Postauth);
-    end;
-  menu true  "Catalog" main (fun _ _ -> ()) (List.combine catalogues catalogues);
-  let tz = tz_local() in
-  Cookie.set "TZ" tz;
-  let cities = Hashtbl.find Base_locations.loch tz in
-  let cities' = List.map (fun (city,area,lat,long) -> city,(area,lat,long)) cities in
-  menu true "Location" main (fun city (area,lat,long) ->
-        Cookie.set "latitude" (string_of_float lat);
-        Cookie.set "longitude" (string_of_float long);
-        Cookie.set "city" city;
-        Cookie.set "area" area;
-        Cookie.set "status" "manual";
-        ) cities';
-(*
-  ignore (Dom_html.addEventListener
-         Dom_html.document
-         Dom_html.Event.keydown
-         (Dom_html.handler (fun ev -> 
-           let cod = ev##.keyCode in
-            match cod  with
-           | 88 ->
-               print_endline "alert";
-               Js._false
-           | cod -> 
-               print_endline "unknown";
-               Js._true)) Js._true);
-  Json.save_text_to_file "hello.txt" "goodbye";
-*)
+  Dom.appendChild main (modern_gui doc);
   if is_secure_session () then Geo.geo();
-(*
-  Table.main main;
-*)
   Js._false
 
-let _ =
-  Dom_html.window##.onload := Dom_html.handler onload
+let _ = Dom_html.window##.onload := Dom_html.handler onload

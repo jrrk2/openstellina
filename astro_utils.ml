@@ -4,8 +4,6 @@ open Cohttp_lwt_jsoo
 open Altaz
 open Lwt.Infix
 
-let authref' = ref "TBD"
-
 let send_preflight_options_request uri callback =
   let headers = Header.init () in
   Client.call `OPTIONS uri ~headers >>= ( fun (resp, body) ->
@@ -26,8 +24,8 @@ type env' =
 | Spare1
 | Spare2
 
-let verbose = ref true
-let verbose_flag = ref true
+let verbose = ref false
+let verbose_flag = ref false
 
 let ephem_data_lst = ref []
 

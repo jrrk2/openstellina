@@ -18,7 +18,7 @@
 
 (env
   (dev
-    (flags (:standard -g -w -16 -w -32 -w -52 -w -21 -w -26 -w -27 -w -37 -w -11))
+    (flags (:standard -g -w -16 -w -32 -w -52 -w -21 -w -26 -w -27 -w -37 -w -11 -w -33))
     (js_of_ocaml
      (compilation_mode whole_program)
      (flags --pretty --noinline --debug-info --source-map --file=../../catalog.txt --file=../../table3.dat --file=../../ngc2000.dat)
