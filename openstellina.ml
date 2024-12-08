@@ -273,13 +273,87 @@ let create_telescope_display doc =
   display
 
 let debug_mode = ref true
+let debug_flag = ref false
 
-let debug msg =
-  if !debug_mode then
-    begin 
+let create_debug_settings doc =
+  let panel = create_styled_div doc "debug-settings" in
+  let title = create_styled_div doc "section-title" in
+  title##.innerHTML := Js.string "Debug Settings";
+  Dom.appendChild panel title;
+
+  (* Debug checkbox *)
+  let debug_row = create_styled_div doc "debug-row" in
+  let debug_cb = Dom_html.createInput doc ~_type:(Js.string "checkbox") in
+  debug_cb##.className := Js.string "debug-checkbox";
+  debug_cb##.id := Js.string "debug-enable";
+  
+  (* Set initial state from cookie *)
+  (match Cookie.get "debug" with
+  | Some "true" -> 
+      debug_cb##.checked := Js._true;
+      debug_flag := true
+  | _ -> 
+      debug_cb##.checked := Js._false;
+      debug_flag := false
+  );
+
+  let debug_label = Dom_html.createLabel doc in
+  debug_label##.htmlFor := Js.string "debug-enable";
+  debug_label##.innerHTML := Js.string "Enable Debug Mode";
+
+  debug_cb##.onchange := Dom_html.handler (fun _ ->
+    let checked = Js.to_bool debug_cb##.checked in
+    debug_flag := checked;
+    Cookie.set "debug" (string_of_bool checked);
+    Js._false
+  );
+
+  (* Verbose checkbox *)
+  let verbose_row = create_styled_div doc "debug-row" in
+  let verbose_cb = Dom_html.createInput doc ~_type:(Js.string "checkbox") in
+  verbose_cb##.className := Js.string "debug-checkbox";
+  verbose_cb##.id := Js.string "verbose-enable";
+  
+  (match Cookie.get "verbose" with
+  | Some "true" -> 
+      verbose_cb##.checked := Js._true;
+      verbose := true
+  | _ -> 
+      verbose_cb##.checked := Js._false;
+      verbose := false
+  );
+
+  let verbose_label = Dom_html.createLabel doc in
+  verbose_label##.htmlFor := Js.string "verbose-enable";
+  verbose_label##.innerHTML := Js.string "Enable Verbose Logging";
+
+  verbose_cb##.onchange := Dom_html.handler (fun _ ->
+    let checked = Js.to_bool verbose_cb##.checked in
+    verbose := checked;
+    Cookie.set "verbose" (string_of_bool checked);
+    Js._false
+  );
+
+  (* Append elements *)
+  Dom.appendChild debug_row debug_cb;
+  Dom.appendChild debug_row debug_label;
+  Dom.appendChild panel debug_row;
+  
+  Dom.appendChild verbose_row verbose_cb;
+  Dom.appendChild verbose_row verbose_label;
+  Dom.appendChild panel verbose_row;
+
+  panel
+
+let debug_msg msg =
+  if !debug_flag then begin
     print_endline ("DEBUG: " ^ msg);
     show_info msg
-    end
+  end
+
+let verbose_msg msg =
+  if !verbose then
+debug_msg msg
 
 let update_display_value id value =
   (match Dom_html.getElementById_opt id with
@@ -297,7 +371,7 @@ let process_motors status =
       let az_state = member "state" az |> to_string in
       let az_stop = member "atStop" az |> to_bool_option in
       let az_cal = member "calibrated" az |> to_bool in
-      debug ("AZ: " ^ string_of_float az_pos ^ " " ^ az_state);
+      debug_msg ("AZ: " ^ string_of_float az_pos ^ " " ^ az_state);
       update_display_value "status-AZ Position" (Printf.sprintf "%.2f°" az_pos);
       update_display_value "status-AZ State" az_state;
     with _ -> ());
@@ -307,7 +381,7 @@ let process_motors status =
       let alt_pos = member "position" alt |> to_float in
       let alt_state = member "state" alt |> to_string in
       let alt_cal = member "calibrated" alt |> to_bool in
-      debug ("ALT: " ^ string_of_float alt_pos ^ " " ^ alt_state);
+      debug_msg ("ALT: " ^ string_of_float alt_pos ^ " " ^ alt_state);
       update_display_value "status-ALT Position" (Printf.sprintf "%.2f°" alt_pos);
       update_display_value "status-ALT State" alt_state;
     with _ -> ());
@@ -336,7 +410,7 @@ let update_control_display () =
     last_display_state := !control_state;
     (* Rest of display update code *)
   end;
-  let debug_msg s = if !verbose then debug ("Control update: " ^ s) in
+  let debug_msg s = if !verbose then debug_msg ("Control update: " ^ s) in
 
   (* Update status dot *)
   (match Dom_html.getElementById_opt "control-status-dot" with
@@ -704,18 +778,18 @@ and connect_websocket proto server port =
   let ws = new%js webSocket (Js.string ws_url) in
     websocket := Some ws;
       ws##.onopen := Dom.handler (fun _ ->
-        debug "WebSocket connection opened";
+        debug_msg "WebSocket connection opened";
         Js._true
       );
       
       ws##.onclose := Dom.handler (fun _ ->
-        debug "WebSocket connection closed";
+        debug_msg "WebSocket connection closed";
         connect := false;
         Js._true
       );
       
       ws##.onerror := Dom.handler (fun _ ->
-        debug "WebSocket error occurred";
+        debug_msg "WebSocket error occurred";
         Js._true
       );
 
@@ -742,7 +816,7 @@ false
 
 (* Update handle_frame to handle control messages *)
 and handle_frame msg =
-  debug ("Received WebSocket frame: " ^ (if String.length msg < 80 then msg else String.sub msg 0 80 ^ " ..."));
+  debug_msg ("Received WebSocket frame: " ^ (if String.length msg < 80 then msg else String.sub msg 0 80 ^ " ..."));
   (match msg.[0] with
   | '0' -> (* Socket.IO handshake *)
       begin try
@@ -752,31 +826,31 @@ and handle_frame msg =
         sid := member "sid" handshake |> to_string;
         ping_interval := member "pingInterval" handshake |> to_int;
         ping_timeout := member "pingTimeout" handshake |> to_int;
-        debug (Printf.sprintf "Handshake complete - SID: %s, Ping interval: %dms, Timeout: %dms" 
+        debug_msg (Printf.sprintf "Handshake complete - SID: %s, Ping interval: %dms, Timeout: %dms" 
           !sid !ping_interval !ping_timeout);
         connect := true;
         if !control_state = `RequestingControl then
           (match !websocket with
           | Some ws ->
               let msg = {|42["message","takeControl"]|} in
-              debug ("Sending take control message: " ^ msg);
+              debug_msg ("Sending take control message: " ^ msg);
               ws##send (Js.string msg)
           | None -> 
-              debug "Cannot take control - websocket connection lost";
+              debug_msg "Cannot take control - websocket connection lost";
               control_state := `NoControl;
               control_pending := false);
         ignore (ping_loop ())
       with e ->
-        debug ("Handshake parse failed: " ^ Printexc.to_string e ^ "\nMessage was: " ^ msg)
+        debug_msg ("Handshake parse failed: " ^ Printexc.to_string e ^ "\nMessage was: " ^ msg)
       end
   | '2' -> (* PING *)
-      debug "Received PING, sending PONG";
+      debug_msg "Received PING, sending PONG";
       begin match !websocket with
       | Some ws -> ws##send (Js.string "3")
-      | None -> debug "Cannot send PONG - no websocket connection"
+      | None -> debug_msg "Cannot send PONG - no websocket connection"
       end
   | '3' -> (* PONG received *)
-      debug "Received PONG response";
+      debug_msg "Received PONG response";
   | '4' when String.length msg >= 2 -> 
     begin match msg.[1] with
     | '2' -> (* Socket.IO event *)
@@ -818,7 +892,7 @@ and handle_frame msg =
 		begin match Yojson.Safe.Util.(member "masterDeviceId" status |> to_string_option) with
 		| Some device_id when device_id = "openstellina-web" ->
 		    if !control_state <> `HasControl then (
-			debug "Web client getting control";
+			debug_msg "Web client getting control";
 			control_state := `HasControl;
 			control_owner := Some "openstellina";
 			show_info "Control granted"; 
@@ -827,7 +901,7 @@ and handle_frame msg =
 			update_control_display ()
 		    )
 		| Some device_id when device_id <> "openstellina-web" ->
-		    debug ("Device " ^ device_id ^ " has taken control");
+		    debug_msg ("Device " ^ device_id ^ " has taken control");
 		    control_state := `OtherHasControl device_id;
 		    control_owner := Some device_id;
 		    show_info ("Control taken by: " ^ device_id);
@@ -836,7 +910,7 @@ and handle_frame msg =
 		    update_control_display ()
 		| None ->
 		    if !control_state <> `NoControl then (
-			debug "No device has control";
+			debug_msg "No device has control";
 			control_state := `NoControl;
 			control_owner := None;
 			show_info "Control released";
@@ -845,7 +919,7 @@ and handle_frame msg =
 			update_control_display ()
 		    )
 		| Some device_id ->  
-		    debug (Printf.sprintf "Device %s has control (we are in state %s)" 
+		    debug_msg (Printf.sprintf "Device %s has control (we are in state %s)" 
 			device_id
 			(match !control_state with
 			 | `NoControl -> "NoControl"
@@ -868,11 +942,11 @@ and handle_frame msg =
                 update_control_display ()
             | _ -> process_json [] json
           with e -> 
-            debug ("Failed to parse event: " ^ event_json ^ "\nError: " ^ Printexc.to_string e)
+            debug_msg ("Failed to parse event: " ^ event_json ^ "\nError: " ^ Printexc.to_string e)
           end
-    | _ -> debug ("Unknown type-4 message subtype: " ^ String.make 1 msg.[1] ^ "\nFull message: " ^ msg)
+    | _ -> debug_msg ("Unknown type-4 message subtype: " ^ String.make 1 msg.[1] ^ "\nFull message: " ^ msg)
 end
-| c -> debug ("Unhandled frame type: " ^ String.make 1 c ^ "\nFull message: " ^ msg))
+| c -> debug_msg ("Unhandled frame type: " ^ String.make 1 c ^ "\nFull message: " ^ msg))
 
 and errchklst' user = function
   | (kw', `List [`String "message"; `String msg]) ->
@@ -889,39 +963,39 @@ and ping_loop () =
   | Some ws ->
       let* () = Lwt_js.sleep (25.0) in
       if !connect then begin
-        debug "Ping loop: Sending ping probe";
+        debug_msg "Ping loop: Sending ping probe";
         ws##send (Js.string "2probe");
         let* () = ping_loop () in
         Lwt.return_unit
       end else begin
-        debug "Ping loop: Connection not active, stopping";
+        debug_msg "Ping loop: Connection not active, stopping";
         Lwt.return_unit
       end
   | None -> 
-      debug "Ping loop: No websocket connection";
+      debug_msg "Ping loop: No websocket connection";
       Lwt.return_unit)
 
 (* Update the take_control function to use the new state *)
 let take_control () =
-  debug "Initiating take control sequence";
+  debug_msg "Initiating take control sequence";
   if !sid = "" then begin
-    debug "No session ID - requesting new session";
+    debug_msg "No session ID - requesting new session";
     control_state := `RequestingControl;
     let* _ = get_session_id session in
     control_pending := true;
     Lwt.return_unit
   end else if !control_state = `NoControl then begin
-    debug "Have session ID but no control - requesting control";
+    debug_msg "Have session ID but no control - requesting control";
     (match !websocket with
     | Some ws ->
         control_state := `RequestingControl;
         control_pending := true;
         let msg = {|42["message","takeControl"]|} in
-        debug ("Sending take control message: " ^ msg);
+        debug_msg ("Sending take control message: " ^ msg);
         ws##send (Js.string msg);
         Lwt.return_unit
     | None ->
-        debug "No websocket connection - attempting to establish";
+        debug_msg "No websocket connection - attempting to establish";
         if connect_websocket Telescope.proto Telescope.server Telescope.pth3' then
         begin
           control_state := `RequestingControl;
@@ -929,21 +1003,21 @@ let take_control () =
           match !websocket with
           | Some ws ->
               let msg = {|42["message","takeControl"]|} in
-              debug ("Sending take control message: " ^ msg);
+              debug_msg ("Sending take control message: " ^ msg);
               ws##send (Js.string msg);
               Lwt.return_unit
           | None -> 
-              debug "Lost websocket connection after establishment";
+              debug_msg "Lost websocket connection after establishment";
               control_pending := false;
               control_state := `NoControl;
               Lwt.return_unit
         end else begin
-          debug "Failed to establish websocket connection";
+          debug_msg "Failed to establish websocket connection";
           control_state := `NoControl;
           Lwt.return_unit
         end)
   end else begin
-    debug (Printf.sprintf "Take control blocked - current state: %s" 
+    debug_msg (Printf.sprintf "Take control blocked - current state: %s" 
       (match !control_state with
        | `NoControl -> "NoControl"
        | `RequestingControl -> "RequestingControl"
@@ -1123,7 +1197,7 @@ let create_control_status_widget doc =
   Dom.appendChild widget actions;
 
   (* Add debug logging *)
-  if !verbose then debug "Control widget created";
+  if !verbose then debug_msg "Control widget created";
   widget
 
 (* Modified control panel *)
@@ -1459,6 +1533,7 @@ let modern_gui doc =
   Dom.appendChild control_panel message_panel;
   let status_display = create_status_display doc in
   let object_select = create_styled_div doc "input-group" in
+  let debug_display = create_debug_settings doc in
   let input = Dom_html.createInput ~_type:(Js.string "text") doc in
   input##.className := Js.string "input-field";
   input##.placeholder := Js.string "Enter Messier object (e.g., M31)";
@@ -1470,7 +1545,8 @@ let modern_gui doc =
     ("Control", control_panel);
     ("Telescope", create_telescope_display doc);
     ("Position", status_display);
-    ("Object", object_select)
+    ("Object", object_select);
+    ("Debug", debug_display)
   ]
     
 let is_secure_session () = 
