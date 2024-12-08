@@ -272,7 +272,7 @@ let create_telescope_display doc =
     [system; environment; storage; motors; status; updates; observation];
   display
 
-let debug_mode = ref false
+let debug_mode = ref true
 
 let debug msg =
   if !debug_mode then
@@ -694,7 +694,7 @@ and process_ws_messages ws =
 and connect_websocket proto server port =
   let server' = if String.length server > 0 && server.[0] = '/' then 
     String.sub server 1 (String.length server - 1) else server in
-  let device_info = {|id=openstellina-web&name=openstellina-wb|} in
+  let device_info = {|id=openstellina-web&name=openstellina-web|} in
   let ws_url = (if proto = "https://" then "wss://" else "ws://") ^ server' ^ port ^
     "/socket.io/?EIO=3&transport=websocket&" ^ device_info in
   if !verbose then show_info ("Connecting WebSocket to: " ^ ws_url);
@@ -815,42 +815,44 @@ and handle_frame msg =
                 | _ -> ()
                 end;
                 (* Check masterDeviceId in status update *)
-                begin match Yojson.Safe.Util.(member "masterDeviceId" status |> to_string_option) with
-                | Some device_id when device_id <> "openstellina-web" && !control_state = `HasControl ->
-                    (* We lost control to another device *)
-                    control_state := `OtherHasControl device_id;
-                    control_owner := Some device_id;
-                    show_info ("Control taken by: " ^ device_id);
-                    has_control := false;
-                    control_pending := false;
-                    update_control_display ()
-                | Some "openstellina-web" when !control_state <> `HasControl ->
-                    (* We got control *)
-                    control_state := `HasControl;
-                    control_owner := Some "openstellina";
-                    show_info "Control granted";
-                    has_control := true;
-                    control_pending := false;
-                    update_control_display ()
-                | None when !control_state <> `NoControl ->
-                    (* No one has control *)
-                    control_state := `NoControl;
-                    control_owner := None;
-                    show_info "Control released";
-                    has_control := false;
-                    control_pending := false;
-                    update_control_display ()
-		| _ -> 
-		    let device_str = match Yojson.Safe.Util.(member "masterDeviceId" status |> to_string_option) with
-		    | Some id -> "masterDeviceId: " ^ id
-		    | None -> "masterDeviceId: None" in
-		    show_info ("Other change - " ^ device_str ^ ", current state: " ^ 
-		      (match !control_state with
-		       | `NoControl -> "NoControl"
-		       | `RequestingControl -> "RequestingControl"
-		       | `HasControl -> "HasControl"
-		       | `OtherHasControl u -> "OtherHasControl:" ^ u))
-                end
+		begin match Yojson.Safe.Util.(member "masterDeviceId" status |> to_string_option) with
+		| Some device_id when device_id = "openstellina-web" ->
+		    if !control_state <> `HasControl then (
+			debug "Web client getting control";
+			control_state := `HasControl;
+			control_owner := Some "openstellina";
+			show_info "Control granted"; 
+			has_control := true;
+			control_pending := false;
+			update_control_display ()
+		    )
+		| Some device_id when device_id <> "openstellina-web" ->
+		    debug ("Device " ^ device_id ^ " has taken control");
+		    control_state := `OtherHasControl device_id;
+		    control_owner := Some device_id;
+		    show_info ("Control taken by: " ^ device_id);
+		    has_control := false;
+		    control_pending := false;
+		    update_control_display ()
+		| None ->
+		    if !control_state <> `NoControl then (
+			debug "No device has control";
+			control_state := `NoControl;
+			control_owner := None;
+			show_info "Control released";
+			has_control := false;
+			control_pending := false;
+			update_control_display ()
+		    )
+		| Some device_id ->  
+		    debug (Printf.sprintf "Device %s has control (we are in state %s)" 
+			device_id
+			(match !control_state with
+			 | `NoControl -> "NoControl"
+			 | `RequestingControl -> "RequestingControl"
+			 | `HasControl -> "HasControl"
+			 | `OtherHasControl u -> "OtherHasControl:" ^ u))
+		end;
             | `List [`String "CONTROL_GRANTED"] ->
                 control_state := `HasControl;
                 control_owner := Some "openstellina";
