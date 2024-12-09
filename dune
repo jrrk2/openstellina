@@ -11,17 +11,34 @@
  (name openstellina)
  (modes js)
  (modules_without_implementation calc)
- (modules tabbed_dialog cookie storage altaz astro_utils trans hidemsg msgs messier_catalogue calc mfcalc lexer expr dso_read abell_cnv ngc2000 telescope base_locations geo openstellina)
+ (modules geolocate.ml comets table_update utils location tabbed_dialog cookie storage altaz astro_utils trans hidemsg msgs messier_catalogue calc mfcalc lexer expr dso_read abell_cnv ngc2000 telescope base_locations geo openstellina)
  (libraries js_of_ocaml-lwt js_of_ocaml-tyxml yojson base64 cohttp-lwt-jsoo xml-light js_of_ocaml unix)
  (preprocess (pps lwt_ppx js_of_ocaml-ppx))
 )
+
+(rule
+ (alias build_js)
+ (deps src/main.c)
+ (action (progn
+   (run sh -c "emcc ../../src/main.c -I /Users/jonathan/ephemeris-compute-de430/src -I ../../gsl-2.8 -D DEBUG=0 -D MEMDEBUG1=0 -D MEMDEBUG2=0 -D DCFVERSION=4.0 -D DATE=26/11/2024 -D PATHLINK= ../../src/argparse/argparse.c ../../src/coreUtils/asciiDouble.c ../../src/coreUtils/errorReport.c ../../src/coreUtils/makeRasters.c ../../src/ephemCalc/magnitudeEstimate.c ../../src/ephemCalc/jpl.c ../../src/ephemCalc/orbitalElements.c ../../src/listTools/ltDict.c ../../src/listTools/ltList.c ../../src/listTools/ltMemory.c ../../src/listTools/ltStringProc.c ../../src/mathsTools/julianDate.c ../../src/mathsTools/precess_equinoxes.c ../../src/mathsTools/sphericalAst.c ../../src/settings/settings.c ../../gsl-2.8/sys/infnan.c ../../gsl-2.8/sys/pow_int.c ../../gsl-2.8/sys/hypot.c ../../gsl-2.8/sys/fdiv.c ../../gsl-2.8/err/error.c ../../gsl-2.8/err/stream.c -lm -s WASM=1 -s EXPORTED_FUNCTIONS=[_myFunction,_myFloat,_myAscii,_main] -o my_program.js --preload-file ../../data/header.430@/data/ \
+     --preload-file ../../data/dcfbinary.430@/data/ \
+     --preload-file ../../data/dcfbinary.cmt@/data/ \
+     --preload-file ../../data/dcfbinary.plt@/data/ \
+     -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s STACK_SIZE=1048576 \
+     -s 'EXPORTED_FUNCTIONS=[_myFunction,_myFloat,_myAscii,_main]'")
+ ))
+ (targets my_program.js my_program.wasm my_program.data))
+
+(alias
+ (name default)
+ (deps openstellina.bc.js my_program.js my_program.wasm my_program.data))
 
 (env
   (dev
     (flags (:standard -g -w -16 -w -32 -w -52 -w -21 -w -26 -w -27 -w -37 -w -11 -w -33))
     (js_of_ocaml
      (compilation_mode whole_program)
-     (flags --pretty --noinline --debug-info --source-map --file=../../catalog.txt --file=../../table3.dat --file=../../ngc2000.dat)
+     (flags --pretty --disable genprim --noinline --debug-info --source-map --file=../../catalog.txt --file=../../table3.dat --file=../../ngc2000.dat)
      ) 
   )
 )

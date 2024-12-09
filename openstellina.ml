@@ -436,6 +436,70 @@ let tab_styles = tab_styles ^ {|
     position: relative;
     z-index: 1;
   }
+  /* Picker Panels */
+  .picker-panel {
+    padding: 20px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+
+  .picker-panel select {
+    width: 100%;
+    padding: 8px;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .picker-button {
+    padding: 8px 16px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+  }
+
+  .picker-button:hover {
+    background: #0056b3;
+  }
+
+  /* Location Picker */
+  .location-panel {
+    padding: 20px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+
+  .location-input {
+    width: 100%;
+    padding: 8px;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .location-button {
+    padding: 8px 16px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-right: 8px;
+    transition: background-color 0.2s;
+  }
+
+  .location-button:hover {
+    background: #218838;
+  }
 |}
 
 let create_styled_div ?(a=[]) contents =
@@ -1593,10 +1657,75 @@ let create_tabs tabs =
     tab_headers;
     tab_contents
 ]
+
+(*
+let create_planet_picker () =
+  let open Tyxml_js.Html in
+  div ~a:[a_class ["picker-panel"]] [
+    div ~a:[a_class ["section-title"]] [txt "Planet Selection"];
+    select ~a:[
+      a_class ["planet-select"];
+      a_onchange (fun _ -> 
+        (* Implementation from tabbed_dialog *)
+        true)
+    ] (
+      List.map (fun name ->
+        option ~a:[a_value name] [txt name]
+      ) ["Sun"; "Moon"; "Mercury"; "Venus"; "Mars"; "Jupiter"; "Saturn"; "Uranus"; "Neptune"]
+    );
+    button ~a:[
+      a_class ["picker-button"];
+      a_onclick (fun _ -> 
+        (* Implementation from tabbed_dialog *)
+        true)
+    ] [txt "Find Major Body"]
+  ]
+
+let create_comet_picker () =
+  let open Tyxml_js.Html in
+  div ~a:[a_class ["picker-panel"]] [
+    div ~a:[a_class ["section-title"]] [txt "Comet Selection"];
+    (* Add year dropdown *)
+    select ~a:[
+      a_class ["comet-year-select"];
+      a_onchange (fun _ -> 
+        (* Implementation from tabbed_dialog *)
+        true)
+    ] (
+      List.map (fun (year, _) ->
+        option ~a:[a_value year] [txt year]
+      ) (group_comets Comets.comets)
+    );
+    (* Comet specific dropdown will be populated by JS *)
+    select ~a:[
+      a_id "comet-specific-dropdown";
+      a_class ["comet-select"];
+      a_style "display: none;"
+    ] [];
+    button ~a:[
+      a_class ["picker-button"];
+      a_onclick (fun _ -> 
+        (* Implementation from tabbed_dialog *)
+        true)
+    ] [txt "Find Comet"]
+  ]
+*)
   
 let modern_gui () =
   let open Tyxml_js.Html in
   let tabs = [
+    {
+      id = "location";
+      label = "Location";
+      description = "Select and pick the nearest city";
+      content = Location.create_location_picker ();
+    };
+    { 
+      id = "date"; 
+      label = "Date"; 
+      description = "Select and pick a specific date";
+      content = Tabbed_dialog.create_date_picker (); 
+      };
     {
       id = "control";
       label = "Control";
@@ -1610,6 +1739,18 @@ let modern_gui () =
       content = create_telescope_display ()
     };
     {
+      id = "planets";
+      label = "Planets";
+      description = "Planet picker";
+      content = Tabbed_dialog.create_planet_picker ();
+    };
+    {
+      id = "comets";
+      label = "Comets";
+      description = "Comet picker";
+      content = Tabbed_dialog.create_comet_picker ();
+    };
+    {
       id = "debug";
       label = "Debug";
       description = "Debug settings and logs";
@@ -1619,7 +1760,7 @@ let modern_gui () =
   
   div ~a:[
     a_style "max-width: 800px; margin: 0 auto; padding: 20px;"
-  ] [create_tabs tabs]
+  ] [create_tabs tabs; br (); Table_update.table_element]
     
 let is_secure_session () = 
 Js.to_string Dom_html.window##.location##.protocol = "https:"
@@ -1645,6 +1786,13 @@ let onload _ =
   Dom.appendChild main (Tyxml_js.To_dom.of_div ui);
   
   if is_secure_session () then Geo.geo();
+  (* we need to update the julian dates with the dialog defaults (now and 24 hours time) *)
+  let open Tabbed_dialog in
+  let open Utils in
+  let _ = handle_julian_date txtdate_start jd_start (format_date today) in
+  let _ = handle_julian_time txttime_start jd_start (format_time today) in
+  let _ = handle_julian_date txtdate_stop jd_stop (format_date tomorrow) in
+  let _ = handle_julian_time txttime_stop jd_stop (format_time tomorrow) in
   Js._false
 
 let _ = Dom_html.window##.onload := Dom_html.handler onload
