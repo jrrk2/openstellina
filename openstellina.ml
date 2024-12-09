@@ -5,6 +5,15 @@ open Cookie
 open Telescope
 open Lwt.Infix
 open Js_of_ocaml_lwt
+open Js_of_ocaml_tyxml
+open Tyxml_js.Html
+
+type tab_config = {
+  id: string;
+  label: string;
+  description: string;
+  content: Html_types.div Tyxml_js.Html.elt;
+}
 
 (* Control state type definition *)
 type control_state = [
@@ -25,6 +34,56 @@ type action =
   | Observe
   | Park
   | Openarm
+
+(* Message type and state *)
+type message = {
+  msg_type: string;  (* "error" or "info" *)
+  text: string;
+  timestamp: float;
+}
+
+let rec take n lst = 
+  if n <= 0 then []
+  else match lst with
+    | [] -> []
+    | x::xs -> x :: take (n-1) xs
+
+let messages = ref ([] : message list)
+
+(* Add message to the list *)
+let add_message msg_type text =
+  let new_message = {
+    msg_type;
+    text;
+    timestamp = Unix.gettimeofday ()
+  } in
+  messages := !messages @ [new_message];
+  
+  (* Optional: Keep only last N messages *)
+  let max_messages = 100 in
+  if List.length !messages > max_messages then
+    messages := List.rev (take max_messages (List.rev !messages));
+    
+  (* Update the message panel if it exists *)
+  match Dom_html.getElementById_opt "telescope-messages" with
+  | None -> ()
+  | Some panel ->
+      let message_element = 
+        let open Tyxml_js.Html in
+        div ~a:[
+          a_class ["message"; msg_type];
+        ] [txt text]
+      in
+      let dom_msg = Tyxml_js.To_dom.of_div message_element in
+      Dom.appendChild panel dom_msg;
+      (* Auto-scroll to bottom *)
+      panel##.scrollTop := panel##.scrollHeight
+
+(* Helper functions *)
+let show_error text = add_message "error" text
+let show_info text = 
+  if false then print_endline text; 
+  add_message "info" text
 
 (*
 type motor_update = {
@@ -60,22 +119,274 @@ let control_pending = ref false
 let sid = ref ""
 let ping_interval = ref 25000
 let ping_timeout = ref 60000
+(* Replace the current tab_styles definition with this complete version *)
+let tab_styles = {|
+  /* Base Layout */
+  .tabs-container {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+  }
 
-let create_styled_div doc class_name =
- let div = Dom_html.createDiv doc in
- div##.className := Js.string class_name;
-div
+  /* Tab Navigation */
+  .tab-buttons {
+    display: flex;
+    gap: 4px;
+    margin-bottom: -1px;
+    position: relative;
+    z-index: 1;
+    border-bottom: 1px solid #ddd;
+  }
+  
+  .tab-button-container {
+    position: relative;
+  }
+  
+  .tab-btn {
+    padding: 10px 20px;
+    border: 1px solid #ddd;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: #f0f0f0;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-size: 14px;
+  }
+  
+  .tab-btn.active {
+    background: white;
+    border-bottom-color: white;
+    color: #007bff;
+  }
+  
+  .tab-tooltip {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 20;
+  }
+  
+  .tab-content {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 0 0 8px 8px;
+    padding: 20px;
+    margin-top: -1px;
+  }
 
-let add_message msg_type text =
-  let doc = Dom_html.document in
-  (match Dom_html.getElementById_opt "telescope-messages" with
-  | None -> ()
-  | Some panel ->
-      let msg = create_styled_div doc ("message " ^ msg_type) in
-      msg##.innerHTML := Js.string text;
-      Dom.appendChild panel msg;
-      (* Auto-scroll to bottom *)
-      panel##.scrollTop := panel##.scrollHeight)
+  .tab-content-item {
+    display: none;
+  }
+
+  .tab-content-item.active {
+    display: block;
+  }
+
+  /* Status Indicators */
+  .status-pill {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+  
+  .connected {
+    background: #10b981;
+    color: white;
+  }
+  
+  .disconnected {
+    background: #ef4444;
+    color: white;
+  }
+
+  /* Message Panel */
+  .message-panel {
+    height: 200px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 8px;
+    margin-top: 12px;
+    font-family: monospace;
+    font-size: 13px;
+  }
+  
+  .message {
+    padding: 4px 8px;
+    margin: 4px 0;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  
+  .message.error {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+  
+  .message.info {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+
+  /* Telescope Display */
+  .telescope-display {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+  }
+  
+  .status-section {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .section-title {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    color: #2563eb;
+  }
+  
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  
+  .status-label {
+    color: #666;
+  }
+
+  .status-value {
+    font-family: monospace;
+    color: #111;
+  }
+
+  /* Control Panel */
+  .control-status-widget {
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  
+  .control-status-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  
+  .control-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  
+  .status-dot.no-control { background-color: #666666; }
+  .status-dot.has-control { background-color: #10b981; }
+  .status-dot.requesting { background-color: #f59e0b; }
+  .status-dot.other-control { background-color: #ef4444; }
+  
+  .control-details {
+    font-size: 14px;
+    color: #666;
+    margin: 8px 0;
+  }
+  
+  .control-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  
+  .control-button {
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    background: #e5e7eb;
+    color: #374151;
+  }
+  
+  .control-button:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+  
+  .control-button.take {
+    background-color: #10b981;
+    color: white;
+  }
+  
+  .control-button.release {
+    background-color: #ef4444;
+    color: white;
+  }
+  
+  .control-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .control-warning {
+    margin: 8px 0;
+    padding: 8px 12px;
+    background: #fee2e2;
+    color: #991b1b;
+    border-radius: 4px;
+    font-weight: bold;
+  }
+
+  /* Debug Settings */
+  .debug-settings {
+    padding: 16px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+
+  .debug-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .debug-checkbox {
+    width: 16px;
+    height: 16px;
+  }
+|}
+
+let create_styled_div ?(a=[]) contents =
+  div ~a contents
 
 let show_error text = add_message "error" text
 let show_info text = if false then print_endline text; add_message "info" text
@@ -134,24 +445,20 @@ let send_message msg =
       show_info "No websocket connection";
       false)
 
-let create_status_section doc title items =
-  let section = create_styled_div doc "status-section" in
-  let title_div = create_styled_div doc "section-title" in
-  title_div##.innerHTML := Js.string title;
-  Dom.appendChild section title_div;
-  
-  List.iter (fun (label, value_ref) ->
-    let row = create_styled_div doc "status-row" in
-    let label_div = create_styled_div doc "status-label" in
-    let value_div = create_styled_div doc "status-value" in
-    label_div##.innerHTML := Js.string label;
-    value_div##.id := Js.string ("status-" ^ label);
-    value_div##.innerHTML := Js.string !value_ref;
-    Dom.appendChild row label_div;
-    Dom.appendChild row value_div;
-    Dom.appendChild section row
-  ) items;
-  section
+let create_status_section titled items =
+  let open Tyxml_js.Html in
+  div ~a:[a_class ["status-section"]] (
+    div ~a:[a_class ["section-title"]] [txt titled] ::
+    List.map (fun (label, value_ref) ->
+      div ~a:[a_class ["status-row"]] [
+        div ~a:[a_class ["status-label"]] [txt label];
+        div ~a:[
+          a_id ("status-" ^ label);
+          a_class ["status-value"]
+        ] [txt !value_ref]
+      ]
+    ) items
+  )
 
 let process_json_value path = function
   | `Float f -> 
@@ -194,11 +501,20 @@ let process_json_value path = function
       end
 | _ -> ()
 
-let create_telescope_display doc =
-  let display = create_styled_div doc "telescope-display" in
+let create_telescope_display () =
+  let open Tyxml_js.Html in
+  div ~a:[a_class ["telescope-display"]] [
+    create_status_section "System" [
+      ("ID", Telescope.telescopeId);
+      ("Model", Telescope.model_ref);
+      ("API Version", Telescope.api_version_ref);
+      ("Version", Telescope.version_ref);
+      ("Boot Count", ref (string_of_int !Telescope.bootCnt));
+      ("Auth", ref "Unknown");
+      ("Challenge", Telescope.challengeref)
+    ];
 
-  (* Move Motors section to the top since it's more important for control *)
-  let motors = create_status_section doc "Motors" [
+  create_status_section "Motors" [
     ("AZ Position", az_posref);
     ("AZ State", ref !motor_state_ref);
     ("ALT Position", alt_posref);
@@ -207,23 +523,9 @@ let create_telescope_display doc =
     ("DER State", ref !motor_state_ref);
     ("MAP Position", map_posref);
     ("MAP State", ref !motor_state_ref)
-  ] in
+  ];
 
-  let system = create_status_section doc "System" [
-    ("ID", Telescope.telescopeId);
-    ("Model", Telescope.model_ref);
-    ("API Version", Telescope.api_version_ref);
-    ("Version", Telescope.version_ref);
-    ("Boot Count", ref (string_of_int !Telescope.bootCnt));
-    ("Auth", ref "Unknown");
-    ("Debug Mode", Telescope.board_debug_ref);
-    ("Autofocus", Telescope.autofocus_ref);
-    ("Challenge", Telescope.challengeref);
-    ("Initialized", Telescope.initialized_ref);
-    ("Shutting Down", Telescope.shutting_down_ref)
-  ] in
-
-  let environment = create_status_section doc "Environment" [
+  create_status_section "Environment" [
     ("Temperature", Telescope.tempref);
     ("Temp Delta", Telescope.temperature_delta_ref);
     ("Humidity", Telescope.humref);
@@ -231,119 +533,67 @@ let create_telescope_display doc =
     ("Dew Point", Telescope.dewpointref); 
     ("Dew Point Depression", Telescope.dewpointref);
     ("Defog Status", Telescope.defogref)
-  ] in
+  ];
 
-  let motors = create_status_section doc "Motors" [
-    ("AZ Position", Telescope.az_posref);
-    ("AZ State", ref !Telescope.motor_state_ref);
-    ("ALT Position", Telescope.alt_posref);
-    ("ALT State", ref !Telescope.motor_state_ref);
-    ("DER Position", Telescope.der_posref);
-    ("DER State", ref !Telescope.motor_state_ref);
-    ("MAP Position", Telescope.map_posref);
-    ("MAP State", ref !Telescope.motor_state_ref)
-  ] in  
-
-  let status = create_status_section doc "Status" [
+  create_status_section "Status" [
     ("Operation", Telescope.debugref);
     ("Error", Telescope.errorref)
-  ] in
-  let storage = create_status_section doc "Storage" [
+  ];
+
+  create_status_section "Storage" [
     ("System Size", Telescope.storage_system_size_ref);
     ("System Available", Telescope.storage_system_avail_ref);
     ("Data Size", Telescope.storage_data_size_ref);
     ("Data Available", Telescope.storage_data_avail_ref);
     ("Network Band", Telescope.storage_band_ref)
-  ] in
+  ];
 
-  let updates = create_status_section doc "Updates" [
+  create_status_section "Updates" [
     ("Installed Version", Telescope.installed_version_ref);
     ("Min Compatible", Telescope.min_compat_version_ref); 
     ("State", Telescope.update_state_ref)
-  ] in
+  ];
 
-  let observation = create_status_section doc "Current Observation" [
+  create_status_section "Current Observation" [
     ("Target", Telescope.current_target_ref);
     ("Latitude", Telescope.position_lat_ref);
     ("Longitude", Telescope.position_lon_ref) 
-  ] in
+  ]
 
-  List.iter (fun section -> Dom.appendChild display section) 
-    [system; environment; storage; motors; status; updates; observation];
-  display
+]
 
 let debug_mode = ref true
 let debug_flag = ref false
 
-let create_debug_settings doc =
-  let panel = create_styled_div doc "debug-settings" in
-  let title = create_styled_div doc "section-title" in
-  title##.innerHTML := Js.string "Debug Settings";
-  Dom.appendChild panel title;
-
-  (* Debug checkbox *)
-  let debug_row = create_styled_div doc "debug-row" in
-  let debug_cb = Dom_html.createInput doc ~_type:(Js.string "checkbox") in
-  debug_cb##.className := Js.string "debug-checkbox";
-  debug_cb##.id := Js.string "debug-enable";
-  
-  (* Set initial state from cookie *)
-  (match Cookie.get "debug" with
-  | Some "true" -> 
-      debug_cb##.checked := Js._true;
-      debug_flag := true
-  | _ -> 
-      debug_cb##.checked := Js._false;
-      debug_flag := false
-  );
-
-  let debug_label = Dom_html.createLabel doc in
-  debug_label##.htmlFor := Js.string "debug-enable";
-  debug_label##.innerHTML := Js.string "Enable Debug Mode";
-
-  debug_cb##.onchange := Dom_html.handler (fun _ ->
-    let checked = Js.to_bool debug_cb##.checked in
-    debug_flag := checked;
-    Cookie.set "debug" (string_of_bool checked);
-    Js._false
-  );
-
-  (* Verbose checkbox *)
-  let verbose_row = create_styled_div doc "debug-row" in
-  let verbose_cb = Dom_html.createInput doc ~_type:(Js.string "checkbox") in
-  verbose_cb##.className := Js.string "debug-checkbox";
-  verbose_cb##.id := Js.string "verbose-enable";
-  
-  (match Cookie.get "verbose" with
-  | Some "true" -> 
-      verbose_cb##.checked := Js._true;
-      verbose := true
-  | _ -> 
-      verbose_cb##.checked := Js._false;
-      verbose := false
-  );
-
-  let verbose_label = Dom_html.createLabel doc in
-  verbose_label##.htmlFor := Js.string "verbose-enable";
-  verbose_label##.innerHTML := Js.string "Enable Verbose Logging";
-
-  verbose_cb##.onchange := Dom_html.handler (fun _ ->
-    let checked = Js.to_bool verbose_cb##.checked in
-    verbose := checked;
-    Cookie.set "verbose" (string_of_bool checked);
-    Js._false
-  );
-
-  (* Append elements *)
-  Dom.appendChild debug_row debug_cb;
-  Dom.appendChild debug_row debug_label;
-  Dom.appendChild panel debug_row;
-  
-  Dom.appendChild verbose_row verbose_cb;
-  Dom.appendChild verbose_row verbose_label;
-  Dom.appendChild panel verbose_row;
-
-  panel
+let create_debug_settings () =
+  let open Tyxml_js.Html in
+  div ~a:[a_class ["debug-settings"]] [
+    div ~a:[a_class ["section-title"]] [txt "Debug Settings"];
+    div ~a:[a_class ["debug-row"]] [
+      input ~a:[
+        a_input_type `Checkbox;
+        a_id "debug-enable";
+        a_class ["debug-checkbox"];
+        a_onclick (fun _ ->
+          debug_flag := not !debug_flag;
+          Cookie.set "debug" (string_of_bool !debug_flag);
+          true)
+      ] ();
+      label ~a:[a_label_for "debug-enable"] [txt "Enable Debug Mode"]
+    ];
+    div ~a:[a_class ["debug-row"]] [
+      input ~a:[
+        a_input_type `Checkbox;
+        a_id "verbose-enable";
+        a_class ["debug-checkbox"];
+        a_onclick (fun _ ->
+          verbose := not !verbose;
+          Cookie.set "verbose" (string_of_bool !verbose);
+          true)
+      ] ();
+      label ~a:[a_label_for "verbose-enable"] [txt "Enable Verbose Logging"]
+    ]
+  ]
 
 let debug_msg msg =
   if !debug_flag then begin
@@ -1108,402 +1358,105 @@ let rec draw_things fn arg =
 
 let (promise:unit Lwt.t ref) = ref @@ draw_things choose (fun () -> ())
 
-let create_styled_div doc class_name =
-  let div = Dom_html.createDiv doc in
-  div##.className := Js.string class_name;
-  div
+let create_control_status_widget () =
+  let open Tyxml_js.Html in
+  div ~a:[a_class ["control-status-widget"]] [
+    div ~a:[a_class ["control-status-header"]] [
+      div ~a:[a_class ["control-indicator"]] [
+        div ~a:[
+          a_id "control-status-dot";
+          a_class ["status-dot"; "no-control"]
+        ] [];
+        div ~a:[
+          a_id "control-status-text";
+          a_class ["status-text"]
+        ] [txt "No Control"]
+      ]
+    ];
+    div ~a:[
+      a_id "control-details";
+      a_class ["control-details"]
+    ] [txt "The telescope is not being controlled"];
+    div ~a:[a_class ["control-actions"]] [
+      button ~a:[
+        a_id "take-control-button";
+        a_class ["control-button"; "take"];
+        a_onclick (fun _ -> 
+          action := TakeControl;
+          true)
+      ] [txt "Take Control"];
+      button ~a:[
+        a_id "release-control-button";
+        a_class ["control-button"; "release"];
+        a_onclick (fun _ ->
+          action := ReleaseControl;
+          true)
+      ] [txt "Release Control"]
+    ]
+    ]
 
-let create_button doc text onclick =
-  let btn = Dom_html.createInput ~_type:(Js.string "button") doc in
-  btn##.value := Js.string text;
-  btn##.className := Js.string "btn";
-  btn##.onclick := Dom_html.handler onclick;
-  btn
+let create_message_panel () =
+  let open Tyxml_js.Html in
+  div ~a:[
+    a_id "telescope-messages";
+    a_class ["message-panel"]
+  ] (
+    List.map (fun msg ->
+      div ~a:[
+        a_class ["message"; msg.msg_type]
+      ] [txt msg.text]
+    ) !messages
+  )
 
-let create_card doc title content =
-  let card = create_styled_div doc "card" in
-  let header = create_styled_div doc "card-header" in
-  let title_div = Dom_html.createDiv doc in
-  title_div##.innerHTML := Js.string title;
-  title_div##.className := Js.string "card-title";
-  let content_div = create_styled_div doc "card-content" in
-  Dom.appendChild content_div content;
-  Dom.appendChild header title_div;
-  Dom.appendChild card header;
-  Dom.appendChild card content_div;
-  card
-
-let create_connection_status doc =
-  let status_div = create_styled_div doc "connection-status" in
-  let update_status () =
-    status_div##.innerHTML := Js.string (
-      if !connect then "Connected" else "Disconnected"
-    );
-    status_div##.className := Js.string (
-      "status-pill " ^ if !connect then "connected" else "disconnected"
-    )
-  in
-  update_status ();
-  status_div
-  
-let create_control_status_widget doc =
-  let widget = create_styled_div doc "control-status-widget" in
-  
-  (* Create control panel *)
-  let header = create_styled_div doc "control-status-header" in
-  let indicator = create_styled_div doc "control-indicator" in
-  
-  let status_dot = create_styled_div doc "status-dot no-control" in
-  status_dot##.id := Js.string "control-status-dot";
-  
-  let status_text = Dom_html.createDiv doc in
-  status_text##.id := Js.string "control-status-text";
-  status_text##.className := Js.string "status-text";
-  status_text##.textContent := Js.some (Js.string "No Control");
-  
-  let details = create_styled_div doc "control-details" in
-  details##.id := Js.string "control-details";
-  details##.textContent := Js.some (Js.string "The telescope is not being controlled");
-  
-  (* Create action buttons *)
-  let actions = create_styled_div doc "control-actions" in
-  
-  let take_button = Dom_html.createInput ~_type:(Js.string "button") doc in
-  take_button##.value := Js.string "Take Control";
-  take_button##.id := Js.string "take-control-button";
-  take_button##.className := Js.string "control-button take";
-  take_button##.onclick := Dom_html.handler (fun _ -> 
-    action := TakeControl;
-    Js._false
-  );
-    
-  let release_button = Dom_html.createInput ~_type:(Js.string "button") doc in
-  release_button##.value := Js.string "Release Control";
-  release_button##.id := Js.string "release-control-button";
-  release_button##.className := Js.string "control-button release";
-  release_button##.onclick := Dom_html.handler (fun _ ->
-    action := ReleaseControl;
-    Js._false
-  );
-  
-  (* Assemble the widget *)
-  Dom.appendChild indicator status_dot;
-  Dom.appendChild indicator status_text;
-  Dom.appendChild header indicator;
-  Dom.appendChild widget header;
-  Dom.appendChild widget details;
-  Dom.appendChild actions take_button;
-  Dom.appendChild actions release_button;
-  Dom.appendChild widget actions;
-
-  (* Add debug logging *)
-  if !verbose then debug_msg "Control widget created";
-  widget
-
-(* Modified control panel *)
-let create_control_panel doc callback =
-  let panel = create_styled_div doc "control-panel" in
-  (* Add the control status widget at the top *)
-  let control_status = create_control_status_widget doc in
-
-  Dom.appendChild panel control_status;
-
-  (* Add warning when someone else has control *)
-  let warning = create_styled_div doc "control-warning" in
-  warning##.style##.display := Js.string "none";
-  panel_warning := Some warning;
-  Dom.appendChild panel warning;
-  
-  (* Add a motor status section *)
-  let motor_status = create_styled_div doc "motor-status" in
-  motor_status##.className := Js.string "status-section"; (* Style similar to other sections *)
-  
-  let motor_info = create_status_section doc "Motor Status" [
-    ("AZ Position", az_posref);
-    ("AZ State", ref !motor_state_ref);
-    ("ALT Position", alt_posref);
-    ("ALT State", ref !motor_state_ref);
-  ] in
-  Dom.appendChild motor_status motor_info;
-  Dom.appendChild panel motor_status;
-
-  (* Create buttons and store refs *)
-  panel_buttons := List.map (fun (text, onclick) ->
-    let btn = create_button doc text onclick in
-    btn##.disabled := Js._false;
-    Dom.appendChild panel btn;
-    btn
-    ) [
-      (*
-    ("Take Control", (fun _ -> action := TakeControl; Js._false));
-    ("Release Control", (fun _ -> action := ReleaseControl; Js._false));
-       *)
-    ("Initialize", (fun _ -> action := Init; Js._false));
-    ("Observe", (fun _ -> action := Observe; Js._false));
-    ("Park", (fun _ -> action := Park; Js._false));
-    ("Open arm", (fun _ -> action := Openarm; Js._false));
-    ("Status", (fun _ -> action := Status; Js._false));
-    ("Consume", (fun _ -> action := Consume; Js._false));
-  ];
-
-  panel
-
-let create_message_panel doc =
-  let panel = create_styled_div doc "message-panel" in
-  panel##.id := Js.string "telescope-messages";
-  panel
-
- let element i _ =
-  let elems = Dom_html.document##getElementsByClassName (Js.string "tab-content-item") in
-  for j = 0 to (elems##.length - 1) do
-    Js.Opt.iter (elems##item j) (fun el ->
-      Js.Opt.iter (Dom_html.CoerceTo.element el) (fun e ->
-        e##.style##.display := Js.string (if j = i then "block" else "none")
-      )
-    )
-  done;
-  let btns = Dom_html.document##getElementsByClassName (Js.string "tab-btn") in
-  for j = 0 to (btns##.length - 1) do
-    Js.Opt.iter (btns##item j) (fun el ->
-      Js.Opt.iter (Dom_html.CoerceTo.element el) (fun b ->
-        b##.className := Js.string ("tab-btn" ^ if j = i then " active" else "")
-      )
-    )
-  done;
-  Js._false
-;;	     
-let iterate doc tab_buttons tab_content i (title, content) =  
-    let btn = create_button doc title (element i) in
-    btn##.className := Js.string ("tab-btn" ^ if i = 0 then " active" else "");
-    Dom.appendChild tab_buttons btn;
-    
-    let content_div = create_styled_div doc ("tab-content-item" ^ if i = 0 then " active" else "") in
-    content_div##.style##.display := Js.string (if i = 0 then "block" else "none");
-    Dom.appendChild content_div content;
-    Dom.appendChild tab_content content_div
-;;
-let create_status_display doc =
-  let status_grid = create_styled_div doc "status-grid" in
-  let create_status_item label value =
-    let item = create_styled_div doc "status-item" in
-    let label_span = Dom_html.createDiv doc in
-    let value_span = Dom_html.createDiv doc in
-    label_span##.innerHTML := Js.string label;
-    value_span##.innerHTML := Js.string value;
-    Dom.appendChild item label_span;
-    Dom.appendChild item value_span;
-    item
-  in
-  List.iter
-    (fun (label, value) -> Dom.appendChild status_grid (create_status_item label value))
-    [ ("RA", !entry_ra_ref);
-      ("DEC", !entry_dec_ref);
-      ("Alt", !entry_alt_ref);
-      ("Az", !entry_az_ref) ];
-      status_grid
+let create_control_panel () =
+  let open Tyxml_js.Html in
+  div ~a:[a_class ["control-panel"]] [
+    create_control_status_widget ();
+    div ~a:[
+      a_id "control-warning";
+      a_class ["control-warning"];
+      a_style "display: none;"
+    ] [];
+    create_status_section "Motor Status" [
+      ("AZ Position", az_posref);
+      ("AZ State", ref !motor_state_ref);
+      ("ALT Position", alt_posref);
+      ("ALT State", ref !motor_state_ref)
+    ];
+    create_message_panel ()  (* Use new message panel *)
+    ]
       
-let create_tabs doc content_list =
-  let tabs_container = create_styled_div doc "tabs-container" in
-  let tab_buttons = create_styled_div doc "tab-buttons" in
-  let tab_content = create_styled_div doc "tab-content" in
+let switch_tab tab_id =
+  let open Js_of_ocaml in
+  let doc = Dom_html.document in
+  let tabs = doc##getElementsByClassName (Js.string "tab-btn") in
+  let contents = doc##getElementsByClassName (Js.string "tab-content-item") in
   
-  List.iteri (iterate doc tab_buttons tab_content) content_list;
+  for i = 0 to tabs##.length - 1 do
+    Js.Opt.iter (tabs##item i) (fun tab ->
+      Js.Opt.iter (Dom_html.CoerceTo.element tab) (fun t ->
+        t##.className := Js.string (
+          if Js.to_string t##.id = (tab_id ^ "-tab") 
+          then "tab-btn active" 
+          else "tab-btn"
+        )
+      )
+    )
+  done;
   
-  Dom.appendChild tabs_container tab_buttons;
-  Dom.appendChild tabs_container tab_content;
-  tabs_container
+  for i = 0 to contents##.length - 1 do
+    Js.Opt.iter (contents##item i) (fun content ->
+      Js.Opt.iter (Dom_html.CoerceTo.element content) (fun c ->
+        c##.style##.display := Js.string (
+          if Js.to_string c##.id = (tab_id ^ "-content") 
+          then "block" 
+          else "none"
+        )
+      )
+    )
+  done;
+true
 
-let apply_styles doc =
-  let style = Dom_html.createStyle doc in
-  style##.innerHTML := Js.string {|
-    .tabs-container {
-      width: 100%;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-    }
-    .tab-buttons {
-      display: flex;
-      gap: 4px;
-      border-bottom: 1px solid #ddd;
-      margin-bottom: 20px;
-    }
-    .tab-btn {
-      padding: 8px 16px;
-      border: none;
-      background: none;
-      cursor: pointer;
-      border-radius: 4px 4px 0 0;
-      font-size: 14px;
-    }
-    .tab-btn.active {
-      background: #007bff;
-      color: white;
-    }
-    .tab-content-item {
-      display: none;
-    }
-    .tab-content-item.active {
-      display: block;
-    }
-    .status-pill {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 14px;
-      margin-bottom: 12px;
-    }
-    .connected {
-      background: #10b981;
-      color: white;
-    }
-    .disconnected {
-      background: #ef4444;
-      color: white;
-    }
-    .message-panel {
-      height: 200px;
-      overflow-y: auto;
-      background: #f8f9fa;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 8px;
-      margin-top: 12px;
-    }
-    .message {
-      padding: 4px 8px;
-      margin: 4px 0;
-      border-radius: 4px;
-    }
-    .error {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-    .info {
-      background: #dbeafe;
-      color: #1e40af;
-    }
-    .telescope-display {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      padding: 1rem;
-    }
-    .status-section {
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 1rem;
-    }
-    .section-title {
-      font-weight: bold;
-      margin-bottom: 0.5rem;
-    }
-    .status-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 0.25rem 0;
-    }
-    .status-label {
-      color: #666;
-    }
-
-    /* Control Status Widget Styles */
-    .control-status-widget {
-      background: #f8f9fa;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 12px;
-      margin-bottom: 16px;
-    }
-    
-    .control-status-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-    
-    .control-indicator {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-    }
-    
-    .status-dot.no-control { background-color: #666666; }
-    .status-dot.has-control { background-color: #10b981; }
-    .status-dot.requesting { background-color: #f59e0b; }
-    .status-dot.other-control { background-color: #ef4444; }
-    
-    .control-details {
-      font-size: 14px;
-      color: #666;
-    }
-
-    .control-actions {
-      display: flex;
-      gap: 8px;
-    }
-
-    .control-button {
-      padding: 6px 12px;
-      border-radius: 4px;
-      border: none;
-      cursor: pointer;
-      font-size: 14px;
-      transition: background-color 0.2s;
-    }
-
-    .control-button.take {
-      background-color: #10b981;
-      color: white;
-    }
-
-    .control-button.release {
-      background-color: #ef4444;
-      color: white;
-    }
-
-    .control-button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    .motor-status {
-      margin: 12px 0;
-      padding: 12px;
-      background: #f8f9fa;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-    }
-    
-    .motor-status .status-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 4px 0;
-      font-family: monospace;
-    }
-
-    .motor-status .status-value {
-      font-weight: bold;
-    }
-
-    .control-warning {
-      margin: 8px 0;
-      padding: 8px 12px;
-      background: #fee2e2;
-      color: #991b1b;
-      border-radius: 4px;
-      font-weight: bold;
-    }
-
-  |};
-Dom.appendChild doc##.head style
 
 let handle_connect callback status_div _ =
   callback true;
@@ -1526,40 +1479,97 @@ let start_control_updates () =
     update_loop ()
   in
   ignore (update_loop ())
+let create_tabs tabs =
+  let open Tyxml_js.Html in
+  let tab_headers = div ~a:[a_class ["tab-buttons"]] (
+    List.map (fun tab ->
+      div ~a:[a_class ["tab-button-container"]] [
+        button ~a:[
+          a_id (tab.id ^ "-tab");
+          a_class ["tab-btn"; if tab.id = "control" then "active" else ""];  (* Make first tab active *)
+          a_onclick (fun _ -> switch_tab tab.id);
+          a_onmouseover (fun _ ->
+            let tooltip = Dom_html.getElementById (tab.id ^ "-tooltip") in
+            tooltip##.style##.display := Js.string "block";
+            true);
+          a_onmouseout (fun _ ->
+            let tooltip = Dom_html.getElementById (tab.id ^ "-tooltip") in
+            tooltip##.style##.display := Js.string "none";
+            true)
+        ] [txt tab.label];
+        div ~a:[
+          a_id (tab.id ^ "-tooltip");
+          a_class ["tab-tooltip"]
+        ] [txt tab.description]
+      ]
+    ) tabs
+  ) in
   
-let modern_gui doc =
-  apply_styles doc;
+  let tab_contents = div ~a:[a_class ["tab-content"]] (
+    List.mapi (fun i tab ->
+      div ~a:[
+        a_id (tab.id ^ "-content");
+        a_class ["tab-content-item"; if tab.id = "control" then "active" else ""];  (* Make first content active *)
+        a_style (if tab.id = "control" then "" else "display: none;")
+      ] [tab.content]
+    ) tabs
+  ) in
   
-  let control_panel = create_control_panel doc (fun connected -> connect := connected) in
-  let message_panel = create_message_panel doc in
-  Dom.appendChild control_panel message_panel;
-  let status_display = create_status_display doc in
-  let object_select = create_styled_div doc "input-group" in
-  let debug_display = create_debug_settings doc in
-  let input = Dom_html.createInput ~_type:(Js.string "text") doc in
-  input##.className := Js.string "input-field";
-  input##.placeholder := Js.string "Enter Messier object (e.g., M31)";
-  Dom.appendChild object_select input;
+  div ~a:[a_class ["tabs-container"]] [
+    tab_headers;
+    tab_contents
+]
   
-  start_control_updates ();  (* Start periodic updates *)
+let modern_gui () =
+  let open Tyxml_js.Html in
+  let tabs = [
+    {
+      id = "control";
+      label = "Control";
+      description = "Telescope control panel";
+      content = create_control_panel ()
+    };
+    {
+      id = "telescope";
+      label = "Telescope";
+      description = "Telescope status and information";
+      content = create_telescope_display ()
+    };
+    {
+      id = "debug";
+      label = "Debug";
+      description = "Debug settings and logs";
+      content = create_debug_settings ()
+    }
+  ] in
   
-  create_tabs doc [
-    ("Control", control_panel);
-    ("Telescope", create_telescope_display doc);
-    ("Position", status_display);
-    ("Object", object_select);
-    ("Debug", debug_display)
-  ]
+  div ~a:[
+    a_style "max-width: 800px; margin: 0 auto; padding: 20px;"
+  ] [create_tabs tabs]
     
 let is_secure_session () = 
 Js.to_string Dom_html.window##.location##.protocol = "https:"
 
 let onload _ =
-  let doc = Dom_html.window##.document in
+  let doc = Dom_html.document in
   let main = Js.Opt.get (doc##getElementById (Js.string "openstellina"))
-  (fun () -> assert false) in
+    (fun () -> assert false) in
+  
+  (* Add canvas for any drawing needs *)
   Dom.appendChild doc##.body canvas;
-  Dom.appendChild main (modern_gui doc);
+  
+  (* Add styles *)
+  let style = Dom_html.createStyle doc in
+  style##.innerHTML := Js.string tab_styles;
+  Dom.appendChild doc##.head style;
+  
+  (* Start control updates *)
+  start_control_updates ();
+  
+  (* Create and mount UI *)
+  let ui = modern_gui () in
+  Dom.appendChild main (Tyxml_js.To_dom.of_div ui);
+  
   if is_secure_session () then Geo.geo();
   Js._false
 
