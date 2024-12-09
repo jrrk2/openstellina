@@ -21,3 +21,7 @@ logfile.txt
 json.log
 _build
 _opam
+ephem.log
+ephem_test.bin
+ephem_test.bin.dSYM/
+mapfile
