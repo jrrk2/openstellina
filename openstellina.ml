@@ -1233,9 +1233,11 @@ let create_control_panel doc callback =
     btn##.disabled := Js._false;
     Dom.appendChild panel btn;
     btn
-  ) [
+    ) [
+      (*
     ("Take Control", (fun _ -> action := TakeControl; Js._false));
     ("Release Control", (fun _ -> action := ReleaseControl; Js._false));
+       *)
     ("Initialize", (fun _ -> action := Init; Js._false));
     ("Observe", (fun _ -> action := Observe; Js._false));
     ("Park", (fun _ -> action := Park; Js._false));

@@ -82,7 +82,9 @@ let polling = "polling"
 let eio = "3"
 let params' = [ ("name", name); ("EIO", eio); ("id", id); ("transport", polling)]
 let pth = pth3'^"/socket.io/"
-let cookie = ref []
+(*
+ let cookie = ref []
+ *)
 let hdrs = ref []
 let authref = ref ""
 let bootCnt = ref 0
@@ -170,6 +172,7 @@ let postauth' cnvauth =
   in
     Astro_utils.post' proto server params headers (key_port^"/generate-authorization") ((Yojson.Safe.to_string json)) (cnv' f)
 
+(*    
 let get1' fn =
     let iter = fun s -> fn (cnv s) in
     let headers = [
@@ -323,6 +326,7 @@ let post36' fn =
     let f = (fun s -> fn (cnv s)) in
     let json = `List [`String "message"; `String "takeControl"] in
     Astro_utils.post' proto server params headers pth (( jwrap json )) (cnv' f)
+    *)
 
 let auth' () = 
 let auth = !authref in
@@ -419,10 +423,17 @@ let init' fn =
     let pth = pth2'^"/v1/general/"^cmd in
     let lat_flt = Cookie.get' "latitude" in
     let long_flt = Cookie.get' "longitude" in
+    let lat_flt = "52.2" and long_flt = "0.0" in
     let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Raw.to_string (`Assoc
-    [("latitude", `Floatlit lat_flt);
-     ("longitude", `Floatlit long_flt); ("time", `Intlit (time_ms()))] )^"\r\n")) (cnv' f)
+    [
+    ("longitude", `Floatlit long_flt);
+    ("latitude", `Floatlit lat_flt);
+    ("time", `Intlit (time_ms()));
+    ("observatoryId", `Stringlit ("\"111a4385-b4cc-4be6-a1a6-eab551711501\""));
+    ("observatoryName", `Stringlit ("\"Hardwick\""));
+    ("skipAutoFocus", `Bool false)
+    ] )^"\r\n")) (cnv' f)
 
 let manualinit' fn =
     let cmd = "startManualInit" in
