@@ -25,3 +25,6 @@ ephem.log
 ephem_test.bin
 ephem_test.bin.dSYM/
 mapfile
+data/dcfbinary.430
+data/dcfbinary.cmt
+data/dcfbinary.plt
