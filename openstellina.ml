@@ -119,7 +119,7 @@ let control_pending = ref false
 let sid = ref ""
 let ping_interval = ref 25000
 let ping_timeout = ref 60000
-(* Replace the current tab_styles definition with this complete version *)
+
 let tab_styles = {|
   /* Base Layout */
   .tabs-container {
@@ -383,7 +383,6 @@ let tab_styles = {|
     width: 16px;
     height: 16px;
   }
-let tab_styles = tab_styles ^ {|
   /* Enhanced 3D Tab Effects */
   .tab-buttons {
     display: flex;
@@ -500,13 +499,14 @@ let tab_styles = tab_styles ^ {|
   .location-button:hover {
     background: #218838;
   }
+
 |}
 
 let create_styled_div ?(a=[]) contents =
   div ~a contents
 
 let show_error text = add_message "error" text
-let show_info text = if false then print_endline text; add_message "info" text
+let show_info text = add_message "info" text
 let new_challenge = ref false
 let get_session_id (fn:Yojson.Safe.t->unit) =
   let headers = Astro_utils.split ["Accept: */*"] in
@@ -714,7 +714,7 @@ let create_debug_settings () =
 
 let debug_msg msg =
   if !debug_flag then begin
-    print_endline ("DEBUG: " ^ msg);
+    if !verbose then print_endline ("DEBUG: " ^ msg);
     show_info msg
   end
 
@@ -1223,7 +1223,7 @@ and handle_frame msg =
     | '2' -> (* Socket.IO event *)
         if String.length msg > 2 then
           let event_json = String.sub msg 2 (String.length msg - 2) in
-          print_endline ("Received Socket.IO event: " ^ event_json);
+          debug_msg ("Received Socket.IO event: " ^ event_json);
           begin try
             let json = Yojson.Safe.from_string event_json in
             match json with
@@ -1321,7 +1321,7 @@ and errchklst' user = function
   | (_, json) -> process_json [] json
 	
 and session (arg:Yojson.Safe.t) =
-  if !verbose' then print_endline "session";
+  debug_msg "session";
   errchklst' true ("R", arg);
   update_telescope_display ()
 
@@ -1715,6 +1715,12 @@ let modern_gui () =
   let open Tyxml_js.Html in
   let tabs = [
     {
+      id = "control";
+      label = "Control";
+      description = "Telescope control panel";
+      content = create_control_panel ()
+    };
+    {
       id = "location";
       label = "Location";
       description = "Select and pick the nearest city";
@@ -1726,12 +1732,6 @@ let modern_gui () =
       description = "Select and pick a specific date";
       content = Tabbed_dialog.create_date_picker (); 
       };
-    {
-      id = "control";
-      label = "Control";
-      description = "Telescope control panel";
-      content = create_control_panel ()
-    };
     {
       id = "telescope";
       label = "Telescope";
@@ -1757,7 +1757,7 @@ let modern_gui () =
       content = create_debug_settings ()
     }
   ] in
-  
+
   div ~a:[
     a_style "max-width: 800px; margin: 0 auto; padding: 20px;"
   ] [create_tabs tabs; br (); Table_update.table_element]
@@ -1785,7 +1785,6 @@ let onload _ =
   let ui = modern_gui () in
   Dom.appendChild main (Tyxml_js.To_dom.of_div ui);
   
-  if is_secure_session () then Geo.geo();
   (* we need to update the julian dates with the dialog defaults (now and 24 hours time) *)
   let open Tabbed_dialog in
   let open Utils in

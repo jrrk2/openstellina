@@ -115,4 +115,4 @@ let create_location_picker () =
   in
   
   let output = div ~a:[ a_id "city-output"; a_style "margin-top: 20px;" ] [] in
-  div [ button; timezone_dropdown; br (); city_dropdown; br (); output; message_div; select_div ]
+  div [ button; timezone_dropdown; br (); city_dropdown; br (); output; message_div; select_div; Geolocate.create_location_picker () ]
