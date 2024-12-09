@@ -383,6 +383,59 @@ let tab_styles = {|
     width: 16px;
     height: 16px;
   }
+let tab_styles = tab_styles ^ {|
+  /* Enhanced 3D Tab Effects */
+  .tab-buttons {
+    display: flex;
+    gap: 4px;
+    margin-bottom: -1px;
+    position: relative;
+    z-index: 1;
+    border-bottom: 1px solid #ddd;
+    perspective: 1000px;
+  }
+  
+  .tab-button-container {
+    position: relative;
+  }
+  
+  .tab-btn {
+    padding: 10px 20px;
+    border: 1px solid #ddd;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    background: #f0f0f0;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+    font-size: 14px;
+    transform: rotateX(0deg) translateY(15px);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+  }
+  
+  .tab-btn:not(.active):hover {
+    transform: rotateX(-2deg) translateY(12px);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);
+  }
+  
+  .tab-btn.active {
+    background: white;
+    border-bottom-color: white;
+    color: #007bff;
+    transform: rotateX(-5deg);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
+    z-index: 10;
+  }
+
+  .tab-content {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 0 0 8px 8px;
+    padding: 20px;
+    margin-top: -1px;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
+    position: relative;
+    z-index: 1;
+  }
 |}
 
 let create_styled_div ?(a=[]) contents =
@@ -1425,7 +1478,6 @@ let create_control_panel () =
     ];
     create_message_panel ()  (* Use new message panel *)
     ]
-      
 let switch_tab tab_id =
   let open Js_of_ocaml in
   let doc = Dom_html.document in
@@ -1435,15 +1487,27 @@ let switch_tab tab_id =
   for i = 0 to tabs##.length - 1 do
     Js.Opt.iter (tabs##item i) (fun tab ->
       Js.Opt.iter (Dom_html.CoerceTo.element tab) (fun t ->
-        t##.className := Js.string (
-          if Js.to_string t##.id = (tab_id ^ "-tab") 
-          then "tab-btn active" 
-          else "tab-btn"
-        )
+        if Js.to_string t##.id = (tab_id ^ "-tab") then begin
+          t##.className := Js.string "tab-btn active";
+          t##.style##.transform := Js.string "rotateX(-5deg)";
+          ignore (t##.style##setProperty (Js.string "box-shadow") 
+            (Js.string "0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23)")
+            (Js.Optdef.empty));
+          t##.style##.backgroundColor := Js.string "white";
+          t##.style##.zIndex := Js.string "10"
+        end else begin
+          t##.className := Js.string "tab-btn";
+          t##.style##.transform := Js.string ("rotateX(0deg) translateY(15px)");
+          ignore (t##.style##setProperty (Js.string "box-shadow")
+            (Js.string "0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)")
+            (Js.Optdef.empty));
+          t##.style##.backgroundColor := Js.string "#f0f0f0";
+          t##.style##.zIndex := Js.string "1"
+        end
       )
     )
   done;
-  
+
   for i = 0 to contents##.length - 1 do
     Js.Opt.iter (contents##item i) (fun content ->
       Js.Opt.iter (Dom_html.CoerceTo.element content) (fun c ->
@@ -1456,7 +1520,6 @@ let switch_tab tab_id =
     )
   done;
 true
-
 
 let handle_connect callback status_div _ =
   callback true;
@@ -1479,14 +1542,25 @@ let start_control_updates () =
     update_loop ()
   in
   ignore (update_loop ())
+
 let create_tabs tabs =
   let open Tyxml_js.Html in
   let tab_headers = div ~a:[a_class ["tab-buttons"]] (
-    List.map (fun tab ->
+    List.mapi (fun i tab ->
+      let base_style = if i = 0 then 
+        "transform: rotateX(-5deg);" ^
+        "box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);" ^
+        "background-color: white;"
+      else 
+        "transform: rotateX(0deg) translateY(" ^ string_of_int ((i + 1) * 5) ^ "px);" ^
+        "box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);" ^
+        "background-color: #f0f0f0;" in
+
       div ~a:[a_class ["tab-button-container"]] [
         button ~a:[
           a_id (tab.id ^ "-tab");
-          a_class ["tab-btn"; if tab.id = "control" then "active" else ""];  (* Make first tab active *)
+          a_class ["tab-btn"; if i = 0 then "active" else ""];
+          a_style base_style;
           a_onclick (fun _ -> switch_tab tab.id);
           a_onmouseover (fun _ ->
             let tooltip = Dom_html.getElementById (tab.id ^ "-tooltip") in
