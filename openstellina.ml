@@ -121,6 +121,59 @@ let ping_interval = ref 25000
 let ping_timeout = ref 60000
 
 let tab_styles = {|
+/* Base Layout */
+.tabs-container {
+  width: 100%;
+  max-width: 1200px; /* Increased from 800px */
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* Control Actions Layout */
+.control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 12px;
+  justify-content: flex-start;
+}
+
+.control-button {
+  padding: 8px 12px; /* Slightly increased padding */
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+  background: #e5e7eb;
+  color: #374151;
+  min-width: min-content; /* Ensure buttons take minimum required width */
+  white-space: nowrap; /* Prevent button text from wrapping */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .tabs-container {
+    max-width: 100%;
+    padding: 10px;
+  }
+  
+  .control-actions {
+    flex-wrap: wrap;
+  }
+  
+  .control-button {
+    flex: 1 1 auto;
+    min-width: calc(50% - 8px); /* Two buttons per row on smaller screens */
+  }
+}
+
+@media (max-width: 480px) {
+  .control-button {
+    min-width: 100%; /* Full width buttons on very small screens */
+  }
+}
+
   /* Base Layout */
   .tabs-container {
     width: 100%;
@@ -802,7 +855,7 @@ let button_lst =
     ] [txt a] in
   [
       button' "Take Control" TakeControl;
-      button' "Release Control" ReleaseControl;
+      button' "Release" ReleaseControl;
       button' "Initialize" Init;
       button' "Observe" Observe;
       button' "Park" Park;
@@ -845,12 +898,13 @@ let update_control_display () =
   | None -> debug_msg "Could not find status dot");
 
   (* Update control panel buttons *)
-  List.iter (fun btn' -> Js.Opt.iter (Dom_html.CoerceTo.input (Tyxml_js.To_dom.of_button btn')) (fun btn ->
+  List.iter (fun btn' -> Js.Opt.iter (Dom_html.CoerceTo.button (Tyxml_js.To_dom.of_button btn')) (fun btn ->
+    let btn_text = Js.to_string (Js.Opt.get btn##.textContent (fun () -> Js.string "")) in
     btn##.disabled := Js.bool (match !control_state with
       | `HasControl -> false 
-      | `NoControl -> btn##.value <> Js.string "Take Control"
+      | `NoControl -> btn_text <> "Take Control"
       | `RequestingControl -> true
-      | `OtherHasControl _ -> btn##.value = Js.string "Release Control"
+      | `OtherHasControl _ -> btn##.value = Js.string "Release"
     ))
   ) button_lst;
 
@@ -1805,7 +1859,7 @@ let modern_gui () =
   ] in
 
   div ~a:[
-    a_style "max-width: 800px; margin: 0 auto; padding: 20px;"
+    a_style "max-width: 1200px; margin: 0 auto; padding: 20px;"
   ] [create_tabs tabs; br (); Table_update.table_element]
     
 let is_secure_session () = 
