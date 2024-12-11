@@ -811,9 +811,8 @@ let button_lst =
       button' "Consume" Consume
   ]
 
-let panel_buttons = let lst = ref [] in List.iter (fun btn ->
-  Js.Opt.iter (Dom_html.CoerceTo.input (Tyxml_js.To_dom.of_button btn)) (fun input -> lst := input :: !lst)) button_lst;
-  !lst
+let panel_buttons = List.map (fun btn ->
+  Js.Opt.get (Dom_html.CoerceTo.input (Tyxml_js.To_dom.of_button btn)) (fun () -> failwith "btn")) button_lst
 
 let panel_warning = ref None
 let last_display_state = ref (`NoControl:control_state)
