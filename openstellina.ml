@@ -789,7 +789,32 @@ let process_motors status =
 let last_ctrl = ref (`OtherHasControl "")
 let last_class = ref ""
 (* Add button refs to track panel buttons *)
-let panel_buttons = ref [] 
+let button_lst =
+  let trim' a = String.lowercase_ascii (if String.contains a ' ' then String.sub a 0 (String.index a ' ') else a) in
+  let button' a b = 
+    let c = trim' a in
+    button ~a:[
+      a_id (c^"-control-button");
+      a_class ["control-button"; c];
+      a_onclick (fun _ -> 
+	action := b;
+	true)
+    ] [txt a] in
+  [
+      button' "Take Control" TakeControl;
+      button' "Release Control" ReleaseControl;
+      button' "Initialize" Init;
+      button' "Observe" Observe;
+      button' "Park" Park;
+      button' "Open arm" Openarm;
+      button' "Status" Status;
+      button' "Consume" Consume
+  ]
+
+let panel_buttons = let lst = ref [] in List.iter (fun btn ->
+  Js.Opt.iter (Dom_html.CoerceTo.input (Tyxml_js.To_dom.of_button btn)) (fun input -> lst := input :: !lst)) button_lst;
+  !lst
+
 let panel_warning = ref None
 let last_display_state = ref (`NoControl:control_state)
 
@@ -831,7 +856,7 @@ let update_control_display () =
       | `RequestingControl -> true
       | `OtherHasControl _ -> btn##.value = Js.string "Release Control"
     )
-  ) !panel_buttons;
+  ) panel_buttons;
 
   (* Update warning display *)
   (match !panel_warning with
@@ -1507,26 +1532,8 @@ let rec draw_things fn arg =
 
 let (promise:unit Lwt.t ref) = ref @@ draw_things choose (fun () -> ())
 
-let trim' a = String.lowercase_ascii (if String.contains a ' ' then String.sub a 0 (String.index a ' ') else a)
-
-let button' a b = 
-  let c = trim' a in
-  let btn = button ~a:[
-    a_id (c^"-control-button");
-    a_class ["control-button"; c];
-    a_onclick (fun _ -> 
-      action := b;
-      true)
-  ] [txt a] in
-  let btn_dom = Tyxml_js.To_dom.of_button btn in
-  Js.Opt.iter (Dom_html.CoerceTo.input btn_dom) (fun input ->
-    panel_buttons := input :: !panel_buttons
-  );
-  btn
-
 let create_control_status_widget () =
   let open Tyxml_js.Html in
-  panel_buttons := []; (* Reset panel_buttons before creating new ones *)
   div ~a:[a_class ["control-status-widget"]] [
     div ~a:[a_class ["control-status-header"]] [
       div ~a:[a_class ["control-indicator"]] [
@@ -1547,16 +1554,7 @@ let create_control_status_widget () =
     div ~a:[
       a_id "control-actions";
       a_class ["control-actions"]
-    ] [
-      button' "Take Control" TakeControl;
-      button' "Release Control" ReleaseControl;
-      button' "Initialize" Init;
-      button' "Observe" Observe;
-      button' "Park" Park;
-      button' "Open arm" Openarm;
-      button' "Status" Status;
-      button' "Consume" Consume
-    ];
+    ] button_lst;
     div ~a:[
       a_id "control-warning";
       a_class ["control-warning"];
