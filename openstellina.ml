@@ -811,9 +811,6 @@ let button_lst =
       button' "Consume" Consume
   ]
 
-let panel_buttons = List.map (fun btn ->
-  Js.Opt.get (Dom_html.CoerceTo.input (Tyxml_js.To_dom.of_button btn)) (fun () -> failwith "btn")) button_lst
-
 let panel_warning = ref None
 let last_display_state = ref (`NoControl:control_state)
 
@@ -848,14 +845,14 @@ let update_control_display () =
   | None -> debug_msg "Could not find status dot");
 
   (* Update control panel buttons *)
-  List.iter (fun btn ->
+  List.iter (fun btn' -> Js.Opt.iter (Dom_html.CoerceTo.input (Tyxml_js.To_dom.of_button btn')) (fun btn ->
     btn##.disabled := Js.bool (match !control_state with
       | `HasControl -> false 
       | `NoControl -> btn##.value <> Js.string "Take Control"
       | `RequestingControl -> true
       | `OtherHasControl _ -> btn##.value = Js.string "Release Control"
-    )
-  ) panel_buttons;
+    ))
+  ) button_lst;
 
   (* Update warning display *)
   (match !panel_warning with
