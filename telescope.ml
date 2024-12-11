@@ -2,8 +2,7 @@
 
 open Lwt
 open Cookie
-
-type session = {sid:string; ping_int: int; ping_tim: int }
+open Version
 
 let server = "10.0.0.1:"
 let pth2' = "8082"
@@ -11,15 +10,10 @@ let pth3' = "8083"
 
 let verbose_flag = ref false
 
-(*
-let start = Queue.create ()
-*)
-
 let defcat = 7
 let accstr = "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)"
 let acceptance = Expr.simplify [] (Expr.expr accstr)
 let tmpdir = (Filename.get_temp_dir_name ())^"/"
-let session' = ref {sid=""; ping_int=0; ping_tim=0}
 
 let approach = Array.length Sys.argv > 1 && Sys.argv.(1) = "-f"
 let pairing = Array.length Sys.argv > 1 && Sys.argv.(1) = "-p"
@@ -75,16 +69,8 @@ let cnv body =
   try if body <> "" then Yojson.Safe.from_string body else `String ""
   with err -> print_endline ("Exception: "^Printexc.to_string_default err^"\n"^body^"\n"^body^"\n"); `String body
 
-let version = ref "openstellina-2.003"
-let name = !version
-let id = !version
-let polling = "polling"
-let eio = "3"
-let params' = [ ("name", name); ("EIO", eio); ("id", id); ("transport", polling)]
+let params' = [ ("name", version); ("EIO", "3"); ("id", version); ("transport", "polling")]
 let pth = pth3'^"/socket.io/"
-(*
- let cookie = ref []
- *)
 let hdrs = ref []
 let authref = ref ""
 let bootCnt = ref 0
@@ -143,7 +129,7 @@ let senduser user =
   let json = `List
   [`String "message"; `String "sendUserName";
    `Assoc
-     [("device", `String id);
+     [("device", `String version);
       ("user", `String user)]] in
    jwrap json
 
@@ -171,162 +157,6 @@ let postauth' cnvauth =
     ])
   in
     Astro_utils.post' proto server params headers (key_port^"/generate-authorization") ((Yojson.Safe.to_string json)) (cnv' f)
-
-(*    
-let get1' fn =
-    let iter = fun s -> fn (cnv s) in
-    let headers = [
-    ("Accept", "*/*")] in
-    Astro_utils.get' proto server params' headers pth (cnv' iter) hdrs
-
-let post1' fn =
-    let params = params' @ ["sid", (!session').sid] in
-    let headers = !cookie @ Astro_utils.split [] in
-    let f = (fun s -> fn (cnv s)) in
-    let tim = Printf.sprintf "%10.0f" (Unix.gettimeofday() *. 1000.0) in
-    let (json:Yojson.Safe.t) = `List [`String "message"; `String "setSystemTime"; `Intlit tim] in
-    Astro_utils.post' proto server params headers pth ((jwrap json)) (cnv' f)
-
-let get2' fn =
-    let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "websocket") :: ("sid", (!session').sid) :: [] in
-    let headers = Astro_utils.split [
-] in
-    incr rotate;
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
-
-let get3' fn =
-    let params = ("id", id) :: ("name", name) :: ("EIO", eio) :: ("transport", "polling") :: ("sid", (!session').sid) :: [] in
-    let headers = Astro_utils.split [
-      "Accept: */*" ] in
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
-
-let get4' fn =
-    let params = [] in
-    let headers = [] in
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers (pth2'^"/v1/app/status") (cnv' f) hdrs
-
-let get5' fn =
-    let params = params' in
-    let headers = Astro_utils.split [
-      "Accept-Language: en-GB,en;q=0.9";
-      "Accept: application/json"] in
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
-
-let get6' fn =
-    let params = params' in
-    let headers = Astro_utils.split [
-      "Accept-Language: en-GB,en;q=0.9";
-      "Accept: application/json";
-] in
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
-
-let get7' fn =
-    let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "polling") :: ("sid", (!session').sid) :: [] in
-    let headers = Astro_utils.split [
-      "Accept-Language: en-GB,en;q=0.9";
-      "Accept: application/json";
-] in
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
-
-let get8' fn =
-    let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "websocket") :: ("sid", (!session').sid) :: [] in
-    let headers = Astro_utils.split [
-      "Accept-Language: en-GB,en;q=0.9";
-      "Accept: application/json";
-] in
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
-
-let get9' fn =
-    let params = [] in
-    let headers = [] in
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers (pth2'^"/v1/app/status") (cnv' f) hdrs
-
-let post11' fn =
-    let params = (("sid", (!session').sid) :: params') in
-    let headers = !cookie @ Astro_utils.split [] in
-    let f = (fun s -> fn (cnv s)) in
-    let body = senduser "null" in
-    Astro_utils.post' proto server params headers pth (body) (cnv' f)
-
-let get12' fn =
-    let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "polling") :: (* ("sid", (!session').sid) :: *) [] in
-    let headers = Astro_utils.split [
-      "Accept-Language: en-GB,en;q=0.9";
-      "Accept: application/json";
-] in
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
-
-let get13' fn =
-    let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "polling") ::  (* ("sid", (!session').sid) :: *) [] in
-    let headers = Astro_utils.split [
-      "Accept-Language: en-GB,en;q=0.9";
-      "Accept: application/json";
-] in
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
-
-let post14' fn =
-    let params = (("sid", (!session').sid) :: params') in
-    let headers = !cookie @ Astro_utils.split [] in
-    let f = (fun s -> fn (cnv s)) in
-    let tim = Printf.sprintf "%10.0f" (Unix.gettimeofday() *. 1000.0) in
-    let (json:Yojson.Safe.t) = `List [`String "message"; `String "setSystemTime"; `Intlit tim] in
-    Astro_utils.post' proto server params headers pth ((jwrap json)) (cnv' f)
-
-let get15' fn =
-    let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "polling") :: ("sid", (!session').sid) :: [] in
-    let headers = Astro_utils.split [
-      "Accept-Language: en-GB,en;q=0.9";
-      "Accept: application/json";
-] in
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
-
-let get16' fn =
-    let params = [] in
-    let headers = [] in
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers (pth2'^"/v1/app/status") (cnv' f) hdrs
-
-let get17' fn =
-    let params = ("name", name) ::  ("EIO", eio) :: ("id", id) :: ("transport", "websocket") :: ("sid", (!session').sid) :: [] in
-    let headers = Astro_utils.split [
-      "Accept-Language: en-GB,en;q=0.9";
-      "Accept: application/json";
-] in
-    let f = (fun s -> fn (cnv s)) in
-    Astro_utils.get' proto server params headers pth (cnv' f) hdrs
-
-let post27' fn =
-    let params = (("sid", (!session').sid) :: params') in
-    let headers = !cookie @ Astro_utils.split [] in
-    let f = (fun s -> fn (cnv s)) in
-    let body = senduser "null" in
-    Astro_utils.post' proto server params headers pth (body) (cnv' f)
-
-let post28' fn =
-    let params = (("sid", (!session').sid) :: params') in
-    let headers = !cookie @ Astro_utils.split [] in
-    let f = (fun s -> fn (cnv s)) in
-    let body = senduser "openstellina" in
-    Astro_utils.post' proto server params headers pth (body) (cnv' f)
-
-let post36' fn =
-    let params = (("sid", (!session').sid) :: params') in
-    let headers = !cookie @ Astro_utils.split [] in
-    let f = (fun s -> fn (cnv s)) in
-    let json = `List [`String "message"; `String "takeControl"] in
-    Astro_utils.post' proto server params headers pth (( jwrap json )) (cnv' f)
-    *)
 
 let auth' () = 
 let auth = !authref in

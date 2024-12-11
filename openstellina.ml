@@ -1858,9 +1858,18 @@ let modern_gui () =
     }
   ] in
 
+  let version_info = div ~a:[
+    a_class ["version-info"];
+    a_style "text-align: right; font-size: 12px; color: #666; margin-top: 8px; font-family: monospace;"
+  ] [
+    txt (Version.version ^ " (" ^ Version.git_commit ^ ") • ");
+    txt ("Author: " ^ Version.git_author);
+  ] in
+
+  
   div ~a:[
     a_style "max-width: 1200px; margin: 0 auto; padding: 20px;"
-  ] [create_tabs tabs; br (); Table_update.table_element]
+  ] [create_tabs tabs; br (); Table_update.table_element; version_info]
     
 let is_secure_session () = 
 Js.to_string Dom_html.window##.location##.protocol = "https:"
