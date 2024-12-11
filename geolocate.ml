@@ -114,15 +114,9 @@ module Geo = struct
     )
 end
 
-let register_service_worker () =
-  let open Js.Unsafe in
-  if Js.Optdef.test (global##.navigator##.serviceWorker) then
-    let sw = global##.navigator##.serviceWorker in
-    ignore (sw##register (Js.string "/service-worker.js"))
 
 (* Initialize application *)
 let init () =
-  register_service_worker ();
   Geo.geo ()
 
 let () = 
@@ -294,12 +288,5 @@ let create_location_picker () =
     ]
   ]
 
-let register_service_worker () =
-  let open Js.Unsafe in
-  if Js.Optdef.test (global##.navigator##.serviceWorker) then
-    let sw = global##.navigator##.serviceWorker in
-    ignore (sw##register (Js.string "/service-worker.js"))
-
 let init () =
-  register_service_worker ();
   geo ()

@@ -499,7 +499,39 @@ let tab_styles = {|
   .location-button:hover {
     background: #218838;
   }
+  /* Base Layout */
+  .tabs-container {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    background: white;
+    display: block !important;
+    visibility: visible !important;
+  }
+  /* Safari-specific fixes */
+  @supports (-webkit-hyphens:none) {
+    .control-button {
+      -webkit-appearance: none;
+      display: inline-block !important;
+      visibility: visible !important;
+    }
 
+    .control-actions {
+      display: -webkit-flex;
+      display: flex;
+      -webkit-flex-wrap: wrap;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+      visibility: visible !important;
+    }
+
+    .tabs-container {
+      visibility: visible !important;
+      -webkit-transform: translate3d(0,0,0);
+    }
+  }
 |}
 
 let create_styled_div ?(a=[]) contents =
@@ -1475,8 +1507,26 @@ let rec draw_things fn arg =
 
 let (promise:unit Lwt.t ref) = ref @@ draw_things choose (fun () -> ())
 
+let trim' a = String.lowercase_ascii (if String.contains a ' ' then String.sub a 0 (String.index a ' ') else a)
+
+let button' a b = 
+  let c = trim' a in
+  let btn = button ~a:[
+    a_id (c^"-control-button");
+    a_class ["control-button"; c];
+    a_onclick (fun _ -> 
+      action := b;
+      true)
+  ] [txt a] in
+  let btn_dom = Tyxml_js.To_dom.of_button btn in
+  Js.Opt.iter (Dom_html.CoerceTo.input btn_dom) (fun input ->
+    panel_buttons := input :: !panel_buttons
+  );
+  btn
+
 let create_control_status_widget () =
   let open Tyxml_js.Html in
+  panel_buttons := []; (* Reset panel_buttons before creating new ones *)
   div ~a:[a_class ["control-status-widget"]] [
     div ~a:[a_class ["control-status-header"]] [
       div ~a:[a_class ["control-indicator"]] [
@@ -1494,23 +1544,25 @@ let create_control_status_widget () =
       a_id "control-details";
       a_class ["control-details"]
     ] [txt "The telescope is not being controlled"];
-    div ~a:[a_class ["control-actions"]] [
-      button ~a:[
-        a_id "take-control-button";
-        a_class ["control-button"; "take"];
-        a_onclick (fun _ -> 
-          action := TakeControl;
-          true)
-      ] [txt "Take Control"];
-      button ~a:[
-        a_id "release-control-button";
-        a_class ["control-button"; "release"];
-        a_onclick (fun _ ->
-          action := ReleaseControl;
-          true)
-      ] [txt "Release Control"]
-    ]
-    ]
+    div ~a:[
+      a_id "control-actions";
+      a_class ["control-actions"]
+    ] [
+      button' "Take Control" TakeControl;
+      button' "Release Control" ReleaseControl;
+      button' "Initialize" Init;
+      button' "Observe" Observe;
+      button' "Park" Park;
+      button' "Open arm" Openarm;
+      button' "Status" Status;
+      button' "Consume" Consume
+    ];
+    div ~a:[
+      a_id "control-warning";
+      a_class ["control-warning"];
+      a_style "display: none;"
+    ] []
+]
 
 let create_message_panel () =
   let open Tyxml_js.Html in
@@ -1766,32 +1818,41 @@ let is_secure_session () =
 Js.to_string Dom_html.window##.location##.protocol = "https:"
 
 let onload _ =
+  print_endline "Starting onload";
   let doc = Dom_html.document in
+  print_endline "Got document";
   let main = Js.Opt.get (doc##getElementById (Js.string "openstellina"))
-    (fun () -> assert false) in
+    (fun () -> print_endline "Could not find openstellina div"; assert false) in
+  print_endline "Found main div";
   
   (* Add canvas for any drawing needs *)
   Dom.appendChild doc##.body canvas;
+  print_endline "Added canvas";
   
   (* Add styles *)
   let style = Dom_html.createStyle doc in
   style##.innerHTML := Js.string tab_styles;
   Dom.appendChild doc##.head style;
+  print_endline "Added styles";
   
   (* Start control updates *)
   start_control_updates ();
+  print_endline "Started control updates";
   
   (* Create and mount UI *)
   let ui = modern_gui () in
+  print_endline "Created UI";
   Dom.appendChild main (Tyxml_js.To_dom.of_div ui);
+  print_endline "Mounted UI";
   
-  (* we need to update the julian dates with the dialog defaults (now and 24 hours time) *)
+  (* Update julian dates *)
   let open Tabbed_dialog in
   let open Utils in
   let _ = handle_julian_date txtdate_start jd_start (format_date today) in
   let _ = handle_julian_time txttime_start jd_start (format_time today) in
   let _ = handle_julian_date txtdate_stop jd_stop (format_date tomorrow) in
   let _ = handle_julian_time txttime_stop jd_stop (format_time tomorrow) in
+  print_endline "Updated julian dates";
   Js._false
 
 let _ = Dom_html.window##.onload := Dom_html.handler onload
