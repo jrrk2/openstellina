@@ -278,17 +278,6 @@ int main_args(int argc, const char **argv) {
 static char body[20];
 static settings ephemeris_settings;
 
-static char *dtoa(double value) {
-    int precision = 6;
-    int size = snprintf(NULL, 0, "%.*f", precision, value); // Get required size
-    char *buffer = malloc(size + 1); // +1 for the null terminator
-    if (buffer == NULL) {
-        return NULL; // Handle memory allocation failure
-    }
-    snprintf(buffer, size + 1, "%.*f", precision, value); // Format the double into the buffer
-    return buffer; // Return pointer to the allocated string
-}
-
 EMSCRIPTEN_KEEPALIVE
 double pack_chars_to_float(const char *chars) {
     double packed = 0.0;

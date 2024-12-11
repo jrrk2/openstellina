@@ -227,15 +227,15 @@ void orbitalElements_planets_readAsciiData() {
     // Pre-fill columns with NANs, which is the best value for data we don't populate later
     for (i = 0; i < MAX_PLANETS; i++) {
         memset(&planet_database[i], 0, sizeof(orbitalElements));
-        planet_database[i].absoluteMag = nan(0);
-        planet_database[i].meanAnomaly = nan(0);
-        planet_database[i].argumentPerihelion = nan(0);
-        planet_database[i].longAscNode = nan(0);
-        planet_database[i].inclination = nan(0);
-        planet_database[i].eccentricity = nan(0);
-        planet_database[i].semiMajorAxis = nan(0);
-        planet_database[i].epochPerihelion = nan(0);
-        planet_database[i].epochOsculation = nan(0);
+        planet_database[i].absoluteMag = GSL_NAN;
+        planet_database[i].meanAnomaly = GSL_NAN;
+        planet_database[i].argumentPerihelion = GSL_NAN;
+        planet_database[i].longAscNode = GSL_NAN;
+        planet_database[i].inclination = GSL_NAN;
+        planet_database[i].eccentricity = GSL_NAN;
+        planet_database[i].semiMajorAxis = GSL_NAN;
+        planet_database[i].epochPerihelion = GSL_NAN;
+        planet_database[i].epochOsculation = GSL_NAN;
         planet_database[i].slopeParam_n = 2;
         planet_database[i].slopeParam_G = -999;
         planet_database[i].number = -1;
@@ -393,15 +393,15 @@ void orbitalElements_asteroids_readAsciiData() {
     // Pre-fill columns with NANs, which is the best value for data we don't populate later
     for (i = 0; i < MAX_ASTEROIDS; i++) {
         memset(&asteroid_database[i], 0, sizeof(orbitalElements));
-        asteroid_database[i].absoluteMag = nan(0);
-        asteroid_database[i].meanAnomaly = nan(0);
-        asteroid_database[i].argumentPerihelion = nan(0);
-        asteroid_database[i].longAscNode = nan(0);
-        asteroid_database[i].inclination = nan(0);
-        asteroid_database[i].eccentricity = nan(0);
-        asteroid_database[i].semiMajorAxis = nan(0);
-        asteroid_database[i].epochPerihelion = nan(0);
-        asteroid_database[i].epochOsculation = nan(0);
+        asteroid_database[i].absoluteMag = GSL_NAN;
+        asteroid_database[i].meanAnomaly = GSL_NAN;
+        asteroid_database[i].argumentPerihelion = GSL_NAN;
+        asteroid_database[i].longAscNode = GSL_NAN;
+        asteroid_database[i].inclination = GSL_NAN;
+        asteroid_database[i].eccentricity = GSL_NAN;
+        asteroid_database[i].semiMajorAxis = GSL_NAN;
+        asteroid_database[i].epochPerihelion = GSL_NAN;
+        asteroid_database[i].epochOsculation = GSL_NAN;
         asteroid_database[i].slopeParam_n = 2;
         asteroid_database[i].slopeParam_G = -999;
         asteroid_database[i].number = -1;
@@ -575,15 +575,15 @@ void orbitalElements_comets_readAsciiData() {
     // Pre-fill columns with NANs, which is the best value for data we don't populate later
     for (i = 0; i < MAX_COMETS; i++) {
         memset(&comet_database[i], 0, sizeof(orbitalElements));
-        comet_database[i].absoluteMag = nan(0);
-        comet_database[i].meanAnomaly = nan(0);
-        comet_database[i].argumentPerihelion = nan(0);
-        comet_database[i].longAscNode = nan(0);
-        comet_database[i].inclination = nan(0);
-        comet_database[i].eccentricity = nan(0);
-        comet_database[i].semiMajorAxis = nan(0);
-        comet_database[i].epochPerihelion = nan(0);
-        comet_database[i].epochOsculation = nan(0);
+        comet_database[i].absoluteMag = GSL_NAN;
+        comet_database[i].meanAnomaly = GSL_NAN;
+        comet_database[i].argumentPerihelion = GSL_NAN;
+        comet_database[i].longAscNode = GSL_NAN;
+        comet_database[i].inclination = GSL_NAN;
+        comet_database[i].eccentricity = GSL_NAN;
+        comet_database[i].semiMajorAxis = GSL_NAN;
+        comet_database[i].epochPerihelion = GSL_NAN;
+        comet_database[i].epochOsculation = GSL_NAN;
         comet_database[i].slopeParam_n = 2;
         comet_database[i].slopeParam_G = -999;
         comet_database[i].number = -1;
@@ -685,7 +685,7 @@ void orbitalElements_comets_readAsciiData() {
 
         // Read absolute magnitude
         for (j = 90; (line[j] > '\0') && (line[j] <= ' '); j++);
-        if (!valid_float(line + j, NULL)) comet_database[comet_count].absoluteMag = nan(0);
+        if (!valid_float(line + j, NULL)) comet_database[comet_count].absoluteMag = GSL_NAN;
         else comet_database[comet_count].absoluteMag = get_float(line + j, NULL);
 
         // Read slope parameter
@@ -860,7 +860,7 @@ void orbitalElements_computeXYZ(int body_id, double jd, double *x, double *y, do
 
         // Return NaN if object is not in database
         if ((planet_database_file == NULL) || (index >= planet_count)) {
-            *x = *y = *z = nan(0);
+            *x = *y = *z = GSL_NAN;
             return;
         }
 
@@ -877,7 +877,7 @@ void orbitalElements_computeXYZ(int body_id, double jd, double *x, double *y, do
 
         // Return NaN if object is not in database
         if ((asteroid_database_file == NULL) || (index >= asteroid_count)) {
-            *x = *y = *z = nan(0);
+            *x = *y = *z = GSL_NAN;
             return;
         }
 
@@ -894,7 +894,7 @@ void orbitalElements_computeXYZ(int body_id, double jd, double *x, double *y, do
 
         // Return NaN if object is not in database
         if ((comet_database_file == NULL) || (index >= comet_count)) {
-            *x = *y = *z = nan(0);
+            *x = *y = *z = GSL_NAN;
             return;
         }
 
