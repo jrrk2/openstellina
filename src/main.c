@@ -271,6 +271,7 @@ int main_args(int argc, const char **argv) {
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #else
+// stubs for plain cc or clang use
 #define EMSCRIPTEN_KEEPALIVE
 #endif
 
@@ -357,8 +358,12 @@ EMSCRIPTEN_KEEPALIVE
 #ifndef __EMSCRIPTEN__
 int main(int argc, const char **argv) { return main_args(argc, argv); }
 #else
+
 int main() {
 
+  int status;
+  char buf[256];
+  
     puts("Hello, World");
   
     lt_memoryInit(&ephem_error, &ephem_log);
@@ -366,6 +371,34 @@ int main() {
     // Turn off GSL's automatic error handler
     gsl_set_error_handler_off();
 
+    puts("Fetch partial");
+    
+    js_fetch_partial_file("data/header.430", 0, 99, buf, &status);
+
+    puts("Fetched");
+
+    // Open a file
+    MYFILE* file = myfopen("data/header.430", "rb");
+    if (!file) {
+	printf("Error: %s\n", myfile_strerror(MYFILE_ERROR_NOT_FOUND));
+	return 1;
+    }
+
+    // Read some data
+    char buffer[1024];
+    size_t read = myfread(buffer, 1, sizeof(buffer), file);
+    if (read < sizeof(buffer)) {
+	printf("Error: %s\n", myfile_strerror(myferror(file)));
+    }
+
+    // Seek to a position
+    if (myfseek(file, 1000, SEEK_SET) != 0) {
+	printf("Seek failed\n");
+    }
+
+    // Clean up
+    myfclose(file);
+ 
     return 0;
 }  
 #endif

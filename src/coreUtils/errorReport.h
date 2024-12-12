@@ -24,6 +24,8 @@
 #ifndef ERRORREPORT_H
 #define ERRORREPORT_H 1
 
+#include "partial_file.h"
+
 extern char temp_err_string[];
 
 void ephem_error(char *msg);
@@ -36,7 +38,7 @@ void ephem_report(char *msg);
 
 void ephem_log(char *msg);
 
-void dcf_fread(void *ptr, size_t size, size_t n_requested, FILE *stream,
+void dcf_fread(void *ptr, size_t size, size_t n_requested, MYFILE *stream,
                const char *input_filename, const char *source_file, int source_line);
 
 #endif

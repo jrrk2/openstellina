@@ -116,18 +116,18 @@ void ephem_log(char *msg) {
 //! \param [in] filename - The filename of the stream we are reading (used to produce helpful error messages)
 //! \param [in] source_file - The source code file requesting this read (used to produce helpful error messages)
 //! \param [in] source_line - The source code line number requesting this read (used to produce helpful error messages)
-void dcf_fread(void *ptr, size_t size, size_t n_requested, FILE *stream,
+void dcf_fread(void *ptr, size_t size, size_t n_requested, MYFILE *stream,
                const char *input_filename, const char *source_file, const int source_line) {
-    const size_t items_read = fread(ptr, size, n_requested, stream);
+    const size_t items_read = myfread(ptr, size, n_requested, stream);
     if (items_read != n_requested) {
         char buffer[LSTR_LENGTH];
 
-        const int file_end = feof(stream);
-        const int file_error = ferror(stream);
-        const long file_position = ftell(stream);
+        const int file_end = myfeof(stream);
+        const int file_error = myferror(stream);
+        const long file_position = myftell(stream);
 
-        fseek(stream, 0L, SEEK_END);
-        const long file_end_position = ftell(stream);
+        myfseek(stream, 0L, SEEK_END);
+        const long file_end_position = myftell(stream);
 
         snprintf(buffer, LSTR_LENGTH, "\
 Failure while trying to read file <%s>\n\

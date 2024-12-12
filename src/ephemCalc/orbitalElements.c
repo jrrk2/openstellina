@@ -46,9 +46,9 @@ const static double ORBIT_CONST_ASTRONOMICAL_UNIT = 149597870700.; // m
 const static double ORBIT_CONST_GM_SOLAR = 1.32712440041279419e20; // m^3 s^-2
 
 // Binary files containing the orbital elements of solar system objects
-FILE *planet_database_file = NULL;
-FILE *asteroid_database_file = NULL;
-FILE *comet_database_file = NULL;
+MYFILE *planet_database_file = NULL;
+MYFILE *asteroid_database_file = NULL;
+MYFILE *comet_database_file = NULL;
 
 // Filenames of binary files
 char planet_database_filename[FNAME_LENGTH];
@@ -97,20 +97,20 @@ int comet_secure_count = 0;
 //! \param [out] item_secure_count - Return the number of securely determined orbital elements in this binary file.
 //! \return - Zero on success
 
-int OrbitalElements_ReadBinaryData(const char *filename, FILE **file_pointer, int *elements_offset,
+int OrbitalElements_ReadBinaryData(const char *filename, MYFILE **file_pointer, int *elements_offset,
                                    orbitalElements **data_buffer, unsigned char **data_buffer_items_loaded,
                                    int *item_count, int *item_secure_count) {
     char filename_with_path[FNAME_LENGTH];
 
     // Work out the full path of the binary data file we are to read
-    sprintf(filename_with_path, "%s/../data/%s", SRCDIR, filename);
+    sprintf(filename_with_path, "%s/%s", DATADIR, filename);
     if (DEBUG) {
         sprintf(temp_err_string, "Trying to fetch binary data from file <%s>.", filename_with_path);
         ephem_log(temp_err_string);
     }
 
     // Open binary data file
-    *file_pointer = fopen(filename_with_path, "rb");
+    *file_pointer = myfopen(filename_with_path, "rb");
     if (*file_pointer == NULL) return 1; // FAIL
 
     // Read the number of objects with orbital elements in this file
@@ -130,13 +130,13 @@ int OrbitalElements_ReadBinaryData(const char *filename, FILE **file_pointer, in
     // Check that numbers are sensible
     if ((*item_count < 1) || (*item_count > 1e6)) {
         if (DEBUG) { ephem_log("Rejecting this as implausible"); }
-        fclose(*file_pointer);
+        myfclose(*file_pointer);
         *file_pointer = NULL;
         return 1;
     }
 
     // We have now reached the orbital elements. Store their offset from the start of the file.
-    *elements_offset = ftell(*file_pointer);
+    *elements_offset = myftell(*file_pointer);
 
     // Allocate memory to store records as we load them
     *data_buffer = (orbitalElements *) lt_malloc((*item_count) * sizeof(orbitalElements));
@@ -170,7 +170,7 @@ void OrbitalElements_DumpBinaryData(const char *filename, const orbitalElements 
     char filename_with_path[FNAME_LENGTH];
 
     // Work out the full path of the binary data file we are to write
-    sprintf(filename_with_path, "%s/../data/%s", SRCDIR, filename);
+    sprintf(filename_with_path, "%s/%s", DATADIR, filename);
     if (DEBUG) {
         sprintf(temp_err_string, "Dumping binary data to file <%s>.", filename_with_path);
         ephem_log(temp_err_string);
@@ -253,7 +253,7 @@ void orbitalElements_planets_readAsciiData() {
         sprintf(temp_err_string, "Beginning to read ASCII planet list.");
         ephem_log(temp_err_string);
     }
-    sprintf(fname, "%s/../data/planets.dat", SRCDIR);
+    sprintf(fname, "%s/planets.dat", DATADIR);
     if (DEBUG) {
         sprintf(temp_err_string, "Opening file <%s>", fname);
         ephem_log(temp_err_string);
@@ -360,8 +360,8 @@ void orbitalElements_planets_readAsciiData() {
 
     // Open a file pointer to the file
     char filename_with_path[FNAME_LENGTH];
-    snprintf(filename_with_path, FNAME_LENGTH, "%s/../data/%s", SRCDIR, "dcfbinary.plt");
-    planet_database_file = fopen(filename_with_path, "rb");
+    snprintf(filename_with_path, FNAME_LENGTH, "%s/%s", DATADIR, "dcfbinary.plt");
+    planet_database_file = myfopen(filename_with_path, "rb");
     snprintf(planet_database_filename, FNAME_LENGTH, "%s", filename_with_path);
 }
 
@@ -419,7 +419,7 @@ void orbitalElements_asteroids_readAsciiData() {
         sprintf(temp_err_string, "Beginning to read ASCII asteroid list.");
         ephem_log(temp_err_string);
     }
-    sprintf(fname, "%s/../data/astorb.dat", SRCDIR);
+    sprintf(fname, "%s/astorb.dat", DATADIR);
     if (DEBUG) {
         sprintf(temp_err_string, "Opening file <%s>", fname);
         ephem_log(temp_err_string);
@@ -541,8 +541,8 @@ void orbitalElements_asteroids_readAsciiData() {
 
     // Open a file pointer to the file
     char filename_with_path[FNAME_LENGTH];
-    snprintf(filename_with_path, FNAME_LENGTH, "%s/../data/%s", SRCDIR, "dcfbinary.ast");
-    asteroid_database_file = fopen(filename_with_path, "rb");
+    snprintf(filename_with_path, FNAME_LENGTH, "%s/%s", DATADIR, "dcfbinary.ast");
+    asteroid_database_file = myfopen(filename_with_path, "rb");
     snprintf(asteroid_database_filename, FNAME_LENGTH, "%s", filename_with_path);
 }
 
@@ -603,7 +603,7 @@ void orbitalElements_comets_readAsciiData() {
         sprintf(temp_err_string, "Beginning to read ASCII comet list.");
         ephem_log(temp_err_string);
     }
-    sprintf(fname, "%s/../data/Soft00Cmt.txt", SRCDIR);
+    sprintf(fname, "%s/Soft00Cmt.txt", DATADIR);
     if (DEBUG) {
         sprintf(temp_err_string, "Opening file <%s>", fname);
         ephem_log(temp_err_string);
@@ -730,8 +730,8 @@ void orbitalElements_comets_readAsciiData() {
 
     // Open a file pointer to the file
     char filename_with_path[FNAME_LENGTH];
-    snprintf(filename_with_path, FNAME_LENGTH, "%s/../data/%s", SRCDIR, "dcfbinary.cmt");
-    comet_database_file = fopen(filename_with_path, "rb");
+    snprintf(filename_with_path, FNAME_LENGTH, "%s/%s", DATADIR, "dcfbinary.cmt");
+    comet_database_file = myfopen(filename_with_path, "rb");
     snprintf(comet_database_filename, FNAME_LENGTH, "%s", filename_with_path);
 }
 
@@ -759,7 +759,7 @@ orbitalElements *orbitalElements_planets_fetch(int index) {
     {
         // If not, then read them from disk now
         long data_position_needed = planet_database_offset + index * sizeof(orbitalElements);
-        fseek(planet_database_file, data_position_needed, SEEK_SET);
+        myfseek(planet_database_file, data_position_needed, SEEK_SET);
         dcf_fread((void *) &planet_database[index], sizeof(orbitalElements), 1, planet_database_file,
                   planet_database_filename, __FILE__, __LINE__);
         planet_database_items_loaded[index] = 1;
@@ -793,7 +793,7 @@ orbitalElements *orbitalElements_asteroids_fetch(int index) {
     {
         // If not, then read them from disk now
         long data_position_needed = asteroid_database_offset + index * sizeof(orbitalElements);
-        fseek(asteroid_database_file, data_position_needed, SEEK_SET);
+        myfseek(asteroid_database_file, data_position_needed, SEEK_SET);
         dcf_fread((void *) &asteroid_database[index], sizeof(orbitalElements), 1, asteroid_database_file,
                   asteroid_database_filename, __FILE__, __LINE__);
         asteroid_database_items_loaded[index] = 1;
@@ -827,7 +827,7 @@ orbitalElements *orbitalElements_comets_fetch(int index) {
     {
         // If not, then read them from disk now
         long data_position_needed = comet_database_offset + index * sizeof(orbitalElements);
-        fseek(comet_database_file, data_position_needed, SEEK_SET);
+        myfseek(comet_database_file, data_position_needed, SEEK_SET);
         dcf_fread((void *) &comet_database[index], sizeof(orbitalElements), 1, comet_database_file,
                   comet_database_filename, __FILE__, __LINE__);
         comet_database_items_loaded[index] = 1;

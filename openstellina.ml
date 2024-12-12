@@ -69,7 +69,6 @@ let add_message msg_type text =
   | None -> ()
   | Some panel ->
       let message_element = 
-        let open Tyxml_js.Html in
         div ~a:[
           a_class ["message"; msg_type];
         ] [txt text]
@@ -648,7 +647,6 @@ let send_message msg =
       false)
 
 let create_status_section titled items =
-  let open Tyxml_js.Html in
   div ~a:[a_class ["status-section"]] (
     div ~a:[a_class ["section-title"]] [txt titled] ::
     List.map (fun (label, value_ref) ->
@@ -704,7 +702,6 @@ let process_json_value path = function
 | _ -> ()
 
 let create_telescope_display () =
-  let open Tyxml_js.Html in
   div ~a:[a_class ["telescope-display"]] [
     create_status_section "System" [
       ("ID", Telescope.telescopeId);
@@ -768,7 +765,6 @@ let debug_mode = ref true
 let debug_flag = ref false
 
 let create_debug_settings () =
-  let open Tyxml_js.Html in
   div ~a:[a_class ["debug-settings"]] [
     div ~a:[a_class ["section-title"]] [txt "Debug Settings"];
     div ~a:[a_class ["debug-row"]] [
@@ -1583,7 +1579,6 @@ let rec draw_things fn arg =
 let (promise:unit Lwt.t ref) = ref @@ draw_things choose (fun () -> ())
 
 let create_control_status_widget () =
-  let open Tyxml_js.Html in
   div ~a:[a_class ["control-status-widget"]] [
     div ~a:[a_class ["control-status-header"]] [
       div ~a:[a_class ["control-indicator"]] [
@@ -1613,7 +1608,6 @@ let create_control_status_widget () =
 ]
 
 let create_message_panel () =
-  let open Tyxml_js.Html in
   div ~a:[
     a_id "telescope-messages";
     a_class ["message-panel"]
@@ -1626,7 +1620,6 @@ let create_message_panel () =
   )
 
 let create_control_panel () =
-  let open Tyxml_js.Html in
   div ~a:[a_class ["control-panel"]] [
     create_control_status_widget ();
     div ~a:[
@@ -1643,7 +1636,6 @@ let create_control_panel () =
     create_message_panel ()  (* Use new message panel *)
     ]
 let switch_tab tab_id =
-  let open Js_of_ocaml in
   let doc = Dom_html.document in
   let tabs = doc##getElementsByClassName (Js.string "tab-btn") in
   let contents = doc##getElementsByClassName (Js.string "tab-content-item") in
@@ -1708,7 +1700,6 @@ let start_control_updates () =
   ignore (update_loop ())
 
 let create_tabs tabs =
-  let open Tyxml_js.Html in
   let tab_headers = div ~a:[a_class ["tab-buttons"]] (
     List.mapi (fun i tab ->
       let base_style = if i = 0 then 
@@ -1760,7 +1751,6 @@ let create_tabs tabs =
 
 (*
 let create_planet_picker () =
-  let open Tyxml_js.Html in
   div ~a:[a_class ["picker-panel"]] [
     div ~a:[a_class ["section-title"]] [txt "Planet Selection"];
     select ~a:[
@@ -1782,7 +1772,6 @@ let create_planet_picker () =
   ]
 
 let create_comet_picker () =
-  let open Tyxml_js.Html in
   div ~a:[a_class ["picker-panel"]] [
     div ~a:[a_class ["section-title"]] [txt "Comet Selection"];
     (* Add year dropdown *)
@@ -1812,7 +1801,6 @@ let create_comet_picker () =
 *)
   
 let modern_gui () =
-  let open Tyxml_js.Html in
   let tabs = [
     {
       id = "control";
@@ -1901,7 +1889,7 @@ let onload _ =
   print_endline "Created UI";
   Dom.appendChild main (Tyxml_js.To_dom.of_div ui);
   print_endline "Mounted UI";
-  
+
   (* Update julian dates *)
   let open Tabbed_dialog in
   let open Utils in

@@ -38,6 +38,8 @@
 #include "orbitalElements.h"
 #include "magnitudeEstimate.h"
 
+#include "settings/settings.h"
+
 //! The number of the JPL ephemeris we are using: DE430
 static int JPL_EphemNumber = 430;
 
@@ -60,7 +62,7 @@ static dict *JPL_EphemVars = NULL; // The metadata variables about the ephemeris
 static int JPL_EphemArrayRecords = 0; // The number of blocks needed to go from EphemStart to EphemEnd at step size EphemStep
 
 static int JPL_EphemData_offset = -1; // The offset of the start of the ephmeris binary data from the start of the binary file
-static FILE *JPL_EphemFile = NULL; // File pointer used to read binary data from DE430 (we don't read whole binary ephemeris into memory)
+static MYFILE *JPL_EphemFile = NULL; // File pointer used to read binary data from DE430 (we don't read whole binary ephemeris into memory)
 static char jpl_ephem_filename[FNAME_LENGTH];  // File name of binary ephemeris file
 
 static double *JPL_EphemData = NULL; // Buffer to hold the ephemeris data, as we load it
@@ -76,7 +78,7 @@ int JPL_ReadBinaryData() {
     char fname[FNAME_LENGTH];
 
     // Work out the filename of the binary file that we are to open
-    snprintf(fname, FNAME_LENGTH, "%s/../data/dcfbinary.%d", SRCDIR, JPL_EphemNumber);
+    snprintf(fname, FNAME_LENGTH, "%s/dcfbinary.%d", DATADIR, JPL_EphemNumber);
     snprintf(jpl_ephem_filename, FNAME_LENGTH, "%s", fname);
     if (DEBUG) {
         snprintf(temp_err_string, FNAME_LENGTH, "Trying to fetch binary data from file <%s>.", fname);
@@ -84,7 +86,7 @@ int JPL_ReadBinaryData() {
     }
 
     // Open binary data
-    JPL_EphemFile = fopen(fname, "rb");
+    JPL_EphemFile = myfopen(fname, "rb");
     if (JPL_EphemFile == NULL) return 1; // Failed to open binary file
 
     // Read headers to binary file
@@ -130,7 +132,7 @@ int JPL_ReadBinaryData() {
 
     // We have now reached the actual ephemeris data. We don't load this into RAM since it is large and this would
     // take time. Instead, store a pointer to the offset of the start of the ephemeris from the beginning of file.
-    JPL_EphemData_offset = (int) ftell(JPL_EphemFile);
+    JPL_EphemData_offset = (int) myftell(JPL_EphemFile);
 
     // Allocate memory to use to store ephemeris, as we load it
     JPL_EphemData = (double *) lt_malloc(JPL_EphemArrayLen * JPL_EphemArrayRecords * sizeof(double));
@@ -155,7 +157,7 @@ void JPL_DumpBinaryData() {
     FILE *output;
     char fname[FNAME_LENGTH];
 
-    snprintf(fname, FNAME_LENGTH, "%s/../data/dcfbinary.%d", SRCDIR, JPL_EphemNumber);
+    snprintf(fname, FNAME_LENGTH, "%s/dcfbinary.%d", DATADIR, JPL_EphemNumber);
     if (DEBUG) {
         sprintf(temp_err_string, "Dumping binary data to file <%s>.", fname);
         ephem_log(temp_err_string);
@@ -208,7 +210,7 @@ void jpl_readAsciiData() {
     }
 
     // The header file, <data/header.430>, contains global information about the ephemeris
-    snprintf(fname, FNAME_LENGTH, "%s/../data/header.%d", SRCDIR, JPL_EphemNumber);
+    snprintf(fname, FNAME_LENGTH, "%s/header.%d", DATADIR, JPL_EphemNumber);
 
     while (1) {
         // If we don't currently have an ephemeris file with readable data, we need to open one
@@ -239,7 +241,7 @@ void jpl_readAsciiData() {
 
             // Populate <fname> with the filename of the next ephemeris file to read
             // The ephemeris data is contained in files <data/ascp????.430>, where ???? is the start year
-            snprintf(fname, FNAME_LENGTH, "%s/../data/ascp%d.%d", SRCDIR, year, JPL_EphemNumber);
+            snprintf(fname, FNAME_LENGTH, "%s/ascp%d.%d", DATADIR, year, JPL_EphemNumber);
         }
 
         // Read a line of data from the ephemeris file
@@ -567,7 +569,7 @@ void jpl_computeXYZ(int body_id, double jd, double *x, double *y, double *z) {
 
 #pragma omp critical (jpl_fetch)
         {
-            fseek(JPL_EphemFile, data_position_needed, SEEK_SET);
+            myfseek(JPL_EphemFile, data_position_needed, SEEK_SET);
             dcf_fread((void *) &JPL_EphemData[record_index * JPL_EphemArrayLen],
                       sizeof(double), JPL_EphemArrayLen, JPL_EphemFile,
                       jpl_ephem_filename, __FILE__, __LINE__);

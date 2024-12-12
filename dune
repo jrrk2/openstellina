@@ -20,14 +20,14 @@
  (alias build_js)
  (deps src/main.c)
  (action (progn
-   (run sh -c "emcc ../../src/main.c -I ../../src -I ../../gsl-2.8 -D DEBUG=0 -D MEMDEBUG1=0 -D MEMDEBUG2=0 -D DCFVERSION=4.0 -D DATE=26/11/2024 -D PATHLINK= ../../src/argparse/argparse.c ../../src/coreUtils/asciiDouble.c ../../src/coreUtils/errorReport.c ../../src/coreUtils/makeRasters.c ../../src/ephemCalc/magnitudeEstimate.c ../../src/ephemCalc/jpl.c ../../src/ephemCalc/orbitalElements.c ../../src/listTools/ltDict.c ../../src/listTools/ltList.c ../../src/listTools/ltMemory.c ../../src/listTools/ltStringProc.c ../../src/mathsTools/julianDate.c ../../src/mathsTools/precess_equinoxes.c ../../src/mathsTools/sphericalAst.c ../../src/settings/settings.c ../../gsl-2.8/sys/infnan.c ../../gsl-2.8/sys/pow_int.c ../../gsl-2.8/sys/hypot.c ../../gsl-2.8/sys/fdiv.c ../../gsl-2.8/err/error.c ../../gsl-2.8/err/stream.c -lm -s WASM=1 -s EXPORTED_FUNCTIONS=[_myFunction,_myFloat,_myAscii,_main] -o my_program.js --preload-file ../../data/header.430@/data/ \
-     --preload-file ../../data/dcfbinary.430@/data/ \
-     --preload-file ../../data/dcfbinary.cmt@/data/ \
-     --preload-file ../../data/dcfbinary.plt@/data/ \
-     -s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s STACK_SIZE=1048576 \
-     -s 'EXPORTED_FUNCTIONS=[_myFunction,_myFloat,_myAscii,_main]'")
+   (run sh -c "emcc ../../src/main.c -I ../../src -I ../../gsl-2.8 -D DEBUG=0 -D MEMDEBUG1=0 -D MEMDEBUG2=0 -D DCFVERSION=4.0 -D DATE=26/11/2024 -D DATADIR=\\\"data\\\" ../../src/partial_file.c ../../src/argparse/argparse.c ../../src/coreUtils/asciiDouble.c ../../src/coreUtils/errorReport.c ../../src/coreUtils/makeRasters.c ../../src/ephemCalc/magnitudeEstimate.c ../../src/ephemCalc/jpl.c ../../src/ephemCalc/orbitalElements.c ../../src/listTools/ltDict.c ../../src/listTools/ltList.c ../../src/listTools/ltMemory.c ../../src/listTools/ltStringProc.c ../../src/mathsTools/julianDate.c ../../src/mathsTools/precess_equinoxes.c ../../src/mathsTools/sphericalAst.c ../../src/settings/settings.c ../../gsl-2.8/sys/infnan.c ../../gsl-2.8/sys/pow_int.c ../../gsl-2.8/sys/hypot.c ../../gsl-2.8/sys/fdiv.c ../../gsl-2.8/err/error.c ../../gsl-2.8/err/stream.c -lm \
+     -s WASM=1 -s EXPORTED_FUNCTIONS=[_myFunction,_myFloat,_myAscii,_main,_malloc] \
+     -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB \
+     -s STACK_SIZE=1048576 -s FORCE_FILESYSTEM=1 \
+     -s FETCH=1 -s EXIT_RUNTIME=0 \
+     -s 'EXPORTED_RUNTIME_METHODS=[\"FS\",\"ccall\", \"cwrap\" ]' -o my_program.js")
  ))
- (targets my_program.js my_program.wasm my_program.data))
+ (targets my_program.js my_program.wasm))
 
 (rule
  (alias generate_binary)
@@ -60,17 +60,50 @@
           && git rev-parse HEAD > git_rev.txt \
           && git log -1 --format='%an' > git_author.txt \
           && sed \"s/%%VERSION%%/2.004/g; s/%%GIT_COMMIT%%/$(cat git_rev.txt)/g; s/%%GIT_AUTHOR%%/$(cat git_author.txt)/g\" %{deps}"))))
+(rule
+ (alias deploy)
+ (deps openstellina.bc.js my_program.js my_program.wasm index.html)
+ (action
+  (progn
+    (run mkdir -p %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/js)
+    (run mkdir -p %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/data)
+    (run cp -f openstellina.bc.js %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/js/)
+    (run cp -f my_program.js my_program.wasm %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/js/)
+    (run cp -f ../../data/header.430 ../../data/dcfbinary.430 ../../data/dcfbinary.cmt ../../data/dcfbinary.plt ../../catalog.txt ../../table3.dat ../../ngc2000.dat %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/data/)
+    (run cp -f index.html %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/)
+  )))
+
+(rule
+ (target index.html)
+ (action
+  (with-stdout-to
+   %{target}
+   (echo "<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=\"utf-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <title>OpenStellina</title>
+</head>
+<body>
+    <div id=\"openstellina\"></div>
+    <script src=\"js/my_program.js\"></script>
+    <script src=\"js/openstellina.bc.js\"></script>
+</body>
+</html>
+"))))
 
 (alias
  (name default)
- (deps  dcfbinary.cmt dcfbinary.430 dcfbinary.plt openstellina.bc.js my_program.js my_program.wasm my_program.data))
-
+ (deps my_program.js my_program.wasm)
+ )
+ 
 (env
   (dev
     (flags (:standard -g -w -16 -w -32 -w -52 -w -21 -w -26 -w -27 -w -37 -w -11 -w -33))
     (js_of_ocaml
      (compilation_mode whole_program)
-     (flags --pretty --disable genprim --noinline --debug-info --source-map --file=../../catalog.txt --file=../../table3.dat --file=../../ngc2000.dat)
+     (flags --pretty --disable genprim --noinline --debug-info)
      ) 
   )
 )
