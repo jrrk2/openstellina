@@ -14,19 +14,24 @@ static int file_count = 0;
 #ifdef __EMSCRIPTEN__
 EM_JS(void, js_fetch_partial_file, (const char* url, int32_t start, int32_t end, void* buffer_ptr, int* status_ptr), {
     var xhr = new XMLHttpRequest();
+#if 0
     console.log('Fetching:', UTF8ToString(url), 'bytes', start, '-', end);
+#endif        
     xhr.open('GET', UTF8ToString(url), false);  // Synchronous request
     xhr.setRequestHeader('Range', 'bytes=' + start + '-' + end);
     xhr.overrideMimeType('text/plain; charset=x-user-defined');
     
     try {
         xhr.send();
+#if 0
         console.log('Response status:', xhr.status);
         console.log('Response headers:', xhr.getAllResponseHeaders());
-        
+#endif        
         if (xhr.status === 206) {
             var response = xhr.response;
+#if 0
             console.log('Response length:', response.length);
+#endif        
             
             var byteArray = new Uint8Array(response.length);
             for (var i = 0; i < response.length; ++i) {
@@ -35,11 +40,13 @@ EM_JS(void, js_fetch_partial_file, (const char* url, int32_t start, int32_t end,
             HEAPU8.set(byteArray, buffer_ptr);
             HEAP32[status_ptr >> 2] = byteArray.length;
             
+#if 0
             console.log('Successfully read', byteArray.length, 'bytes');
             // Debug first few bytes
             if (byteArray.length > 0) {
                 console.log('First bytes:', Array.from(byteArray.slice(0, 4)));
             }
+#endif        
         } else {
             console.error('HTTP error:', xhr.status);
             HEAP32[status_ptr >> 2] = -xhr.status;
@@ -54,12 +61,16 @@ EM_JS(void, js_fetch_partial_file, (const char* url, int32_t start, int32_t end,
 EM_JS(int, js_test_file, (const char* url), {
     var xhr = new XMLHttpRequest();
     var file_url = UTF8ToString(url);
+#if 0
     console.log('Testing file existence:', file_url);
+#endif
     xhr.open('HEAD', file_url, false);
     try {
         xhr.send();
         var status = (xhr.status >= 200 && xhr.status < 300);
+#if 0
         console.log('File test result:', status ? 'exists' : 'not found');
+#endif
         return status ? 1 : 0;
     } catch(e) {
         console.error('File test error:', e);
@@ -70,21 +81,21 @@ EM_JS(int, js_test_file, (const char* url), {
 
 MYFILE* myfopen(const char* filename, const char* mode) {
     if (!filename || !mode) {
-        printf("myfopen: Invalid parameters\n");
+      if (0) printf("myfopen: Invalid parameters\n");
         return NULL;
     }
     
-    printf("myfopen: Opening %s with mode %s\n", filename, mode);
+    if (0) printf("myfopen: Opening %s with mode %s\n", filename, mode);
     
     #ifdef __EMSCRIPTEN__
     if (!js_test_file(filename)) {
-        printf("myfopen: File not found: %s\n", filename);
+        if (0) printf("myfopen: File not found: %s\n", filename);
         return NULL;
     }
     #endif
     
     if (file_count >= MYFILE_MAX_FILES) {
-        printf("myfopen: Too many open files\n");
+        if (0) printf("myfopen: Too many open files\n");
         return NULL;
     }
     
@@ -97,7 +108,7 @@ MYFILE* myfopen(const char* filename, const char* mode) {
     }
     
     if (!file) {
-        printf("myfopen: No free file slots\n");
+        if (0) printf("myfopen: No free file slots\n");
         return NULL;
     }
     
@@ -107,19 +118,19 @@ MYFILE* myfopen(const char* filename, const char* mode) {
     file->error_state = MYFILE_ERROR_NONE;
     
     file_count++;
-    printf("myfopen: Successfully opened %s\n", filename);
+    if (0) printf("myfopen: Successfully opened %s\n", filename);
     return file;
 }
 
 size_t myfread(void* ptr, size_t size, size_t count, MYFILE* file) {
     if (!ptr || !file || !file->exists) {
-        printf("myfread: Invalid parameters: ptr=%p, file=%p, exists=%d\n", 
+        if (0) printf("myfread: Invalid parameters: ptr=%p, file=%p, exists=%d\n", 
                ptr, file, file ? file->exists : 0);
         return 0;
     }
     
     const size_t total_bytes = size * count;
-    printf("myfread: Reading %zu bytes at position %d from %s\n", 
+    if (0) printf("myfread: Reading %zu bytes at position %d from %s\n", 
            total_bytes, file->position, file->filename);
     
     #ifdef __EMSCRIPTEN__
@@ -130,16 +141,16 @@ size_t myfread(void* ptr, size_t size, size_t count, MYFILE* file) {
                          ptr,
                          &status);
     
-    printf("myfread: Read status: %d\n", status);
+    if (0) printf("myfread: Read status: %d\n", status);
     
     if (status > 0) {
         file->position += status;
-        printf("myfread: Successfully read %d bytes, new position: %d\n", 
+        if (0) printf("myfread: Successfully read %d bytes, new position: %d\n", 
                status, file->position);
         return status / size;
     } else {
         file->error_state = MYFILE_ERROR_NETWORK;
-        printf("myfread: Network error occurred\n");
+        if (0) printf("myfread: Network error occurred\n");
         return 0;
     }
     #else

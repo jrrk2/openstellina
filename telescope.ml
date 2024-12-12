@@ -69,7 +69,7 @@ let cnv body =
   try if body <> "" then Yojson.Safe.from_string body else `String ""
   with err -> print_endline ("Exception: "^Printexc.to_string_default err^"\n"^body^"\n"^body^"\n"); `String body
 
-let params' = [ ("name", version); ("EIO", "3"); ("id", version); ("transport", "polling")]
+let params' = [ ("name", Version.version); ("EIO", "3"); ("id", version); ("transport", "polling")]
 let pth = pth3'^"/socket.io/"
 let hdrs = ref []
 let authref = ref ""

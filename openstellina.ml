@@ -1960,8 +1960,9 @@ let modern_gui () =
     a_class ["version-info"];
     a_style "text-align: right; font-size: 12px; color: #666; margin-top: 8px; font-family: monospace;"
   ] [
-    txt (Version.version ^ " (" ^ Version.git_commit ^ ") • ");
-    txt ("Author: " ^ Version.git_author);
+    txt (Version.version ^ " (" ^ Version.git_commit ^ ") •");
+    txt (" Author: " ^ Version.git_author);
+    txt (" Build date: " ^ Version.build_date);
   ] in
 
   

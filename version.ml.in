@@ -1,3 +1,4 @@
 let version = "openstellina-%%VERSION%%"
 let git_commit = "%%GIT_COMMIT%%"
 let git_author = "%%GIT_AUTHOR%%"
+let build_date = "%%BUILD_DATE%%"
