@@ -618,6 +618,63 @@ let tab_styles = {|
   .secure-redirect:hover {
     background-color: #218838 !important;
   }
+  /* Base Layout */
+  .tabs-container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  .secure-connection-panel {
+    padding: 20px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+
+  .secure-warning {
+    margin: 16px 0;
+    padding: 12px;
+    background: #fff3cd;
+    border: 1px solid #ffeeba;
+    border-radius: 4px;
+    color: #856404;
+  }
+
+  .secure-info {
+    margin: 16px 0;
+    padding: 12px;
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    border-radius: 4px;
+    color: #155724;
+  }
+
+  .secure-redirect {
+    margin-top: 12px;
+    background-color: #28a745 !important;
+    color: white !important;
+  }
+
+  .http-redirect {
+    margin-top: 12px;
+    background-color: #dc3545 !important;
+    color: white !important;
+  }
+
+  .control-panel.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .control-disabled-message {
+    padding: 20px;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    color: #721c24;
+    margin-bottom: 20px;
+  }
 
 |}
 
@@ -1654,22 +1711,34 @@ let create_message_panel () =
     ) !messages
   )
 
+(* Update the control panel to be disabled in HTTPS mode *)
 let create_control_panel () =
-  div ~a:[a_class ["control-panel"]] [
-    create_control_status_widget ();
-    div ~a:[
-      a_id "control-warning";
-      a_class ["control-warning"];
-      a_style "display: none;"
-    ] [];
-    create_status_section "Motor Status" [
-      ("AZ Position", az_posref);
-      ("AZ State", ref !motor_state_ref);
-      ("ALT Position", alt_posref);
-      ("ALT State", ref !motor_state_ref)
-    ];
-    create_message_panel ()  (* Use new message panel *)
+  let is_secure = Secure.is_secure_session() in
+  if is_secure then
+    div ~a:[a_class ["control-panel"; "disabled"]] [
+      div ~a:[a_class ["control-disabled-message"]] [
+        txt "Control features are not available in HTTPS mode. ";
+        txt "Please switch to HTTP mode using the Security tab to access controls."
+      ]
     ]
+  else
+    (* Original control panel implementation *)
+    div ~a:[a_class ["control-panel"]] [
+      create_control_status_widget ();
+      div ~a:[
+        a_id "control-warning";
+        a_class ["control-warning"];
+        a_style "display: none;"
+      ] [];
+      create_status_section "Motor Status" [
+        ("AZ Position", az_posref);
+        ("AZ State", ref !motor_state_ref);
+        ("ALT Position", alt_posref);
+        ("ALT State", ref !motor_state_ref)
+      ];
+      create_message_panel ()
+    ]
+
 let switch_tab tab_id =
   let doc = Dom_html.document in
   let tabs = doc##getElementsByClassName (Js.string "tab-btn") in
@@ -1900,33 +1969,27 @@ let modern_gui () =
     a_style "max-width: 1200px; margin: 0 auto; padding: 20px;"
   ] [create_tabs tabs; br (); Table_update.table_element; version_info]
 
+(* Remove migration code from onload since we're using cookies exclusively *)
 let onload _ =
   print_endline "Starting onload";
   let doc = Dom_html.document in
-  print_endline "Got document";
   let main = Js.Opt.get (doc##getElementById (Js.string "openstellina"))
     (fun () -> print_endline "Could not find openstellina div"; assert false) in
-  print_endline "Found main div";
   
   (* Add canvas for any drawing needs *)
   Dom.appendChild doc##.body canvas;
-  print_endline "Added canvas";
   
   (* Add styles *)
   let style = Dom_html.createStyle doc in
   style##.innerHTML := Js.string tab_styles;
   Dom.appendChild doc##.head style;
-  print_endline "Added styles";
   
   (* Start control updates *)
   start_control_updates ();
-  print_endline "Started control updates";
   
   (* Create and mount UI *)
   let ui = modern_gui () in
-  print_endline "Created UI";
   Dom.appendChild main (Tyxml_js.To_dom.of_div ui);
-  print_endline "Mounted UI";
 
   (* Update julian dates *)
   let open Tabbed_dialog in
@@ -1935,7 +1998,6 @@ let onload _ =
   let _ = handle_julian_time txttime_start jd_start (format_time today) in
   let _ = handle_julian_date txtdate_stop jd_stop (format_date tomorrow) in
   let _ = handle_julian_time txttime_stop jd_stop (format_time tomorrow) in
-  print_endline "Updated julian dates";
   Js._false
 
 let _ = Dom_html.window##.onload := Dom_html.handler onload
