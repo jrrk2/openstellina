@@ -5,15 +5,25 @@ open Tyxml_js.Html
 open Utils
 open Geolocate
 
-(* Basic helper functions *)
+(* Move related functions together *)
+let get_cities_for_tz tz =
+  try Hashtbl.find Base_locations.loch tz
+  with Not_found -> []
+
+let get_cities_for_tz_and_region tz reg =
+  let cities = get_cities_for_tz tz in
+  List.filter (fun (_, reg', _, _) -> reg' = reg) cities
+
+let get_cities_for_letter tz reg letter =
+  let cities = get_cities_for_tz_and_region tz reg in
+  List.filter (fun (city, _, _, _) -> 
+    Char.uppercase_ascii city.[0] = letter.[0]
+  ) cities
+
 let get_continent tz =
   (match String.split_on_char '/' tz with
   | continent :: _ -> continent
   | [] -> "Other")
-
-let get_cities_for_tz tz =
-  try Hashtbl.find Base_locations.loch tz
-  with Not_found -> []
 
 let get_unique_continents () =
   Hashtbl.fold (fun tz _ acc ->
@@ -38,9 +48,14 @@ let get_regions_for_tz tz =
   ) [] cities in
   List.sort String.compare regions
 
-let get_cities_for_tz_and_region tz reg =
-  let cities = get_cities_for_tz tz in
-  List.filter (fun (_, reg', _, _) -> reg' = reg) cities
+let get_city_first_letters tz reg =
+  let cities = get_cities_for_tz_and_region tz reg in
+  List.fold_left (fun acc (city, _, _, _) ->
+    let first = String.make 1 (Char.uppercase_ascii city.[0]) in
+    if List.mem first acc then acc
+    else first :: acc
+  ) [] cities
+  |> List.sort String.compare
 
 let select_element element =
   let default = "unknown" in
@@ -57,23 +72,6 @@ let set_select_value id value =
     let sel = Js.Unsafe.coerce select in
     sel##.value := Js.string value
   ) (Dom_html.getElementById_opt id)
-
-
-let get_city_first_letters tz reg =
-  let cities = get_cities_for_tz_and_region tz reg in
-  List.fold_left (fun acc (city, _, _, _) ->
-    let first = String.make 1 (Char.uppercase_ascii city.[0]) in
-    if List.mem first acc then acc
-    else first :: acc
-  ) [] cities
-  |> List.sort String.compare
-
-
-let get_cities_for_letter tz reg letter =
-  let cities = get_cities_for_tz_and_region tz reg in
-  List.filter (fun (city, _, _, _) -> 
-    Char.uppercase_ascii city.[0] = letter.[0]
-  ) cities
 
 let get_default_selections () =
   (match Geo.get_cookie "TZ" with
@@ -156,62 +154,90 @@ let populate_and_select_cities tz reg letter_select city_select =
     | None -> ())
   end
 
-let populate_location_selects () =
-  (match get_default_selections () with
-  | Some (continent, tz, maybe_reg, maybe_city) ->
-      (* Set continent *)
-      set_select_value "continent-select" continent;
+let populate_and_trigger_select select_id value =
+  Option.iter (fun select ->
+    let sel = Js.Unsafe.coerce select in
+    sel##.value := Js.string value;
+    let event = Js.Unsafe.fun_call (Js.Unsafe.js_expr "new Event")
+      [|Js.Unsafe.inject (Js.string "change")|] in
+    ignore (sel##dispatchEvent event)
+  ) (Dom_html.getElementById_opt select_id);
+  Lwt.return_unit  (* Make it return a Lwt type *)
+
+let populate_cascading_selects () =
+  let%lwt () = Lwt_js.sleep 0.1 in
+  (match Geo.get_cookie "TZ" with
+  | Some tz ->
+      let continent = get_continent tz in
+      let%lwt () = populate_and_trigger_select "continent-select" continent in
       
-      (* Populate and set timezone *)
-      Option.iter (fun tz_select ->
-        let timezones = get_timezones_for_continent continent in
-        let tz_sel = Js.Unsafe.coerce tz_select in
-        tz_sel##.innerHTML := Js.string "";
-        let default_option = Dom_html.createOption Dom_html.document in
-        default_option##.value := Js.string "";
-        default_option##.textContent := Js.some (Js.string "Select Timezone");
-        ignore (tz_sel##appendChild (default_option :> Dom.node Js.t));
-        List.iter (fun tz' ->
-          let option = Dom_html.createOption Dom_html.document in
-          option##.value := Js.string tz';
-          option##.textContent := Js.some (Js.string tz');
-          ignore (tz_sel##appendChild (option :> Dom.node Js.t))
-        ) timezones;
-        tz_sel##.value := Js.string tz;
-        
-        (* If we have a region, populate and set it *)
-        (match maybe_reg with
-        | Some reg ->
-            Option.iter (fun region_select ->
-              let regions = get_regions_for_tz tz in
-              let region_sel = Js.Unsafe.coerce region_select in
-              region_sel##.innerHTML := Js.string "";
-              let default_option = Dom_html.createOption Dom_html.document in
-              default_option##.value := Js.string "";
-              default_option##.textContent := Js.some (Js.string "Select Region");
-              ignore (region_sel##appendChild (default_option :> Dom.node Js.t));
-              List.iter (fun reg' ->
-                let option = Dom_html.createOption Dom_html.document in
-                option##.value := Js.string reg';
-                option##.textContent := Js.some (Js.string reg');
-                ignore (region_sel##appendChild (option :> Dom.node Js.t))
-              ) regions;
-              region_sel##.value := Js.string reg;
-              
-              (* Finally populate cities with possible letter filtering *)
-              Option.iter (fun letter_select ->
-                Option.iter (fun city_select ->
-                  populate_and_select_cities tz reg letter_select city_select
-                ) (Dom_html.getElementById_opt "city-select")
-              ) (Dom_html.getElementById_opt "city-letter-select")
-            ) (Dom_html.getElementById_opt "region-select")
-        | None -> ())
-      ) (Dom_html.getElementById_opt "timezone-select")
-| None -> ())
+      let%lwt () = Lwt_js.sleep 0.1 in
+      let%lwt () = populate_and_trigger_select "timezone-select" tz in
+      
+      (match Geo.get_cookie "area" with
+      | Some area ->
+          let%lwt () = Lwt_js.sleep 0.1 in
+          let%lwt () = populate_and_trigger_select "region-select" area in
+          
+          (match Geo.get_cookie "city" with
+          | Some city when String.length city > 0 ->
+              let cities = get_cities_for_tz_and_region tz area in
+              if List.length cities > 20 then begin
+                let letter = String.make 1 (Char.uppercase_ascii city.[0]) in
+                let%lwt () = Lwt_js.sleep 0.1 in
+                let%lwt () = populate_and_trigger_select "city-letter-select" letter in
+                let%lwt () = Lwt_js.sleep 0.1 in
+                let%lwt () = populate_and_trigger_select "city-select" city in
+                Lwt.return_unit
+              end else begin
+                let%lwt () = Lwt_js.sleep 0.1 in
+                let%lwt () = populate_and_trigger_select "city-select" city in
+                Lwt.return_unit
+              end
+          | _ -> Lwt.return_unit)
+      | None -> Lwt.return_unit)
+  | None -> Lwt.return_unit)
+
+let populate_location_selects () =
+  ignore (populate_cascading_selects ())
+
+let populate_manual_coordinates () =
+  (match Geo.get_cookie "latitude", Geo.get_cookie "longitude" with
+  | Some lat, Some lon ->
+      Option.iter (fun lat_el ->
+        (Js.Unsafe.coerce lat_el)##.value := Js.string lat
+      ) (Dom_html.getElementById_opt "manual-latitude");
+      Option.iter (fun lon_el ->
+        (Js.Unsafe.coerce lon_el)##.value := Js.string lon
+      ) (Dom_html.getElementById_opt "manual-longitude")
+  | _ -> ())
+
+let default_tz = Geo.get_cookie "TZ" |> Option.value ~default:""
 
 let create_location_picker () =
+  let default_continent = if default_tz <> "" then get_continent default_tz else "" in
+  let default_reg = Geo.get_cookie "area" |> Option.value ~default:"" in
+  let default_city = Geo.get_cookie "city" |> Option.value ~default:"" in
+  let default_letter = 
+    if default_city <> "" && default_reg <> "" && default_tz <> "" then
+      let letter = String.sub default_city 0 1 in 
+      let count = List.length (get_cities_for_letter default_tz default_reg letter) in
+      if count > 0 then letter else ""
+  else "" in
+  let city_list = 
+    if default_tz <> "" && default_reg <> "" then
+      let all_cities = get_cities_for_tz_and_region default_tz default_reg in
+      if List.length all_cities > 20 && default_letter <> "" then
+	get_cities_for_letter default_tz default_reg default_letter
+      else 
+	all_cities
+  else [] in
   let timezones = Hashtbl.fold (fun tz _ acc -> tz :: acc) Base_locations.loch [] 
                  |> List.sort String.compare in
+  let defoption label default_arg lst = (option ~a:[a_value ""] (txt label)) ::
+            List.map (fun arg -> 
+              option ~a:[a_value arg; (if arg = default_arg then a_selected () else a_class [])] (txt arg)
+            ) lst in
   
   div ~a:[a_class ["location-panel"]] [
     div ~a:[a_class ["section-title"]] [txt "Location Settings"];
@@ -253,10 +279,7 @@ let create_location_picker () =
               ) ["region"; "city-letter"; "city"]
             ) (Dom_html.getElementById_opt "timezone-select");
             true)
-        ] ((option ~a:[a_value ""] (txt "Select Continent")) ::
-            List.map (fun continent -> 
-              option ~a:[a_value continent] (txt continent)
-            ) (get_unique_continents()));
+        ] (defoption "Select Continent" default_continent (get_unique_continents()));
 
         (* Timezone select *)
         select ~a:[
@@ -289,7 +312,7 @@ let create_location_picker () =
               ) ["city-letter-select"; "city-select"]
             ) (Dom_html.getElementById_opt "region-select");
             true)
-        ] [option ~a:[a_value ""] (txt "Select Timezone")];
+        ] (defoption "Select Timezone" default_tz (timezones));
         
         (* Region select *)
         select ~a:[
@@ -349,7 +372,7 @@ let create_location_picker () =
               end
             ) (Dom_html.getElementById_opt "city-letter-select");
             true)
-        ] [option ~a:[a_value ""] (txt "Select Region")];
+        ] (defoption "Select Region" default_reg (get_regions_for_tz default_tz));
 
         (* City letter select *)
         select ~a:[
@@ -379,41 +402,40 @@ let create_location_picker () =
                   (get_cities_for_letter tz reg letter))
             ) (Dom_html.getElementById_opt "city-select");
             true)
-        ] [option ~a:[a_value ""] (txt "Select First Letter")];
+        ] (defoption "Select First Letter" default_letter (get_city_first_letters default_tz default_reg));
+(* Replace the city select onChange handler in create_location_picker *)
+select ~a:[
+  a_id "city-select";
+  a_class ["location-select"];
+  a_style "display: none";
+  a_onchange (fun _ ->
+    let tz = select_element "timezone-select" in
+    let reg = select_element "region-select" in
+    let city_name = select_element "city-select" in
+    let cities = get_cities_for_tz_and_region tz reg in
+    (match List.find_opt (fun (c, _, _, _) -> c = city_name) cities with
+    | Some (_, _, lat, lon) ->
+        (* Set cookies first *)
+        Geo.set_cookie "latitude" (string_of_float lat);
+        Geo.set_cookie "longitude" (string_of_float lon);
+        Geo.set_cookie "city" city_name;
+        Geo.set_cookie "area" reg;
+        Geo.set_cookie "TZ" tz;
+        Geo.set_cookie "status" "OK";
         
-        (* City select - updated to modify status text *)
-        select ~a:[
-          a_id "city-select";
-          a_class ["location-select"];
-          a_style "display: none";
-          a_onchange (fun _ ->
-            let tz = select_element "timezone-select" in
-            let reg = select_element "region-select" in
-            let city_name = select_element "city-select" in
-            let cities = get_cities_for_tz_and_region tz reg in
-            (match List.find_opt (fun (c, _, _, _) -> c = city_name) cities with
-            | Some (_, _, lat, lon) ->
-                latitude := lat;
-                longitude := lon;
-                city := city_name;
-                region := reg;
-                Geo.set_cookie "latitude" (string_of_float lat);
-                Geo.set_cookie "longitude" (string_of_float lon);
-                Geo.set_cookie "city" city_name;
-                Geo.update_ui city_name reg tz lat lon;
-                (* Update status text *)
-                Option.iter (fun status ->
-                  status##.innerHTML := Js.string 
-                    (Printf.sprintf "City selected: %s, %s (latitude=%f, longitude=%f)"
-                      city_name reg lat lon)
-                ) (Dom_html.getElementById_opt "location-state")
-            | None -> ());
-            true)
-        ] [option ~a:[a_value ""] (txt "Select City")]
-      ];
+        (* Update UI *)
+        Geo.update_ui city_name reg tz lat lon;
+        Option.iter (fun status ->
+          status##.innerHTML := Js.string 
+            (Printf.sprintf "City selected: %s, %s (latitude=%f, longitude=%f)"
+              city_name reg lat lon)
+        ) (Dom_html.getElementById_opt "location-state")
+    | None -> ());
+    true)
+] (defoption "Select City" default_city (List.map (fun (a,_,_,_) -> a) (List.sort (fun (a,_,_,_) (b,_,_,_) -> String.compare a b) city_list)))
+ ];
       p ~a:[a_id "location-state"] [txt "No city selected"]
-    ];
-    
+     ];   
     (* Auto-location section *)
     div ~a:[a_class ["location-section"]] [
       div ~a:[a_class ["section-subtitle"]] [txt "Automatic Location"];
@@ -424,7 +446,7 @@ let create_location_picker () =
       button ~a:[
         a_class ["location-button"];
         a_onclick (fun _ -> 
-          Geo.geo ();
+          Geo.geo (fun _ -> ());
           true)
       ] [txt "Detect Location"]
     ];
@@ -481,8 +503,62 @@ let create_location_picker () =
     ]
   ]
 
+let populate_defaults () =
+  if default_tz <> "" then begin
+    let tz_sel = (Dom_html.getElementById_opt "timezone-select") in
+    let reg_sel = (Dom_html.getElementById_opt "region-select") in
+    Option.iter (fun sel ->
+      let event = Js.Unsafe.fun_call (Js.Unsafe.js_expr "new Event")
+        [|Js.Unsafe.inject (Js.string "change")|] in
+      ignore ((Js.Unsafe.coerce sel)##dispatchEvent event)
+    ) tz_sel;
+    Option.iter (fun sel ->
+      let event = Js.Unsafe.fun_call (Js.Unsafe.js_expr "new Event")
+        [|Js.Unsafe.inject (Js.string "change")|] in
+      ignore ((Js.Unsafe.coerce sel)##dispatchEvent event)
+    ) reg_sel
+  end
+
+let populate_from_cookies () =
+  (match Geo.get_cookie "TZ" with
+  | Some tz ->
+      let continent = get_continent tz in
+      (* Set continent *)
+      let%lwt () = populate_and_trigger_select "continent-select" continent in
+      
+      let%lwt () = Lwt_js.sleep 0.1 in (* Wait for continent change to process *)
+      let%lwt () = populate_and_trigger_select "timezone-select" tz in
+      
+      (* If we have a region, set it *)
+      (match Geo.get_cookie "area" with
+      | Some area ->
+          let%lwt () = Lwt_js.sleep 0.1 in
+          let%lwt () = populate_and_trigger_select "region-select" area in
+          
+          (* If we have a city *)
+          (match Geo.get_cookie "city" with
+          | Some city when String.length city > 0 ->
+              let%lwt () = Lwt_js.sleep 0.1 in
+              let cities = get_cities_for_tz_and_region tz area in
+              if List.length cities > 20 then begin
+                let letter = String.make 1 (Char.uppercase_ascii city.[0]) in
+                let%lwt () = populate_and_trigger_select "city-letter-select" letter in
+                let%lwt () = Lwt_js.sleep 0.1 in
+                let%lwt () = populate_and_trigger_select "city-select" city in
+                Lwt.return_unit
+              end else begin
+                let%lwt () = populate_and_trigger_select "city-select" city in
+                Lwt.return_unit
+              end
+          | _ -> Lwt.return_unit)
+      | None -> Lwt.return_unit)
+  | None -> Lwt.return_unit)
+
+(* Modify init function to properly populate from cookies *)
 let init () =
-  populate_location_selects ();
+  let%lwt () = populate_from_cookies () in
   (match Geo.get_cookie "status" with
-  | Some "OK" -> ()
-  | _ -> Geo.geo ())
+  | Some "OK" -> Lwt.return_unit
+  | _ -> 
+      Geo.geo (fun () -> ignore (populate_from_cookies()));
+      Lwt.return_unit)

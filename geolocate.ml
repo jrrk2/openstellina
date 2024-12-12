@@ -51,7 +51,7 @@ module Geo = struct
         message))
       (Dom_html.getElementById_opt "location-info")
 
-  let geo () =
+  let geo callback =
     if (Geolocation.is_supported()) then
       let success pos =
         let coords = pos##.coords in
@@ -81,7 +81,8 @@ module Geo = struct
         set_cookie "TZ" !tz';
         set_cookie "status" "OK";
         
-        update_ui !city' !area' !tz' latitude' longitude'
+        update_ui !city' !area' !tz' latitude' longitude';
+        ignore (callback ())
       in
       
       let error err =
@@ -110,7 +111,7 @@ module Geo = struct
     )
 end
 
-let create_location_picker () =
+let create_location_picker callback =
   div ~a:[a_class ["location-panel"]] [
     div ~a:[a_class ["section-title"]] [txt "Location Settings"];
     
@@ -124,7 +125,7 @@ let create_location_picker () =
       button ~a:[
         a_class ["location-button"];
         a_onclick (fun _ -> 
-          Geo.geo ();
+          Geo.geo callback;
           true)
       ] [txt "Detect Location"]
     ];
@@ -177,7 +178,7 @@ let create_location_picker () =
 
 (* Initialize application *)
 let init () =
-  Geo.geo ()
+  Geo.geo (fun _ -> ())
 
 let () = 
   Dom_html.window##.onload := Dom_html.handler (fun _ ->
