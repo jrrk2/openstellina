@@ -25,9 +25,9 @@ let confirm_my_button msg = fun _ ->
   let _ = _myFloat !jd_start !jd_stop in
   let ra = (_myFunction 3) *. 180. /. Float.pi in
   let dec = (_myFunction 4) *. 180. /. Float.pi in
-  let lst_calc = Altaz.local_siderial_time' !(Location.longitude) (!jd_start -. Altaz.jd_2000) in
+  let lst_calc = Altaz.local_siderial_time' !(Geolocate.longitude) (!jd_start -. Altaz.jd_2000) in
   let ra_now, dec_now = Altaz.j2000_to_jnow ra dec in
-  let alt_calc, az_calc, hour_calc = Altaz.raDectoAltAz ra_now dec_now !(Location.latitude) !(Location.longitude) lst_calc in
+  let alt_calc, az_calc, hour_calc = Altaz.raDectoAltAz ra_now dec_now !(Geolocate.latitude) !(Geolocate.longitude) lst_calc in
 
   Table_update.append_table_row 
 (*
