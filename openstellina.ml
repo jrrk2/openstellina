@@ -584,6 +584,41 @@ let tab_styles = {|
       -webkit-transform: translate3d(0,0,0);
     }
   }
+  .secure-connection-panel {
+    padding: 20px;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+
+  .secure-warning {
+    margin: 16px 0;
+    padding: 12px;
+    background: #fff3cd;
+    border: 1px solid #ffeeba;
+    border-radius: 4px;
+    color: #856404;
+  }
+
+  .secure-info {
+    margin: 16px 0;
+    padding: 12px;
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    border-radius: 4px;
+    color: #155724;
+  }
+
+  .secure-redirect {
+    margin-top: 12px;
+    background-color: #28a745 !important;
+    color: white !important;
+  }
+
+  .secure-redirect:hover {
+    background-color: #218838 !important;
+  }
+
 |}
 
 let create_styled_div ?(a=[]) contents =
@@ -1807,6 +1842,12 @@ let modern_gui () =
       label = "Control";
       description = "Telescope control panel";
       content = create_control_panel ()
+      };
+    {
+      id = "secure";
+      label = "Security";
+      description = "Connection security settings";
+      content = Secure.create_secure_connection_tab ()
     };
     {
       id = "location";
@@ -1858,9 +1899,6 @@ let modern_gui () =
   div ~a:[
     a_style "max-width: 1200px; margin: 0 auto; padding: 20px;"
   ] [create_tabs tabs; br (); Table_update.table_element; version_info]
-    
-let is_secure_session () = 
-Js.to_string Dom_html.window##.location##.protocol = "https:"
 
 let onload _ =
   print_endline "Starting onload";

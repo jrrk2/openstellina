@@ -11,7 +11,7 @@
  (name openstellina)
  (modes js)
  (modules_without_implementation calc)
- (modules version geolocate comets table_update utils location tabbed_dialog cookie storage altaz astro_utils trans hidemsg msgs messier_catalogue calc mfcalc lexer expr dso_read abell_cnv ngc2000 telescope base_locations openstellina)
+ (modules version secure geolocate comets table_update utils location tabbed_dialog cookie storage altaz astro_utils trans hidemsg msgs messier_catalogue calc mfcalc lexer expr dso_read abell_cnv ngc2000 telescope base_locations openstellina)
  (libraries js_of_ocaml-lwt js_of_ocaml-tyxml yojson base64 cohttp-lwt-jsoo xml-light js_of_ocaml unix)
  (preprocess (pps lwt_ppx js_of_ocaml-ppx))
 )
@@ -69,7 +69,7 @@
     (run mkdir -p %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/data)
     (run cp -f openstellina.bc.js %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/js/)
     (run cp -f my_program.js my_program.wasm %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/js/)
-    (run cp -f ../../data/header.430 ../../data/dcfbinary.430 ../../data/dcfbinary.cmt ../../data/dcfbinary.plt ../../catalog.txt ../../table3.dat ../../ngc2000.dat %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/data/)
+    (run cp -f ../../data/header.430 ../../data/dcfbinary.430 ../../data/dcfbinary.cmt ../../data/dcfbinary.plt ../../catalog.txt ../../data/table3.dat ../../data/ngc2000.dat %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/data/)
     (run cp -f index.html %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/)
   )))
 
