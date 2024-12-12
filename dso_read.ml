@@ -1,4 +1,3 @@
-open Cookie
 open Astro_utils
 
 type field = {

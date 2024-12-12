@@ -1,7 +1,6 @@
 open Js_of_ocaml
 open Lwt.Syntax
 open Astro_utils
-open Cookie
 open Telescope
 open Lwt.Infix
 open Js_of_ocaml_lwt
@@ -52,7 +51,7 @@ let get_gps_location () =
 let create_secure_connection_tab () =
   let open Tyxml_js.Html in
   div ~a:[a_class ["secure-connection-panel"]] [
-    div ~a:[a_class ["section-title"]] [txt "Secure Connection"];
+    div ~a:[a_class ["section-title"]] [txt "Connection Security Status"];
     div ~a:[a_class ["connection-status"]] [
       div ~a:[
         a_id "secure-status";

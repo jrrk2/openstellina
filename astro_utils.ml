@@ -1,8 +1,8 @@
-open Cookie
 open Cohttp
 open Cohttp_lwt_jsoo
 open Altaz
 open Lwt.Infix
+open Geolocate
 
 let send_preflight_options_request uri callback =
   let headers = Header.init () in
@@ -55,6 +55,9 @@ let set_dialog_value (sel:sel') x = !set_dialog_value' sel x
 
 let set_environ_value' = ref (fun (env:env') (x:string) -> ())
 let set_environ_value (env:env') x = !set_environ_value' env x
+
+let latitude () = try (match Geo.get_cookie "latitude" with Some lat -> float_of_string lat | None -> 0.0) with _ -> 0.0
+let longitude () = try (match Geo.get_cookie "longitude" with Some long -> float_of_string long | None -> 0.0) with _ -> 0.0
 
 let split = List.map (fun itm -> let ix = String.index itm ':' in (String.sub itm 0 ix, String.sub itm (ix+2) (String.length itm - ix - 2)))
 

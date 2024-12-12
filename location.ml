@@ -378,7 +378,6 @@ let create_location_picker () =
         select ~a:[
           a_id "city-letter-select";
           a_class ["location-select"];
-          a_style "display: none";
           a_onchange (fun _ ->
             let tz = select_element "timezone-select" in
             let reg = select_element "region-select" in
@@ -407,7 +406,6 @@ let create_location_picker () =
 select ~a:[
   a_id "city-select";
   a_class ["location-select"];
-  a_style "display: none";
   a_onchange (fun _ ->
     let tz = select_element "timezone-select" in
     let reg = select_element "region-select" in

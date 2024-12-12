@@ -3,11 +3,6 @@ open Js_of_ocaml_lwt
 open Js_of_ocaml_tyxml
 open Tyxml_js.Html
 
-let city = ref ""
-let region = ref ""
-let latitude = ref 0.0
-let longitude = ref 0.0
-
 module Geo = struct
   let set_cookie key value =
     let cookie_options = {|; SameSite=Lax; path=/; max-age=31536000|} in (* 1 year expiry *)
@@ -80,7 +75,9 @@ module Geo = struct
         set_cookie "area" !area';
         set_cookie "TZ" !tz';
         set_cookie "status" "OK";
-        
+
+        print_endline !area';
+
         update_ui !city' !area' !tz' latitude' longitude';
         ignore (callback ())
       in

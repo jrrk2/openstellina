@@ -1,8 +1,8 @@
 (* Stellina expert App *)
 
 open Lwt
-open Cookie
 open Version
+open Astro_utils
 
 let server = "10.0.0.1:"
 let pth2' = "8082"
@@ -251,8 +251,8 @@ let init' fn =
     let cmd = "startAutoInit" in
     print_endline cmd;
     let pth = pth2'^"/v1/general/"^cmd in
-    let lat_flt = Cookie.get' "latitude" in
-    let long_flt = Cookie.get' "longitude" in
+    let lat_flt = latitude() in
+    let long_flt = longitude() in
     let lat_flt = "52.2" and long_flt = "0.0" in
     let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ((Yojson.Raw.to_string (`Assoc

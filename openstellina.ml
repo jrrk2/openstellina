@@ -1,12 +1,12 @@
 open Js_of_ocaml
 open Lwt.Syntax
 open Astro_utils
-open Cookie
 open Telescope
 open Lwt.Infix
 open Js_of_ocaml_lwt
 open Js_of_ocaml_tyxml
 open Tyxml_js.Html
+open Geolocate
 
 type tab_config = {
   id: string;
@@ -866,7 +866,7 @@ let create_debug_settings () =
         a_class ["debug-checkbox"];
         a_onclick (fun _ ->
           debug_flag := not !debug_flag;
-          Cookie.set "debug" (string_of_bool !debug_flag);
+          Geo.set_cookie "debug" (string_of_bool !debug_flag);
           true)
       ] ();
       label ~a:[a_label_for "debug-enable"] [txt "Enable Debug Mode"]
@@ -878,7 +878,7 @@ let create_debug_settings () =
         a_class ["debug-checkbox"];
         a_onclick (fun _ ->
           verbose := not !verbose;
-          Cookie.set "verbose" (string_of_bool !verbose);
+          Geo.set_cookie "verbose" (string_of_bool !verbose);
           true)
       ] ();
       label ~a:[a_label_for "verbose-enable"] [txt "Enable Verbose Logging"]
