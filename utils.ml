@@ -39,4 +39,13 @@ let rec float_to_string f =
   let flr = floor (f /. 128.0) in let f' = f -. flr *. 128.0 in
   (if flr > 0.0 then float_to_string flr else "") ^ String.make 1 (Char.chr (int_of_float f'))
 
-let send idx str = _myAscii idx (string_to_float str)
+let ephem name sequence discoverer jd =
+  let send idx str = _myAscii idx (string_to_float str) in
+  send 1 name;
+  send 2 sequence;
+  send 3 discoverer;
+  let _ = _myFloat jd (jd +. 0.001) in
+  let ra = (_myFunction 3) *. 180. /. Float.pi in
+  let dec = (_myFunction 4) *. 180. /. Float.pi in
+  ra, dec
+

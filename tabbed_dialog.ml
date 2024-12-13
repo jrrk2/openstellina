@@ -11,6 +11,9 @@ let txtdate_stop = ref ""
 let txttime_start = ref ""
 let txttime_stop = ref ""
 let mybody = ref "Sun"
+let name = ref ""
+let sequence = ref ""
+let discoverer = ref ""
 
 (* Get current date and tomorrow's date *)
 let today = Unix.time()
@@ -18,9 +21,7 @@ let tomorrow = today +. 86400.0
     
 let confirm_my_button msg = fun _ ->
   let element = Js_of_ocaml.Dom_html.getElementById msg in
-  let _ = _myFloat !jd_start !jd_stop in
-  let ra = (_myFunction 3) *. 180. /. Float.pi in
-  let dec = (_myFunction 4) *. 180. /. Float.pi in
+  let ra, dec = ephem !name !sequence !discoverer !jd_start in
   let lst_calc = Altaz.local_siderial_time' (longitude()) (!jd_start -. Altaz.jd_2000) in
   let ra_now, dec_now = Altaz.j2000_to_jnow ra dec in
   let alt_calc, az_calc, hour_calc = Altaz.raDectoAltAz ra_now dec_now (latitude()) (longitude()) lst_calc in
@@ -65,7 +66,9 @@ let create_planet_picker () =
                 (fun select ->
                   let selected_value = Js.to_string (select##.value) in
 		  let element = Js_of_ocaml.Dom_html.getElementById "planets-select" in
-		  send 0 selected_value;
+		  name := selected_value;
+		  sequence := "";
+		  discoverer := "";
 		  set_static_text element ("Body selected: "^selected_value);
 		  mybody := selected_value;
                   true
@@ -172,14 +175,14 @@ let create_comet_picker () =
 		    Js.Opt.case (Dom_html.CoerceTo.select select_element)
 		    ( fun () -> "")  (* Handle the case where the element is not a select *)
 		    ( fun select -> Js.to_string select##.value) in
-                  let (name, sequence, discoverer) = 
+                  let (name', sequence', discoverer') = 
                     List.nth (snd (List.find (fun (year, _) -> year = selected_year) grouped_comets)) selected_index
-                  in
-                  send 1 name;
-                  send 2 sequence;
-                  send 3 discoverer;
-                  set_static_text element ("Comet selected: "^name^" "^sequence^" "^discoverer);
-                  mybody := name^" "^sequence;
+                    in
+		    name := name';
+		    sequence := sequence';
+		    discoverer := discoverer';
+                  set_static_text element ("Comet selected: "^name'^" "^sequence'^" "^discoverer');
+                  mybody := name'^" "^sequence';
                   true
                 )
             )

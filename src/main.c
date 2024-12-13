@@ -62,6 +62,7 @@ void compute_ephemeris(settings *s) {
 
     // Loop over all the time points in the ephemeris
     const int steps_total = (int) ceil((s->jd_max - s->jd_min) / s->jd_step);
+    printf("min=%f, max=%f, steps=%d\n", s->jd_min, s->jd_max, steps_total);
     for (int step_count = 0; step_count < steps_total; step_count++) {
         const double jd = s->jd_min + step_count * s->jd_step;  // TT
 
@@ -160,7 +161,7 @@ void compute_ephemeris(settings *s) {
 
                 // Write RA and Dec in modes 1,2,3
                 if (s->output_format >= 1) {
-                    fprintf(output, "%12.9f %12.9f   ", buffer[o + 3], buffer[o + 4]);
+                    fprintf(output, "%12.9f %12.9f   ", buffer[o + 3]*180/M_PI, buffer[o + 4]*180/M_PI);
                 }
 
                 // Write magnitude, phase and angular size in modes 2,3
@@ -305,7 +306,7 @@ double myFunction(int arg) {
 
 EMSCRIPTEN_KEEPALIVE
 double myFloat(double arg1, double arg2) {
-  printf("selected body: %s\n", body);
+  printf("selected body: **%s**\n", body);
   // Set up default settings
   settings_default(&ephemeris_settings);
   ephemeris_settings.objects_input_list = body;
@@ -342,16 +343,12 @@ char *float_to_string(double f) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-void myAscii(int idx, double asciif) {
+void myAscii(int idx, double asciif)
+{
   static char *object[4];
-  switch(idx)
-    {
-    case 0: strcpy(body, float_to_string(asciif)); break;
-    case 1: case 2: case 3:
-      object[idx] = float_to_string(asciif);
-      sprintf(body, "%s %s", object[1], object[2]);
-      break;
-    }
+  object[idx] = float_to_string(asciif);
+  if (object[2][0]) sprintf(body, "%s %s", object[1], object[2]);
+  else strcpy(body, object[1]);
 }
 
 EMSCRIPTEN_KEEPALIVE

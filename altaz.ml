@@ -171,6 +171,10 @@ let altaz_calc yr mon dy hr min sec ra dec latitude longitude =
     let alt_calc, az_calc, hour_calc = raDectoAltAz ra_now dec_now latitude longitude lst_calc in
     jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc
 
+let jd_now () =
+    let tm = Unix.gmtime (Unix.gettimeofday ()) in
+    computeTheJulianDay true (tm.tm_year+1900) (tm.tm_mon+1) tm.tm_mday +. float_of_int(tm.tm_hour*3600+tm.tm_min*60+tm.tm_sec) /. 86400.0
+
 let test (source,lat,long,date,dec,ra,azimuth,altitude,lst_hours,hour_angle) =
     let yr,mon,dy,hr,min,sec = try Scanf.sscanf date "%d-%[A-Za-z]-%d %d:%d:%d" (fun yr mon dy hr min sec -> yr,mon,dy,hr,min,sec) with _ ->
                                    Scanf.sscanf date "%d-%[A-Za-z]-%d %d:%d" (fun yr mon dy hr min -> yr,mon,dy,hr,min,0) in

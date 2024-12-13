@@ -5,7 +5,6 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
-#endif
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -47,5 +46,7 @@ const char* myfile_strerror(int error_code);
 int32_t myfile_size(MYFILE* file);
 void myfile_set_timeout(int milliseconds);
 void js_fetch_partial_file(const char* url, int32_t start, int32_t end, void* buffer_ptr, int* status_ptr);
+
+#endif
 
 #endif // PARTIAL_FILE_H

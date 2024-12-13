@@ -7,14 +7,6 @@ open Altaz
 open Astro_utils
 open Utils
 
-open Js_of_ocaml
-open Js_of_ocaml_tyxml
-open Tyxml_js.Html
-open Printf
-open Str
-open Altaz
-open Astro_utils
-
 external _myFunction : int -> float = "_myFunction"
 
 type target_category = 
@@ -42,9 +34,8 @@ let get_filtered_targets selected_category search_text =
       debug_msg "Loading solar system objects...";
       let objects = ["Sun"; "Moon"; "Mercury"; "Venus"; "Mars"; "Jupiter"; "Saturn"; "Uranus"; "Neptune"] in
       let get_body_pos name =
-        send 0 name;
-        let ra = (_myFunction 3) *. 180. /. Float.pi in 
-        let dec = (_myFunction 4) *. 180. /. Float.pi in
+        let jd = jd_now() in
+        let ra, dec = ephem name "" "" jd in
         debug_msg (sprintf "%s calculated position: ra=%.2f dec=%.2f" name ra dec);
         (ra, dec)
       in
@@ -79,11 +70,8 @@ let get_filtered_targets selected_category search_text =
       List.map (fun (name, sequence, discoverer) -> 
         let fullname = sprintf "%s %s (%s)" name sequence discoverer in
         debug_msg (sprintf "Processing comet: %s" fullname);
-        send 1 name;
-        send 2 sequence;
-        send 3 discoverer;
-        let ra = (_myFunction 3) *. 180. /. Float.pi in
-        let dec = (_myFunction 4) *. 180. /. Float.pi in
+	let jd = jd_now() in
+        let ra, dec = ephem name sequence discoverer jd in
         {
           name = fullname;
           ra = ra;
@@ -127,52 +115,51 @@ let get_filtered_targets selected_category search_text =
     filtered
   end
 
-let create_target_item target =
-  let currently_visible = ref true in
-  let latitude = latitude() in
-  let longitude = longitude() in
-  let yr,mon,dy,hr,min,sec = split_date() in
-  
-  let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = 
-    altaz_calc yr mon dy hr min sec target.ra target.dec latitude longitude in
-    
-  let visible = alt_calc > 0.0 in
-
-  if (not !currently_visible) || visible then
-    div ~a:[a_class ["target-item"]] [
-      div ~a:[a_class ["target-info"]] [
-        h3 ~a:[a_class ["target-name"]] [txt target.name];
-        p ~a:[a_class ["target-details"]] [
-          txt (sprintf "RA: %s DEC: %s Mag: %.1f" 
-            (hms_of_float target.ra) 
-            (dms_of_float target.dec) 
-            target.mag)
-        ];
-        p ~a:[a_class ["target-visibility"]] [
-          txt (sprintf "Alt: %.1f° Az: %.1f°" alt_calc az_calc)
-        ];
-        p ~a:[a_class ["target-debug"]] [
-          txt (sprintf "Debug: %s" target.debug)
-        ]
-      ];
-      button ~a:[
-        a_class ["select-target"];
-        a_onclick (fun _ ->
-          entry_ra_set_text (hms_of_float target.ra);
-          entry_dec_set_text (dms_of_float target.dec);
-          entry_nam_set_text target.name;
-          true)
-      ] [txt "Select"]
-    ]
-  else
-div ~a:[] []
-
 let create_target_selector () =
   let currently_visible = ref true in
   let selected_category = ref SolarSystem in
   let search_text = ref "" in
   let target_list_div = ref None in
   let target_container = div ~a:[a_class ["target-list-container"]] [] in
+
+  let create_target_item target =
+    let latitude = latitude() in
+    let longitude = longitude() in
+    let yr,mon,dy,hr,min,sec = split_date() in
+    
+    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = 
+      altaz_calc yr mon dy hr min sec target.ra target.dec latitude longitude in
+      
+    let visible = alt_calc > 0.0 in
+
+    if (not !currently_visible) || visible then
+      div ~a:[a_class ["target-item"]] [
+        div ~a:[a_class ["target-info"]] [
+          h3 ~a:[a_class ["target-name"]] [txt target.name];
+          p ~a:[a_class ["target-details"]] [
+            txt (sprintf "RA: %s DEC: %s Mag: %.1f" 
+              (hms_of_float target.ra) 
+              (dms_of_float target.dec) 
+              target.mag)
+          ];
+          p ~a:[a_class ["target-visibility"]] [
+            txt (sprintf "Alt: %.1f° Az: %.1f°" alt_calc az_calc)
+          ];
+          p ~a:[a_class ["target-debug"]] [
+            txt (sprintf "Debug: %s" target.debug)
+          ]
+        ];
+        button ~a:[
+          a_class ["select-target"];
+          a_onclick (fun _ ->
+            entry_ra_set_text (hms_of_float target.ra);
+            entry_dec_set_text (dms_of_float target.dec);
+            entry_nam_set_text target.name;
+            true)
+        ] [txt "Select"]
+      ]
+    else
+      div ~a:[] [] in
 
   let update_target_list () =
     (* Remove existing target list if present *)
@@ -193,59 +180,136 @@ let create_target_selector () =
       (Tyxml_js.To_dom.of_element target_container)
       (Tyxml_js.To_dom.of_element new_list) in
 
-let visibility_filter =
-  let checkbox = input ~a:[
-    a_input_type `Checkbox;
+  let visibility_filter =
+    let checkbox = input ~a:[
+      a_input_type `Checkbox;
+      a_onclick (fun _ ->
+        currently_visible := not !currently_visible;
+        update_target_list ();
+        true)
+    ] () in
+    
+    let dom_checkbox = Tyxml_js.To_dom.of_input checkbox in
+    dom_checkbox##.checked := Js.bool !currently_visible;
+
+    div ~a:[a_class ["visibility-filter"]] [
+      label [
+        checkbox;
+        txt " Show only currently visible targets"
+      ]
+    ] in
+
+let make_radio category label_text =
+  let radio_id = match category with 
+    | SolarSystem -> "radio-solar" 
+    | Comets -> "radio-comets"
+    | DeepSky -> "radio-deep"
+    | RecentTargets -> "radio-recent" in
+
+  let radio = input ~a:[
+    a_input_type `Radio;
+    a_name "category";
+    a_id radio_id;
+    a_value (match category with 
+      | SolarSystem -> "solar" 
+      | Comets -> "comets"
+      | DeepSky -> "deep"
+      | RecentTargets -> "recent");
     a_onclick (fun _ ->
-      currently_visible := not !currently_visible;
-      update_target_list ();  (* Call update when visibility changes *)
+      selected_category := category;
+      update_target_list ();
       true)
   ] () in
-  
-  let dom_checkbox = Tyxml_js.To_dom.of_input checkbox in
-  dom_checkbox##.checked := Js.bool !currently_visible;
 
-  div ~a:[a_class ["visibility-filter"]] [
-    label [
-      checkbox;
-      txt " Show only currently visible targets"
-    ]
-] in
+  let dom_radio = Tyxml_js.To_dom.of_input radio in
+  dom_radio##.checked := Js.bool (category = !selected_category);
 
-  let main_div = div ~a:[
+  div ~a:[a_class ["radio-item"]] [
+    radio;
+    label ~a:[a_label_for radio_id] [txt label_text]
+  ] in
+
+  let styles = {|
+    .radio-group {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .radio-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .radio-item input[type="radio"] {
+      margin: 0;
+    }
+
+    .radio-item label {
+      cursor: pointer;
+    }
+
+    .target-list {
+      margin-top: 20px;
+    }
+
+    .target-item {
+      padding: 12px;
+      border: 1px solid #ddd;
+      margin-bottom: 8px;
+      border-radius: 4px;
+    }
+
+    .target-info {
+      margin-bottom: 8px;
+    }
+
+    .target-name {
+      margin: 0 0 4px 0;
+      font-size: 16px;
+    }
+
+    .target-details, .target-visibility {
+      margin: 2px 0;
+      color: #666;
+    }
+
+    .target-debug {
+      font-size: 12px;
+      color: #999;
+    }
+
+    .select-target {
+      padding: 6px 12px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .select-target:hover {
+      background: #0056b3;
+    }
+  |} in
+
+  let style_elem = Dom_html.createStyle Dom_html.document in
+  style_elem##.innerHTML := Js.string styles;
+  Dom.appendChild Dom_html.document##.head style_elem;
+
+  div ~a:[
     a_class ["target-selector"];
     a_id "target-selector-main"
   ] [
     (* Category buttons *)
     div ~a:[a_class ["category-buttons"]] [
-      button ~a:[
-        a_class ["category-button"; if !selected_category = SolarSystem then "active" else ""];
-        a_onclick (fun _ -> 
-          selected_category := SolarSystem;
-          update_target_list ();
-          true)
-      ] [txt "Solar System"];
-      button ~a:[
-        a_class ["category-button"; if !selected_category = Comets then "active" else ""];
-        a_onclick (fun _ -> 
-          selected_category := Comets;
-          update_target_list ();
-          true)
-      ] [txt "Comets"];
-      button ~a:[
-        a_class ["category-button"; if !selected_category = DeepSky then "active" else ""];
-        a_onclick (fun _ -> 
-          selected_category := DeepSky;
-          update_target_list ();
-          true)
-      ] [txt "Deep Sky Objects"];
-      button ~a:[
-        a_class ["category-button"; if !selected_category = RecentTargets then "active" else ""];
-        a_onclick (fun _ -> 
-          selected_category := RecentTargets;
-          update_target_list ();
-          true)
-      ] [txt "Recent Targets"]
+      div ~a:[a_class ["radio-group"]] [
+        make_radio SolarSystem "Solar System";
+        make_radio Comets "Comets";
+        make_radio DeepSky "Deep Sky Objects";
+        make_radio RecentTargets "Recent Targets"
+      ]
     ];
     
     (* Search and filters *)
@@ -267,6 +331,4 @@ let visibility_filter =
     
     (* Target list container *)
     target_container
-  ] in
-
-main_div
+]
