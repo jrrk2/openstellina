@@ -4,10 +4,6 @@ open Utils
 open Geolocate
 open Astro_utils
 
-external _myFunction : int -> float = "_myFunction"
-external _myFloat : float -> float -> float = "_myFloat"
-external _myAscii : int -> float -> unit = "_myAscii"
-
 let jd_start = ref 2451544.5
 let jd_stop = ref 2451544.5
 let txtdate_start = ref ""
@@ -19,8 +15,6 @@ let mybody = ref "Sun"
 (* Get current date and tomorrow's date *)
 let today = Unix.time()
 let tomorrow = today +. 86400.0
-
-let send idx str = _myAscii idx (string_to_float str)
     
 let confirm_my_button msg = fun _ ->
   let element = Js_of_ocaml.Dom_html.getElementById msg in

@@ -1,5 +1,9 @@
 open Js_of_ocaml
 
+external _myFunction : int -> float = "_myFunction"
+external _myFloat : float -> float -> float = "_myFloat"
+external _myAscii : int -> float -> unit = "_myAscii"
+
 (* Existing dialog creation functions remain the same *)
 
 let set_static_text element txt =
@@ -34,3 +38,5 @@ aux 0.0 0
 let rec float_to_string f =
   let flr = floor (f /. 128.0) in let f' = f -. flr *. 128.0 in
   (if flr > 0.0 then float_to_string flr else "") ^ String.make 1 (Char.chr (int_of_float f'))
+
+let send idx str = _myAscii idx (string_to_float str)

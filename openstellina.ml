@@ -1621,6 +1621,15 @@ let switch_tab tab_id =
       )
     )
   done;
+
+  if tab_id = "targets" then begin
+    let selector = Dom_html.getElementById "target-selector-main" in
+    let btn = selector##querySelector (Js.string ".category-button") in
+    Js.Opt.iter btn (fun btn -> 
+      btn##click;
+    )
+  end;
+
 true
 
 let handle_connect callback status_div _ =
@@ -1790,6 +1799,12 @@ let modern_gui () =
       description = "Comet picker";
       content = Tabbed_dialog.create_comet_picker ();
     };
+  {
+    id = "targets";
+    label = "Targets";
+    description = "Select observation targets";
+    content = Target_selector.create_target_selector ()
+  };
     {
       id = "debug";
       label = "Debug";
