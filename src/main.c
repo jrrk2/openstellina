@@ -371,11 +371,11 @@ int main() {
     // Turn off GSL's automatic error handler
     gsl_set_error_handler_off();
 
-    puts("Fetch partial");
+    if (0) puts("Fetch partial");
     
     js_fetch_partial_file("data/header.430", 0, 99, buf, &status);
 
-    puts("Fetched");
+    if (0) puts("Fetched");
 
     // Open a file
     MYFILE* file = myfopen("data/header.430", "rb");

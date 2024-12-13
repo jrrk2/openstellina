@@ -1972,7 +1972,7 @@ let modern_gui () =
 
 (* Remove migration code from onload since we're using cookies exclusively *)
 let onload _ =
-  print_endline "Starting onload";
+  if !verbose then print_endline "Starting onload";
   let doc = Dom_html.document in
   let main = Js.Opt.get (doc##getElementById (Js.string "openstellina"))
     (fun () -> print_endline "Could not find openstellina div"; assert false) in
