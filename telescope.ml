@@ -198,17 +198,6 @@ let entry_hminov'() = "1"
 let entry_wpassof'() = "1"
 let entry_hpassof'() = "1"
 
-let entry_nam_set_text nam = ()
-let entry_ra_set_text nam = ()
-let entry_dec_set_text nam = ()
-let entry_alt_set_text nam = ()
-let entry_az_set_text nam = ()
-let entry_mag_set_text nam = ()
-let entry_ang_set_text nam = ()
-let entry_darkcnt_set_text nam = ()
-let targ_status_set_text nam = ()
-let targ_entry_set_text nam = ()
-
 let stellarium_enabled_active() = false
 
 let targ_entry'() = "target"
@@ -477,30 +466,6 @@ let abortall fn =
     let pth = pth2'^"/v1/app/abortAllOperations" in
     let f = (fun s -> fn (cnv s)) in
     Astro_utils.post' proto server [] (auth' ()) pth ("{}") (cnv' f)
-
-let show_entries nam jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang ang_diam =
-    if nam <> "" then entry_nam_set_text nam;
-    entry_ra_set_text (Altaz.hms_of_float ra);
-    entry_dec_set_text (Altaz.dms_of_float dec);
-    entry_alt_set_text (Altaz.dms_of_float (alt_calc));
-    entry_az_set_text (Altaz.dms_of_float (az_calc));
-    entry_mag_set_text (Printf.sprintf "%.2f" apmag);
-    entry_ang_set_text (Printf.sprintf "%.2f" ang_diam);
-(*
-    spare_0_set_text (Altaz.dms_of_float (elev));
-    spare_1_set_text (Altaz.dms_of_float (azi));
-    spare_2_set_text (Printf.sprintf "%.4f" lst_calc);
-    spare_3_set_text (Printf.sprintf "%.4f" hour_calc);
-    spare_4_set_text (Printf.sprintf "%.4f" (sidt));
-    spare_5_set_text (Printf.sprintf "%.4f" (hour_ang));
-    spare'_0_set_text (Altaz.hms_of_float ra_now);
-    spare'_1_set_text (Altaz.dms_of_float dec_now);
-    spare'_2_set_text (string_of_float (jd_calc));
-    spare'_3_set_text (string_of_float (jd));
-    spare'_4_set_text (string_of_float ra);
-    spare'_5_set_text (string_of_float dec)
-*)
-    ()
 
 let show_ephem ix =
     let lst = !ephem_data_lst in

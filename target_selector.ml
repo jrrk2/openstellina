@@ -7,8 +7,6 @@ open Altaz
 open Astro_utils
 open Utils
 
-external _myFunction : int -> float = "_myFunction"
-
 type target_category = 
   | SolarSystem
   | Comets 
@@ -24,6 +22,9 @@ type target_info = {
   category: target_category;
   debug: string;
 }
+
+let accstr = ref "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)"
+let acceptance = ref (Calc.Bool false)
 
 let get_filtered_targets selected_category search_text =
   let debug_msg msg = 
@@ -121,45 +122,61 @@ let create_target_selector () =
   let search_text = ref "" in
   let target_list_div = ref None in
   let target_container = div ~a:[a_class ["target-list-container"]] [] in
-
-  let create_target_item target =
-    let latitude = latitude() in
-    let longitude = longitude() in
-    let yr,mon,dy,hr,min,sec = split_date() in
+let create_target_item target =
+  let latitude = latitude() in
+  let longitude = longitude() in
+  let yr,mon,dy,hr,min,sec = split_date() in
+  
+  let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = 
+    altaz_calc yr mon dy hr min sec target.ra target.dec latitude longitude in
     
-    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = 
-      altaz_calc yr mon dy hr min sec target.ra target.dec latitude longitude in
-      
-    let visible = alt_calc > 0.0 in
+  let visible = 
+    let acclst = [
+      ("alt_calc", Calc.Num alt_calc);
+      ("az_calc", Calc.Num az_calc);
+      ("mag", Calc.Num target.mag);
+      ("ang_diam", Calc.Num nan)
+    ] in
+    match Expr.simplify acclst !acceptance with
+    | Calc.Bool true -> true
+    | Calc.Bool false -> false
+    | other -> 
+        !set_debug_value (sprintf "Unexpected acceptance result for %s: " target.name);
+        Expr.dump stderr acclst other;
+        false 
+  in
 
-    if (not !currently_visible) || visible then
-      div ~a:[a_class ["target-item"]] [
-        div ~a:[a_class ["target-info"]] [
-          h3 ~a:[a_class ["target-name"]] [txt target.name];
-          p ~a:[a_class ["target-details"]] [
-            txt (sprintf "RA: %s DEC: %s Mag: %.1f" 
-              (hms_of_float target.ra) 
-              (dms_of_float target.dec) 
-              target.mag)
-          ];
-          p ~a:[a_class ["target-visibility"]] [
-            txt (sprintf "Alt: %.1f° Az: %.1f°" alt_calc az_calc)
-          ];
-          p ~a:[a_class ["target-debug"]] [
-            txt (sprintf "Debug: %s" target.debug)
-          ]
+  if (not !currently_visible) || visible then
+    div ~a:[a_class ["target-item"; if visible then "visible" else "not-visible"]] [
+      div ~a:[a_class ["target-info"]] [
+        h3 ~a:[a_class ["target-name"]] [txt target.name];
+        p ~a:[a_class ["target-details"]] [
+          txt (sprintf "RA: %s DEC: %s Mag: %.1f" 
+            (hms_of_float target.ra) 
+            (dms_of_float target.dec) 
+            target.mag)
         ];
-        button ~a:[
-          a_class ["select-target"];
-          a_onclick (fun _ ->
-            entry_ra_set_text (hms_of_float target.ra);
-            entry_dec_set_text (dms_of_float target.dec);
-            entry_nam_set_text target.name;
-            true)
-        ] [txt "Select"]
-      ]
-    else
-      div ~a:[] [] in
+        p ~a:[a_class ["target-visibility"]] [
+          txt (sprintf "Alt: %.1f° Az: %.1f° %s" 
+            alt_calc 
+            az_calc
+            (if visible then "(Visible)" else "(Not visible)"))
+        ];
+        p ~a:[a_class ["target-debug"]] [
+          txt (sprintf "Debug: %s" target.debug)
+        ]
+      ];
+      button ~a:[
+        a_class ["select-target"];
+        a_onclick (fun _ ->
+          entry_ra_set_text (hms_of_float target.ra);
+          entry_dec_set_text (dms_of_float target.dec);
+          entry_nam_set_text target.name;
+          true)
+      ] [txt "Select"]
+    ]
+  else
+    div ~a:[] [] in
 
   let update_target_list () =
     (* Remove existing target list if present *)
@@ -292,6 +309,42 @@ let make_radio category label_text =
     .select-target:hover {
       background: #0056b3;
     }
+
+  .target-item.visible {
+    border-left: 4px solid #28a745;
+  }
+
+  .target-item.not-visible {
+    border-left: 4px solid #dc3545;
+    opacity: 0.7;
+}
+
+  .acceptance-box {
+    margin: 10px 0;
+  }
+
+  .acceptance-box input[type="text"] {
+    width: 100%;  /* Full width of container */
+    padding: 8px;
+    margin-top: 4px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: monospace;  /* Better for equations */
+  }
+
+  /* Make the search box match width */
+  .search-box input[type="text"] {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+
+  .filters {
+    width: 100%;  /* Ensure container uses full width */
+    margin-bottom: 16px;
+  }
+
   |} in
 
   let style_elem = Dom_html.createStyle Dom_html.document in
@@ -326,6 +379,27 @@ let make_radio category label_text =
             true)
         ] ()
       ];
+    div ~a:[a_class ["acceptance-box"]] [
+      label [txt "Visibility condition: "];
+      input ~a:[
+	a_input_type `Text;
+	a_placeholder "e.g. alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)";
+	a_value !accstr;
+	a_oninput (fun e ->
+	  let input = Dom_html.CoerceTo.input (Dom.eventTarget e) in
+	  Js.Opt.iter input (fun t ->
+	    try
+	      let equation = Js.to_string t##.value in
+              accstr := equation;
+	      acceptance := Expr.simplify [] (Expr.expr equation);
+	      update_target_list();
+	      t##.style##.backgroundColor := Js.string "#ffffff"
+	    with _ ->
+	      t##.style##.backgroundColor := Js.string "#ffeeee"
+	  );
+	  true)
+      ] ()
+    ];
       visibility_filter
     ];
     
