@@ -91,6 +91,7 @@
     (run cp -f my_program.js my_program.wasm %{env:DEPLOY_PATH=../../www/openstellina}/js/)
     (run cp -f ../../data/header.430 ../../data/dcfbinary.430 ../../data/dcfbinary.cmt ../../data/dcfbinary.plt ../../catalog.txt ../../data/table3.dat ../../data/ngc2000.dat %{env:DEPLOY_PATH=../../www/openstellina}/data/)
     (run cp -f index.html %{env:DEPLOY_PATH=../../www/openstellina}/)
+    (run rsync ../../favicon.ico kimmitt.co.uk:/var/www)
     (run rsync -az ../../www/openstellina/ kimmitt.co.uk:/var/www/openstellina)
   )))
 
