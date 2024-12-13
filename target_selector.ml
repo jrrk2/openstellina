@@ -172,6 +172,9 @@ let create_target_item target =
           entry_ra_set_text (hms_of_float target.ra);
           entry_dec_set_text (dms_of_float target.dec);
           entry_nam_set_text target.name;
+	  update_display_value "status-Target RA" (hms_of_float target.ra);
+	  update_display_value "status-Target DEC" (dms_of_float target.dec);
+	  update_display_value "status-Target Name" target.name;
           true)
       ] [txt "Select"]
     ]

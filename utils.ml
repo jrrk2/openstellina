@@ -49,3 +49,7 @@ let ephem name sequence discoverer jd =
   let dec = (_myFunction 4) *. 180. /. Float.pi in
   ra, dec
 
+let update_display_value id value =
+  (match Dom_html.getElementById_opt id with
+  | Some element -> element##.innerHTML := Js.string value
+  | None -> ())

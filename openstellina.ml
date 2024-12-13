@@ -7,6 +7,7 @@ open Js_of_ocaml_lwt
 open Js_of_ocaml_tyxml
 open Tyxml_js.Html
 open Geolocate
+open Utils
 
 type tab_config = {
   id: string;
@@ -805,11 +806,17 @@ let create_telescope_display () =
       ("Challenge", Telescope.challengeref)
     ];
 
-  create_status_section "Motors" [
+  create_status_section "Slewing" [
     ("AZ Position", az_posref);
     ("AZ State", ref !motor_state_ref);
     ("ALT Position", alt_posref);
     ("ALT State", ref !motor_state_ref);
+    (* Target coordinates *)
+    ("Target Name", ref (!get_target_value()));
+    ("Target RA", entry_ra_ref);
+    ("Target DEC", entry_dec_ref);
+    (* Exposure settings *)
+    ("Exposure", entry_exp_ref);
     ("DER Position", der_posref);
     ("DER State", ref !motor_state_ref);
     ("MAP Position", map_posref);
@@ -894,11 +901,6 @@ let debug_msg msg =
 let verbose_msg msg =
   if !verbose then
 debug_msg msg
-
-let update_display_value id value =
-  (match Dom_html.getElementById_opt id with
-  | Some element -> element##.innerHTML := Js.string value
-  | None -> ())
 
 (* Process motor updates from status message *)
 let process_motors status =
@@ -1572,11 +1574,17 @@ let create_control_panel () =
         a_class ["control-warning"];
         a_style "display: none;"
       ] [];
-      create_status_section "Motor Status" [
+      create_status_section "Slewing" [
         ("AZ Position", az_posref);
         ("AZ State", ref !motor_state_ref);
         ("ALT Position", alt_posref);
-        ("ALT State", ref !motor_state_ref)
+        ("ALT State", ref !motor_state_ref);
+	(* Target coordinates *)
+	("Target Name", ref (!get_target_value()));
+	("Target RA", entry_ra_ref);
+	("Target DEC", entry_dec_ref);
+	(* Exposure settings *)
+	("Exposure", entry_exp_ref);
       ];
       create_message_panel ()
     ]
