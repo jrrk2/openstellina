@@ -18,6 +18,7 @@
 
 (rule
  (alias build_js)
+ (targets my_program.js my_program.wasm)
  (deps src/listTools/ltMemory.c src/listTools/ltStringProc.c src/listTools/ltDict.c src/listTools/ltList.c src/partial_file.c src/settings/settings.c src/argparse/argparse.c src/coreUtils/makeRasters.c src/coreUtils/errorReport.c src/coreUtils/asciiDouble.c src/main.c src/ephemCalc/jpl.c src/ephemCalc/magnitudeEstimate.c src/ephemCalc/meeus.c src/ephemCalc/orbitalElements.c src/ephemCalc/constellations.c src/mathsTools/precess_equinoxes.c src/mathsTools/sphericalAst.c src/mathsTools/julianDate.c src/asteroids.c)
  (action (progn
    (run sh -c "emcc ../../src/main.c -I ../../src -I ../../gsl-2.8 -D DEBUG=0 -D MEMDEBUG1=0 -D MEMDEBUG2=0 -D DCFVERSION=4.0 -D DATE=26/11/2024 -D DATADIR=\\\"data\\\" ../../src/partial_file.c ../../src/argparse/argparse.c ../../src/coreUtils/asciiDouble.c ../../src/coreUtils/errorReport.c ../../src/coreUtils/makeRasters.c ../../src/ephemCalc/magnitudeEstimate.c ../../src/ephemCalc/jpl.c ../../src/ephemCalc/orbitalElements.c ../../src/listTools/ltDict.c ../../src/listTools/ltList.c ../../src/listTools/ltMemory.c ../../src/listTools/ltStringProc.c ../../src/mathsTools/julianDate.c ../../src/mathsTools/precess_equinoxes.c ../../src/mathsTools/sphericalAst.c ../../src/settings/settings.c ../../gsl-2.8/sys/infnan.c ../../gsl-2.8/sys/pow_int.c ../../gsl-2.8/sys/hypot.c ../../gsl-2.8/sys/fdiv.c ../../gsl-2.8/err/error.c ../../gsl-2.8/err/stream.c -lm \
@@ -26,8 +27,7 @@
      -s STACK_SIZE=1048576 -s FORCE_FILESYSTEM=1 \
      -s FETCH=1 -s EXIT_RUNTIME=0 \
      -s 'EXPORTED_RUNTIME_METHODS=[\"FS\",\"ccall\", \"cwrap\" ]' -o my_program.js")
- ))
- (targets my_program.js my_program.wasm))
+ )))
 
 (rule
  (alias generate_binary)
@@ -35,7 +35,7 @@
  (deps src/listTools/ltMemory.c src/listTools/ltStringProc.c src/listTools/ltDict.c src/listTools/ltList.c src/partial_file.c src/settings/settings.c src/argparse/argparse.c src/coreUtils/makeRasters.c src/coreUtils/errorReport.c src/coreUtils/asciiDouble.c src/main.c src/ephemCalc/jpl.c src/ephemCalc/magnitudeEstimate.c src/ephemCalc/meeus.c src/ephemCalc/orbitalElements.c src/ephemCalc/constellations.c src/mathsTools/precess_equinoxes.c src/mathsTools/sphericalAst.c src/mathsTools/julianDate.c src/asteroids.c)
  (action
   (progn
-   (run sh -c "cc -Wall -Wno-unknown-pragmas -g -I ../../src -I ../../gsl-2.8 -D myfclose=fclose -D myfeof=feof -D myferror=ferror -D myfopen=fopen -D myfread=fread -D myfseek=fseek -D myftell=ftell -D MYFILE=FILE -D DEBUG=1 -D MEMDEBUG1=0 -D MEMDEBUG2=0 -D DCFVERSION=\\\"4.0\\\" -D DATE=\\\"23/09/2024\\\" -D DATADIR=\\\"data\\\" ../../src/argparse/argparse.c ../../src/coreUtils/asciiDouble.c ../../src/coreUtils/errorReport.c ../../src/coreUtils/makeRasters.c ../../src/ephemCalc/magnitudeEstimate.c ../../src/ephemCalc/jpl.c ../../src/ephemCalc/orbitalElements.c ../../src/listTools/ltDict.c ../../src/listTools/ltList.c ../../src/listTools/ltMemory.c ../../src/listTools/ltStringProc.c ../../src/mathsTools/julianDate.c ../../src/mathsTools/precess_equinoxes.c ../../src/mathsTools/sphericalAst.c ../../src/settings/settings.c ../../src/main.c -o ephem_test.exe ../../gsl-2.8/sys/infnan.c ../../gsl-2.8/sys/pow_int.c ../../gsl-2.8/sys/hypot.c ../../gsl-2.8/sys/fdiv.c ../../gsl-2.8/err/error.c ../../gsl-2.8/err/stream.c -lm"))))
+   (run sh -c "cc -Wall -Wno-unknown-pragmas -g -I ../../src -I ../../gsl-2.8 -D myfclose=fclose -D myfeof=feof -D myferror=ferror -D myfopen=fopen -D myfread=fread -D myfseek=fseek -D myftell=ftell -D MYFILE=FILE -D DEBUG=1 -D MEMDEBUG1=0 -D MEMDEBUG2=0 -D DCFVERSION=\\\"4.0\\\" -D DATE=\\\"23/09/2024\\\" -D DATADIR=\\\"../../data\\\" ../../src/argparse/argparse.c ../../src/coreUtils/asciiDouble.c ../../src/coreUtils/errorReport.c ../../src/coreUtils/makeRasters.c ../../src/ephemCalc/magnitudeEstimate.c ../../src/ephemCalc/jpl.c ../../src/ephemCalc/orbitalElements.c ../../src/listTools/ltDict.c ../../src/listTools/ltList.c ../../src/listTools/ltMemory.c ../../src/listTools/ltStringProc.c ../../src/mathsTools/julianDate.c ../../src/mathsTools/precess_equinoxes.c ../../src/mathsTools/sphericalAst.c ../../src/settings/settings.c ../../src/main.c -o ephem_test.exe ../../gsl-2.8/sys/infnan.c ../../gsl-2.8/sys/pow_int.c ../../gsl-2.8/sys/hypot.c ../../gsl-2.8/sys/fdiv.c ../../gsl-2.8/err/error.c ../../gsl-2.8/err/stream.c -lm"))))
 
 (rule
  (alias generate_dcfbin)
@@ -46,8 +46,8 @@
    (run ln -s ../../data/dcfbinary.cmt)
    (run ln -s ../../data/dcfbinary.plt)
    (run ln -s ../../data/dcfbinary.430)
-   (run sh -c ./ephem_test.exe --objects=mars --use_orbital_elements=1)
-   (run sh -c ./ephem_test.exe --objects=\\"C/2023 A3\\")
+   (run ./ephem_test.exe --use_orbital_elements=1 --jd_min=2451544.5 --jd_max=2451544.6 --jd_step=1 --objects=mars)
+   (run ./ephem_test.exe --jd_min=2451544.5 --jd_max=2451544.6 --jd_step=1 --objects=1P/Halley)
    )))
 
  (rule
@@ -68,7 +68,7 @@
 
 (rule
  (alias deploy)
- (deps openstellina.bc.js my_program.js my_program.wasm index.html)
+ (deps openstellina.bc.js my_program.js my_program.wasm index.html dcfbinary.cmt dcfbinary.430 dcfbinary.plt)
  (action
   (progn
     (run mkdir -p %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/js)
@@ -82,7 +82,7 @@
 
 (rule
  (alias remote)
- (deps openstellina.bc.js my_program.js my_program.wasm index.html)
+ (deps openstellina.bc.js my_program.js my_program.wasm index.html dcfbinary.cmt dcfbinary.430 dcfbinary.plt)
  (action
   (progn
     (run mkdir -p %{env:DEPLOY_PATH=../../www/openstellina}/js)
