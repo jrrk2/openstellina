@@ -21,7 +21,7 @@ let tomorrow = today +. 86400.0
     
 let confirm_my_button msg = fun _ ->
   let element = Js_of_ocaml.Dom_html.getElementById msg in
-  let ra, dec = ephem !name !sequence !discoverer !jd_start in
+  let ra, dec, mag = ephem !name !sequence !discoverer !jd_start in
   let lst_calc = Altaz.local_siderial_time' (longitude()) (!jd_start -. Altaz.jd_2000) in
   let ra_now, dec_now = Altaz.j2000_to_jnow ra dec in
   let alt_calc, az_calc, hour_calc = Altaz.raDectoAltAz ra_now dec_now (latitude()) (longitude()) lst_calc in

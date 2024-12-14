@@ -1,7 +1,7 @@
 open Js_of_ocaml
 
 external _myFunction : int -> float = "_myFunction"
-external _myFloat : float -> float -> float = "_myFloat"
+external _myFloat : float -> float -> float -> float -> float -> float -> float -> unit = "_myFloat"
 external _myAscii : int -> float -> unit = "_myAscii"
 
 (* Existing dialog creation functions remain the same *)
@@ -44,10 +44,14 @@ let ephem name sequence discoverer jd =
   send 1 name;
   send 2 sequence;
   send 3 discoverer;
-  let _ = _myFloat jd (jd +. 0.001) in
+  let open Astro_utils in
+  let correct = 0.0 in (* topocentric correction *)
+  let format = 1.0 in (* output format, only affects debugging log *)
+  let _ = _myFloat jd (jd +. 0.001) 1.0 (latitude()) (longitude()) correct format in
   let ra = (_myFunction 3) *. 180. /. Float.pi in
   let dec = (_myFunction 4) *. 180. /. Float.pi in
-  ra, dec
+  let mag = (_myFunction 5) in
+  ra, dec, mag
 
 let update_display_value id value =
   (match Dom_html.getElementById_opt id with

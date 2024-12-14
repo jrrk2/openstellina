@@ -62,7 +62,7 @@ void compute_ephemeris(settings *s) {
 
     // Loop over all the time points in the ephemeris
     const int steps_total = (int) ceil((s->jd_max - s->jd_min) / s->jd_step);
-    printf("min=%f, max=%f, steps=%d\n", s->jd_min, s->jd_max, steps_total);
+    if (0) printf("min=%f, max=%f, steps=%d\n", s->jd_min, s->jd_max, steps_total);
     for (int step_count = 0; step_count < steps_total; step_count++) {
         const double jd = s->jd_min + step_count * s->jd_step;  // TT
 
@@ -305,22 +305,21 @@ double myFunction(int arg) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-double myFloat(double arg1, double arg2) {
+void myFloat(double arg1, double arg2, double step, double latitude, double longitude, double correct, double format) {
   printf("selected body: **%s**\n", body);
   // Set up default settings
   settings_default(&ephemeris_settings);
   ephemeris_settings.objects_input_list = body;
   ephemeris_settings.jd_min = arg1;
   ephemeris_settings.jd_max = arg2;
-  ephemeris_settings.jd_step = 1.0;
-  ephemeris_settings.latitude = 52.2;
-  ephemeris_settings.longitude = 0.0;
+  ephemeris_settings.jd_step = step;
+  ephemeris_settings.latitude = latitude;
+  ephemeris_settings.longitude = longitude;
   ephemeris_settings.enable_topocentric_correction = 0.0;
-  ephemeris_settings.output_format = 1.0;
+  ephemeris_settings.output_format = 2.0;
 
   // Create ephemeris
   compute_ephemeris(&ephemeris_settings);
-  return 0.0;
 }
 
 EMSCRIPTEN_KEEPALIVE

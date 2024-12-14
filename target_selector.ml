@@ -36,25 +36,13 @@ let get_filtered_targets selected_category search_text =
       let objects = ["Sun"; "Moon"; "Mercury"; "Venus"; "Mars"; "Jupiter"; "Saturn"; "Uranus"; "Neptune"] in
       let get_body_pos name =
         let jd = jd_now() in
-        let ra, dec = ephem name "" "" jd in
+        let ra, dec, mag = ephem name "" "" jd in
         debug_msg (sprintf "%s calculated position: ra=%.2f dec=%.2f" name ra dec);
-        (ra, dec)
+        (ra, dec, mag)
       in
       
       List.map (fun name ->
-        let ra, dec = get_body_pos name in
-        let mag = match name with
-        | "Sun" -> -26.7
-        | "Moon" -> -12.6 
-        | "Mercury" -> 0.0
-        | "Venus" -> -4.4
-        | "Mars" -> -2.9
-        | "Jupiter" -> -2.2
-        | "Saturn" -> 0.6
-        | "Uranus" -> 5.7
-        | "Neptune" -> 7.8
-        | _ -> 0.0
-        in
+        let ra, dec, mag = get_body_pos name in
         {
           name = name;
           ra = ra;
@@ -72,12 +60,12 @@ let get_filtered_targets selected_category search_text =
         let fullname = sprintf "%s %s (%s)" name sequence discoverer in
         debug_msg (sprintf "Processing comet: %s" fullname);
 	let jd = jd_now() in
-        let ra, dec = ephem name sequence discoverer jd in
+        let ra, dec, mag = ephem name sequence discoverer jd in
         {
           name = fullname;
           ra = ra;
           dec = dec;
-          mag = 0.0;
+          mag = mag;
           desc = discoverer;
           category = Comets;
           debug = sprintf "From Comets.comets, calculated position: ra=%.2f dec=%.2f" ra dec
