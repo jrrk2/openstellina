@@ -347,6 +347,7 @@ let make_radio category label_text =
   let style_elem = Dom_html.createStyle Dom_html.document in
   style_elem##.innerHTML := Js.string styles;
   Dom.appendChild Dom_html.document##.head style_elem;
+  let search_timeout = ref None in
 
   div ~a:[
     a_class ["target-selector"];
@@ -364,18 +365,29 @@ let make_radio category label_text =
     
     (* Search and filters *)
     div ~a:[a_class ["filters"]] [
-      div ~a:[a_class ["search-box"]] [
-        input ~a:[
-          a_input_type `Text;
-          a_placeholder "Search targets...";
-          a_oninput (fun e ->
-            let target = Dom_html.CoerceTo.input (Dom.eventTarget e) in
-            Js.Opt.iter target (fun t ->
-              search_text := Js.to_string t##.value;
-              update_target_list ());
-            true)
-        ] ()
-      ];
+    div ~a:[a_class ["search-box"]] [
+      input ~a:[
+	a_input_type `Text;
+	a_placeholder "Search targets...";
+	a_oninput (fun e ->
+	  let target = Dom_html.CoerceTo.input (Dom.eventTarget e) in
+	  Js.Opt.iter target (fun t ->
+	    (* Clear any pending timeout *)
+	    Option.iter (fun tid -> Dom_html.window##clearTimeout tid) !search_timeout;
+
+	    (* Set new timeout *)
+	    search_timeout := Some (Dom_html.window##setTimeout
+	      (Js.wrap_callback (fun () ->
+		search_text := Js.to_string t##.value;
+		update_target_list ();
+	      ))
+	      2000.  (* 2 second delay *)
+	    )
+	  );
+	  true)
+      ] ()
+    ];
+
     div ~a:[a_class ["acceptance-box"]] [
       label [txt "Visibility condition: "];
       input ~a:[
