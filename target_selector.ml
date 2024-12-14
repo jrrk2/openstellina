@@ -55,8 +55,14 @@ let get_filtered_targets selected_category search_text =
       ) objects
 
   | Comets ->
-      debug_msg (sprintf "Loading %d comets..." (List.length Comets.comets));
-      List.map (fun (name, sequence, discoverer) -> 
+     debug_msg (sprintf "Loading %d comets..." (List.length Comets.comets));
+     let regexp' = Str.regexp (String.lowercase_ascii search_text) in
+     let matching_comets = List.filter (fun (name, sequence, discoverer) ->
+        let fullname = sprintf "%s %s (%s)" name sequence discoverer in
+        Str.string_match regexp' (String.lowercase_ascii fullname) 0
+      ) Comets.comets in
+     debug_msg (sprintf "Found %d matching comets" (List.length matching_comets));
+     List.map (fun (name, sequence, discoverer) -> 
         let fullname = sprintf "%s %s (%s)" name sequence discoverer in
         debug_msg (sprintf "Processing comet: %s" fullname);
 	let jd = jd_now() in
@@ -70,7 +76,7 @@ let get_filtered_targets selected_category search_text =
           category = Comets;
           debug = sprintf "From Comets.comets, calculated position: ra=%.2f dec=%.2f" ra dec
         }
-      ) Comets.comets
+      ) matching_comets
 
   | DeepSky ->
       debug_msg "Loading Messier catalog...";
