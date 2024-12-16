@@ -71,12 +71,12 @@
  (deps openstellina.bc.js my_program.js my_program.wasm index.html dcfbinary.cmt dcfbinary.430 dcfbinary.plt)
  (action
   (progn
-    (run mkdir -p %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/js)
-    (run mkdir -p %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/data)
-    (run cp -f openstellina.bc.js %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/js/)
-    (run cp -f my_program.js my_program.wasm %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/js/)
-    (run cp -f ../../data/header.430 ../../data/dcfbinary.430 ../../data/dcfbinary.cmt ../../data/dcfbinary.plt ../../catalog.txt ../../data/table3.dat ../../data/ngc2000.dat %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/data/)
-    (run cp -f index.html %{env:DEPLOY_PATH=/opt/homebrew/var/www/openstellina}/)
+    (run mkdir -p %{env:DEPLOY_PATH=../../docs}/js)
+    (run mkdir -p %{env:DEPLOY_PATH=../../docs}/data)
+    (run cp -f openstellina.bc.js %{env:DEPLOY_PATH=../../docs}/js/)
+    (run cp -f my_program.js my_program.wasm %{env:DEPLOY_PATH=../../docs}/js/)
+    (run cp -f ../../data/header.430 ../../data/dcfbinary.430 ../../data/dcfbinary.cmt ../../data/dcfbinary.plt ../../catalog.txt ../../data/table3.dat ../../data/ngc2000.dat %{env:DEPLOY_PATH=../../docs}/data/)
+    (run cp -f index.html %{env:DEPLOY_PATH=../../docs}/)
     
   )))
 

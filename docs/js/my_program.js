@@ -1499,7 +1499,7 @@ var mmapAlloc = size => {
 var MEMFS = {
   ops_table: null,
   mount(mount) {
-    return MEMFS.createNode(null, "/", 16384 | 511, /* 0777 */ 0);
+    return MEMFS.createNode(null, "/", 16895, 0);
   },
   createNode(parent, name, mode, dev) {
     if (FS.isBlkdev(mode) || FS.isFIFO(mode)) {
@@ -1708,7 +1708,7 @@ var MEMFS = {
       return entries;
     },
     symlink(parent, newname, oldpath) {
-      var node = MEMFS.createNode(parent, newname, 511 | /* 0777 */ 40960, 0);
+      var node = MEMFS.createNode(parent, newname, 511 | 40960, 0);
       node.link = oldpath;
       return node;
     },
@@ -2595,15 +2595,36 @@ var FS = {
     }
     return parent.node_ops.mknod(parent, name, mode, dev);
   },
-  create(path, mode) {
-    mode = mode !== undefined ? mode : 438;
-    /* 0666 */ mode &= 4095;
+  statfs(path) {
+    // NOTE: None of the defaults here are true. We're just returning safe and
+    //       sane values.
+    var rtn = {
+      bsize: 4096,
+      frsize: 4096,
+      blocks: 1e6,
+      bfree: 5e5,
+      bavail: 5e5,
+      files: FS.nextInode,
+      ffree: FS.nextInode - 1,
+      fsid: 42,
+      flags: 2,
+      namelen: 255
+    };
+    var parent = FS.lookupPath(path, {
+      follow: true
+    }).node;
+    if (parent?.node_ops.statfs) {
+      Object.assign(rtn, parent.node_ops.statfs(parent.mount.opts.root));
+    }
+    return rtn;
+  },
+  create(path, mode = 438) {
+    mode &= 4095;
     mode |= 32768;
     return FS.mknod(path, mode, 0);
   },
-  mkdir(path, mode) {
-    mode = mode !== undefined ? mode : 511;
-    /* 0777 */ mode &= 511 | 512;
+  mkdir(path, mode = 511) {
+    mode &= 511 | 512;
     mode |= 16384;
     return FS.mknod(path, mode, 0);
   },
@@ -2625,7 +2646,7 @@ var FS = {
       dev = mode;
       mode = 438;
     }
-    /* 0666 */ mode |= 8192;
+    mode |= 8192;
     return FS.mknod(path, mode, dev);
   },
   symlink(oldpath, newpath) {
@@ -2721,7 +2742,7 @@ var FS = {
     // do the underlying fs rename
     try {
       old_dir.node_ops.rename(old_node, new_dir, new_name);
-      // update old node (we do this here to avoid each backend 
+      // update old node (we do this here to avoid each backend
       // needing to)
       old_node.parent = new_dir;
     } catch (e) {
@@ -2797,7 +2818,7 @@ var FS = {
     if (!link.node_ops.readlink) {
       throw new FS.ErrnoError(28);
     }
-    return PATH_FS.resolve(FS.getPath(link.parent), link.node_ops.readlink(link));
+    return link.node_ops.readlink(link);
   },
   stat(path, dontFollow) {
     var lookup = FS.lookupPath(path, {
@@ -2912,13 +2933,12 @@ var FS = {
       timestamp: Math.max(atime, mtime)
     });
   },
-  open(path, flags, mode) {
+  open(path, flags, mode = 438) {
     if (path === "") {
       throw new FS.ErrnoError(44);
     }
     flags = typeof flags == "string" ? FS_modeStringToFlags(flags) : flags;
     if ((flags & 64)) {
-      mode = typeof mode == "undefined" ? 438 : /* 0666 */ mode;
       mode = (mode & 4095) | 32768;
     } else {
       mode = 0;
@@ -3240,7 +3260,7 @@ var FS = {
     FS.mkdir("/proc/self/fd");
     FS.mount({
       mount() {
-        var node = FS.createNode(proc_self, "fd", 16384 | 511, /* 0777 */ 73);
+        var node = FS.createNode(proc_self, "fd", 16895, 73);
         node.node_ops = {
           lookup(parent, name) {
             var fd = +name;
