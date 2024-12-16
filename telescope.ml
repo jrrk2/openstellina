@@ -286,7 +286,18 @@ let observe' fn =
      ("histogramMedium", `Int 5);
      ("histogramHigh", `Int 0);
      ("backgroundEnabled", `Bool true);
-     ("backgroundPolyorder", `Int 4)]))) (cnv' f)
+     ("backgroundPolyorder", `Int 4);
+     ("observationType", `String "STANDARD");
+     ("algorithm", `String "AUTO");
+     ("store", `Assoc [
+       ("state", `String "NON_RESUMABLE")
+     ]);
+     ("mosaic", `Assoc [
+       ("widthDegree", `Float 1.58208);
+       ("heightDegree", `Float 1.0712)
+     ]);
+     ("targetType", `String "CATALOG")
+  ]))) (cnv' f)
 
 let darks' fn =
     let pth = pth2'^"/v1/expertMode/startStorageAcquisition" in
