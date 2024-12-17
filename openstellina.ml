@@ -815,6 +815,8 @@ let create_telescope_display () =
     ("Target Name", ref (!get_target_value()));
     ("Target RA", entry_ra_ref);
     ("Target DEC", entry_dec_ref);
+    ("Target ALT", entry_alt_ref);
+    ("Target AZ", entry_az_ref);
     (* Exposure settings *)
     ("Exposure", entry_exp_ref);
     ("DER Position", der_posref);
@@ -1488,13 +1490,18 @@ let sel = ref 0
 
 let choose fn =
   fn();
-  let (found, ra', dec', mag') = Messier_catalogue.messier_array.(!sel) in
-  let ra_flt = Altaz.cnv_ra ra' in
-  let dec_flt = Altaz.cnv_dec dec' in
+  incr sel;
+  let ra = entry_ra'() and dec = entry_dec'() in
+  if ra <> "" && dec <> "" then begin
+  let ra_flt = Altaz.cnv_ra ra in
+  let dec_flt = Altaz.cnv_dec dec in
   let yr,mon,dy,hr,min,sec = split_date() in
   let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = 
     Altaz.altaz_calc yr mon dy hr min sec ra_flt dec_flt (latitude()) (longitude()) in
-Astro_utils.show_entries found jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan (float_of_string mag') nan nan;
+  entry_alt_set_text (Altaz.dms_of_float (alt_calc));
+  entry_az_set_text (Altaz.dms_of_float (az_calc));
+  targ_status_set_text ("iter: "^string_of_int !sel);
+  end;
 [Empty]
 
 let rec draw_things fn arg = 
@@ -1583,6 +1590,8 @@ let create_control_panel () =
 	("Target Name", ref (!get_target_value()));
 	("Target RA", entry_ra_ref);
 	("Target DEC", entry_dec_ref);
+	("Target ALT", entry_alt_ref);
+	("Target AZ", entry_az_ref);
 	(* Exposure settings *)
 	("Exposure", entry_exp_ref);
       ];
@@ -1864,6 +1873,12 @@ let onload _ =
   let _ = handle_julian_time txttime_start jd_start (format_time today) in
   let _ = handle_julian_date txtdate_stop jd_stop (format_date tomorrow) in
   let _ = handle_julian_time txttime_stop jd_stop (format_time tomorrow) in
+
+  set_ra_value_gui := (fun msg -> show_info msg);
+  set_dec_value_gui := (fun msg -> show_info msg);
+  set_alt_value_gui := (fun msg -> if !verbose then show_info msg; update_display_value "status-Target ALT" msg);
+  set_az_value_gui := (fun msg -> if !verbose then show_info msg; update_display_value "status-Target AZ" msg);
+
   Js._false
 
 let _ = Dom_html.window##.onload := Dom_html.handler onload

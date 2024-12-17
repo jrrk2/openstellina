@@ -27,12 +27,12 @@ type env' =
 let verbose = ref false
 let verbose_flag = ref false
 
-let ephem_data_lst = ref []
-
 let set_target_value = ref (fun (x:string) -> ())
 let get_target_value = ref (fun () -> "")
-let set_ra_value_gui = ref (fun x -> ())
+let set_ra_value_gui = ref (fun (x:string) -> ())
 let set_dec_value_gui = ref (fun x -> ())
+let set_alt_value_gui = ref (fun (x:string) -> ())
+let set_az_value_gui = ref (fun x -> ())
 let set_status_value = ref (fun x -> ())
 let set_debug_value = ref (fun x -> ())
 
@@ -124,15 +124,19 @@ let entry_exp_set_text nam =
 let entry_nam_set_text nam = ()
 let entry_ra_set_text x =
   entry_ra_ref := x;
-  !set_ra_value_gui ("RA "^x)
+  !set_ra_value_gui x
 let entry_dec_set_text x =
   entry_dec_ref := x;
-  !set_dec_value_gui ("DEC "^x)
+  !set_dec_value_gui x
 let entry_alt_ref = ref ""
-let entry_alt_set_text nam = entry_alt_ref := nam
+let entry_alt_set_text nam =
+  entry_alt_ref := nam;
+  !set_alt_value_gui nam
 let entry_alt'() = !entry_alt_ref
 let entry_az_ref = ref ""
-let entry_az_set_text nam = entry_az_ref := nam
+let entry_az_set_text nam =
+  entry_az_ref := nam;
+  !set_az_value_gui (nam)
 let entry_az'() = !entry_az_ref
 let entry_mag_set_text nam = ()
 let entry_ang_set_text nam = ()
@@ -153,145 +157,15 @@ let split_date () =
     let tm = Unix.gmtime (datum()) in
     tm.tm_year+1900,tm.tm_mon+1,tm.tm_mday,tm.tm_hour,tm.tm_min,tm.tm_sec
 
+(*
 let show_entries nam jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang ang_diam =
     if nam <> "" then entry_nam_set_text nam;
     entry_ra_set_text (hms_of_float ra);
     entry_dec_set_text (dms_of_float dec);
-    entry_alt_set_text (dms_of_float (alt_calc));
-    entry_az_set_text (dms_of_float (az_calc));
     entry_mag_set_text (Printf.sprintf "%.2f" apmag);
     entry_ang_set_text (Printf.sprintf "%.2f" ang_diam);
     ()
-
-let simbad_cnv = function
-    | Xml.Element
-   ("VOTABLE",
-    [("xmlns", "http://www.ivoa.net/xml/VOTable/v1.2");
-     ("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
-     ("xsi:schemaLocation",
-      "http://www.ivoa.net/xml/VOTable/v1.2 http://www.ivoa.net/xml/VOTable/v1.2");
-     ("version", "1.2")],
-    [Xml.Element
-      ("DEFINITIONS", [],
-       [Xml.Element
-         ("COOSYS",
-          [("ID", "COOSYS"); ("equinox", "2000"); ("epoch", "J2000");
-           ("system", "ICRS")],
-          [])]);
-     Xml.Element
-      ("RESOURCE", [("name", "Simbad query"); ("type", "results")],
-       [Xml.Element
-         ("TABLE", [("ID", "simbad"); ("name", "simbad query")],
-          [Xml.Element
-            ("DESCRIPTION", [], [Xml.PCData "... query string ..."]);
-           Xml.Element
-            ("FIELD",
-             [("ID", "MAIN_ID"); ("name", "MAIN_ID"); ("datatype", "char");
-              ("width", "22"); ("ucd", "meta.id;meta.main");
-              ("arraysize", "*")],
-             [Xml.Element
-               ("DESCRIPTION", [],
-                [Xml.PCData "Main identifier for an object"]);
-              Xml.Element
-               ("LINK",
-                [("value", "${MAIN_ID}");
-                 ("href",
-                  "http://simbad.u-strasbg.fr/simbad/sim-id?Ident=${MAIN_ID}&amp;NbIdent=1")],
-                [])]);
-           Xml.Element
-            ("FIELD",
-             [("ID", "RA"); ("name", "RA"); ("datatype", "char");
-              ("precision", "8"); ("width", "13");
-              ("ucd", "pos.eq.ra;meta.main"); ("arraysize", "13");
-              ("unit", "&quot;h:m:s&quot;")],
-             [Xml.Element ("DESCRIPTION", [], [Xml.PCData "Right ascension"])]);
-           Xml.Element
-            ("FIELD",
-             [("ID", "DEC"); ("name", "DEC"); ("datatype", "char");
-              ("precision", "8"); ("width", "13");
-              ("ucd", "pos.eq.dec;meta.main"); ("arraysize", "13");
-              ("unit", "&quot;d:m:s&quot;")],
-             [Xml.Element ("DESCRIPTION", [], [Xml.PCData "Declination"])]);
-           Xml.Element
-              ("FIELD",
-               [("ID", "FLUX_V"); ("name", "FLUX_V"); ("datatype", "float");
-                ("ucd", "phot.mag;em.opt.V"); ("unit", "mag")],
-               [Xml.Element ("DESCRIPTION", [], [Xml.PCData "Magnitude V"])]);
-             Xml.Element
-              ("FIELD",
-               [("ID", "FLUX_UNIT_mag"); ("name", "FLUX_UNIT_mag");
-                ("datatype", "char"); ("width", "3");
-                ("ucd", "meta.unit;phot.flux")],
-               [Xml.Element ("DESCRIPTION", [], [Xml.PCData "flux unit"])]);
-             Xml.Element
-            ("DATA", [],
-             [Xml.Element
-               ("TABLEDATA", [],
-                [Xml.Element
-                  ("TR", [],
-                   [Xml.Element ("TD", [], [Xml.PCData ident]);
-                    Xml.Element ("TD", [], [Xml.PCData ra]);
-                    Xml.Element ("TD", [], [Xml.PCData dec]);
-                    Xml.Element ("TD", [], [Xml.PCData mag]);
-                    Xml.Element ("TD", [], [])])])])])])]) ->
-    !set_debug_value (ident);
-    let latitude = latitude() in
-    let longitude = longitude() in
-    let yr,mon,dy,hr,min,sec = split_date() in
-    let ra_flt = cnv_ra ra in
-    let dec_flt = cnv_dec dec in
-    !set_ra_value_gui (string_of_float ra_flt);
-    !set_dec_value_gui (string_of_float dec_flt);
-    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
-    show_entries ident jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan (float_of_string mag) nan nan;
-    targ_status_set_text ("SIMBAD found: "^ident)
-| Xml.Element
-     ("VOTABLE",
-      [("xmlns", "http://www.ivoa.net/xml/VOTable/v1.2");
-       ("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
-       ("xsi:schemaLocation",
-        "http://www.ivoa.net/xml/VOTable/v1.2 http://www.ivoa.net/xml/VOTable/v1.2");
-       ("version", "1.2")],
-      [Xml.Element
-        ("INFO",
-         [("name", "Error");
-          ("value", errmsg)],
-         [])]) ->
-    !set_status_value errmsg;
-entry_ra_set_text "";
-entry_dec_set_text "";
-entry_alt_set_text "";
-entry_az_set_text "";
-targ_status_set_text (errmsg)
-| _ -> !set_status_value "simbad XML error"
-
-let simbad' () =
-    let hdrs = ref [] in
-    let server =  "simbad.u-strasbg.fr" in
-    let pth = "/simbad/sim-id" in
-    let target = targ_entry'() in
-    !set_debug_value ("simbad called: "^target);
-    let params = [ ("output.format", "VOTABLE"); ("output.params", "main_id,ra,dec,flux(V),flux_unit(mag)"); ("Ident", target) ] in
-    let dbg rslt s =
-              if false then !set_debug_value "simbad returned";
-              let dbgfile = tmpdir^target^".xml" in
-              !set_status_value (rslt^": "^dbgfile);
-              let fd = open_out dbgfile in
-              output_string fd s;
-              close_out fd in
-
-    let f = (fun s -> simbad_cnv (
-                                 !set_status_value "simbad_cnv called";
-                                  let m = XmlParser.make() in
-                                      XmlParser.prove m false;
-                                      try
-                                        let rslt = XmlParser.parse m (SString s) in
-                                        dbg "succeeded" s;
-                                        rslt
-                                      with _ ->
-                                      dbg "failed" s;
-                                      failwith "Xml.parse_string")) in
-    get' "http://" server params [] pth f hdrs
+*)
 
 type attr =
   {
@@ -423,6 +297,7 @@ let setfocus' () =
 
 let stellarium_logfile = open_out (tmpdir^"stellarium_logfile.txt")
 
+(*
 let stellarium' () = if stellarium_enabled_active() then
     let sattr = ref (attr stellarium_logfile (targ_entry'())) in
     let debug (attr:attr) =
@@ -435,7 +310,7 @@ let stellarium' () = if stellarium_enabled_active() then
     let f = (fun s -> match s.[0] with '{' -> descend !sattr (Yojson.Basic.from_string s); debug !sattr | _ -> targ_status_set_text s ) in
     stellarium' !sattr (cnv' f)
     else Lwt.return_unit
-
+    
 let messier' () = 
     let sel = (targ_entry'()) in
     let len = Array.length Messier_catalogue.messier_array in
@@ -473,6 +348,7 @@ let ngc2000' () =
     targ_status_set_text ("NGC2000: " ^ sel ^ ": not found");
     show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
     Lwt.return_unit)
+*)
 
 (*
 Principal Galaxy cataloogue, biggest 25000 items out of ~1M
@@ -513,6 +389,7 @@ let pgc' () =
 
 (* Abell catalogue of multiple galaxy clusters *)
 
+(*
 let abell' () = 
     let sel = (targ_entry'()) in
     if Hashtbl.length Abell_cnv.abellh = 0 then Abell_cnv.cache();
@@ -542,6 +419,8 @@ try (match Hashtbl.find Abell_cnv.abellh sel with
     show_entries " " nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan;
     Lwt.return_unit)
 
+let ephem_data_lst = ref []
+    
 let show_ephem ix =
     let lst = !ephem_data_lst in
     let (eph:string) = if List.length lst > ix then List.nth lst ix else String.make 80 ' ' in
@@ -615,3 +494,4 @@ let horizons' () =
     ] in
     if !verbose then List.iter (fun (k,x) -> print_endline (k^": "^x)) req;
     get' "https://" server req [] pth f hdrs
+*)
