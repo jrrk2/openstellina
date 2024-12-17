@@ -36,55 +36,6 @@ type action =
   | Park
   | Openarm
 
-(* Message type and state *)
-type message = {
-  msg_type: string;  (* "error" or "info" *)
-  text: string;
-  timestamp: float;
-}
-
-let rec take n lst = 
-  if n <= 0 then []
-  else match lst with
-    | [] -> []
-    | x::xs -> x :: take (n-1) xs
-
-let messages = ref ([] : message list)
-
-(* Add message to the list *)
-let add_message msg_type text =
-  let new_message = {
-    msg_type;
-    text;
-    timestamp = Unix.gettimeofday ()
-  } in
-  messages := !messages @ [new_message];
-  
-  (* Optional: Keep only last N messages *)
-  let max_messages = 100 in
-  if List.length !messages > max_messages then
-    messages := List.rev (take max_messages (List.rev !messages));
-    
-  (* Update the message panel if it exists *)
-  match Dom_html.getElementById_opt "telescope-messages" with
-  | None -> ()
-  | Some panel ->
-      let message_element = 
-        div ~a:[
-          a_class ["message"; msg_type];
-        ] [txt text]
-      in
-      let dom_msg = Tyxml_js.To_dom.of_div message_element in
-      Dom.appendChild panel dom_msg;
-      (* Auto-scroll to bottom *)
-      panel##.scrollTop := panel##.scrollHeight
-
-(* Helper functions *)
-let show_error text = add_message "error" text
-let show_info text = 
-  if false then print_endline text; 
-  add_message "info" text
-
 (*
 type motor_update = {
   position: float;

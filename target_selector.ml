@@ -1,5 +1,6 @@
 open Js_of_ocaml
 open Js_of_ocaml_tyxml
+open Js_of_ocaml_lwt
 open Tyxml_js.Html
 open Printf
 open Str
@@ -11,6 +12,9 @@ type target_category =
   | SolarSystem
   | Comets 
   | DeepSky
+  | Simbad      
+  | Horizons
+  | NgcCatalog
   | RecentTargets
 
 type target_info = {
@@ -93,8 +97,34 @@ let get_filtered_targets selected_category search_text =
         }
       ) Messier_catalogue.messier_array)
 
+  | Simbad ->
+      let rslt = ref [] in
+      debug_msg "Loading Simbad catalog...";
+      let callback = function
+        | Simbad.Error errmsg -> Utils.show_info ("SIMBAD: "^errmsg)
+        | Found (ident, ra_flt, dec_flt, mag_flt) ->
+        Utils.show_info ("Found callback for: "^ident);
+        rslt := {
+          name = ident;
+          ra = ra_flt;
+          dec = dec_flt;
+          mag = mag_flt;
+          desc = "Simbad" ^ search_text;
+          category = DeepSky;
+          debug = sprintf "From Simbad online catalog: ra=%f dec=%f mag=%f" ra_flt dec_flt mag_flt
+        } :: !rslt
+        | _ -> Utils.show_info "unhandled simbad response" in
+      Simbad.simbad_main callback search_text;
+      !rslt
+
+  | Horizons ->
+      debug_msg "(not implemented)";
+      []      
+  | NgcCatalog ->
+      debug_msg "(not implemented)";
+      []      
   | RecentTargets ->
-      debug_msg "Loading recent targets (not implemented)";
+      debug_msg "(not implemented)";
       [] in
 
   (* Apply search filter *)
@@ -218,6 +248,9 @@ let make_radio category label_text =
     | SolarSystem -> "radio-solar" 
     | Comets -> "radio-comets"
     | DeepSky -> "radio-deep"
+    | Simbad -> "radio-simbad"
+    | Horizons -> "radio-horizons"
+    | NgcCatalog -> "radio-ngc"
     | RecentTargets -> "radio-recent" in
 
   let radio = input ~a:[
@@ -228,6 +261,9 @@ let make_radio category label_text =
       | SolarSystem -> "solar" 
       | Comets -> "comets"
       | DeepSky -> "deep"
+      | Simbad -> "simbad"
+      | Horizons -> "horizons"
+      | NgcCatalog -> "ngc"
       | RecentTargets -> "recent");
     a_onclick (fun _ ->
       selected_category := category;
@@ -358,7 +394,10 @@ let make_radio category label_text =
       div ~a:[a_class ["radio-group"]] [
         make_radio SolarSystem "Solar System";
         make_radio Comets "Comets";
-        make_radio DeepSky "Deep Sky Objects";
+        make_radio DeepSky "Messier Deep Sky Objects";
+        make_radio Simbad "simbad";
+        make_radio Horizons "horizons";
+        make_radio NgcCatalog "ngc";
         make_radio RecentTargets "Recent Targets"
       ]
     ];

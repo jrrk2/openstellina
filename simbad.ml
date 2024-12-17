@@ -3,8 +3,13 @@ open Cohttp_lwt_jsoo
 open Altaz
 open Lwt.Infix
 open Geolocate
+open Js_of_ocaml_lwt
 
-let simbad_cnv = function
+type err =
+| Error of string
+| Found of string * float * float * float
+
+let simbad_cnv (callback:err->unit) = function
     | Xml.Element
    ("VOTABLE",
     [("xmlns", "http://www.ivoa.net/xml/VOTable/v1.2");
@@ -75,17 +80,10 @@ let simbad_cnv = function
                     Xml.Element ("TD", [], [Xml.PCData dec]);
                     Xml.Element ("TD", [], [Xml.PCData mag]);
                     Xml.Element ("TD", [], [])])])])])])]) ->
-    !set_debug_value (ident);
-    let latitude = latitude() in
-    let longitude = longitude() in
-    let yr,mon,dy,hr,min,sec = split_date() in
     let ra_flt = cnv_ra ra in
     let dec_flt = cnv_dec dec in
-    !set_ra_value_gui (string_of_float ra_flt);
-    !set_dec_value_gui (string_of_float dec_flt);
-    let jd_calc, ra_now, dec_now, alt_calc, az_calc, lst_calc, hour_calc = altaz_calc yr mon dy hr min sec ra_flt dec_flt latitude longitude in
-    show_entries ident jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc nan ra_flt dec_flt nan nan nan (float_of_string mag) nan nan;
-    targ_status_set_text ("SIMBAD found: "^ident)
+    let mag_flt = float_of_string mag in
+    callback (Found (ident, ra_flt, dec_flt, mag_flt))
 | Xml.Element
      ("VOTABLE",
       [("xmlns", "http://www.ivoa.net/xml/VOTable/v1.2");
@@ -98,38 +96,38 @@ let simbad_cnv = function
          [("name", "Error");
           ("value", errmsg)],
          [])]) ->
-    !set_status_value errmsg;
-entry_ra_set_text "";
-entry_dec_set_text "";
-entry_alt_set_text "";
-entry_az_set_text "";
-targ_status_set_text (errmsg)
-| _ -> !set_status_value "simbad XML error"
+callback (Error errmsg);
+| _ -> callback (Error "simbad XML error")
 
-let simbad' () =
+let simbad' callback target =
     let hdrs = ref [] in
     let server =  "simbad.u-strasbg.fr" in
     let pth = "/simbad/sim-id" in
-    let target = targ_entry'() in
-    !set_debug_value ("simbad called: "^target);
+    Utils.show_info ("simbad called: "^target);
     let params = [ ("output.format", "VOTABLE"); ("output.params", "main_id,ra,dec,flux(V),flux_unit(mag)"); ("Ident", target) ] in
-    let dbg rslt s =
-              if false then !set_debug_value "simbad returned";
-              let dbgfile = tmpdir^target^".xml" in
-              !set_status_value (rslt^": "^dbgfile);
-              let fd = open_out dbgfile in
-              output_string fd s;
-              close_out fd in
-
-    let f = (fun s -> simbad_cnv (
-                                 !set_status_value "simbad_cnv called";
+    let f = (fun s -> simbad_cnv callback (
                                   let m = XmlParser.make() in
                                       XmlParser.prove m false;
                                       try
                                         let rslt = XmlParser.parse m (SString s) in
-                                        dbg "succeeded" s;
                                         rslt
                                       with _ ->
-                                      dbg "failed" s;
-                                      failwith "Xml.parse_string")) in
-    get' "http://" server params [] pth f hdrs
+                                      callback (Error "Xml.parse_string"); Xml.PCData "")) in
+    Astro_utils.get' "http://" server params [] pth f hdrs
+
+let timeout seconds =
+  let%lwt () = Lwt_js.sleep seconds in
+  Lwt.return_unit
+
+let wait_or_timeout event_promise seconds =
+	 let promise = Lwt.pick [
+	   event_promise;
+	   timeout seconds
+	 ] in let%lwt () = promise in Lwt.return_unit
+
+let simbad_main callback search_text =
+      if search_text <> "" then
+      begin
+      let _ = wait_or_timeout (simbad' callback search_text) 0.5 in
+      Utils.show_info ("ending simbad");
+      end

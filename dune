@@ -11,7 +11,7 @@
  (name openstellina)
  (modes js)
  (modules_without_implementation calc)
- (modules jsoo_alt_az error_dialog error_status target_selector version secure geolocate comets table_update utils location tabbed_dialog altaz astro_utils trans hidemsg msgs messier_catalogue calc mfcalc lexer expr abell_cnv ngc2000 telescope base_locations openstellina)
+ (modules simbad search jsoo_alt_az error_dialog error_status target_selector version secure geolocate comets table_update utils location tabbed_dialog altaz astro_utils trans hidemsg msgs messier_catalogue calc mfcalc lexer expr abell_cnv ngc2000 telescope base_locations openstellina)
  (libraries js_of_ocaml-lwt js_of_ocaml-tyxml yojson base64 cohttp-lwt-jsoo xml-light js_of_ocaml unix str)
  (preprocess (pps lwt_ppx js_of_ocaml-ppx))
 )
