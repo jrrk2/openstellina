@@ -7,34 +7,37 @@ open Str
 open Altaz
 open Astro_utils
 open Utils
-
-type target_category = 
-  | SolarSystem
-  | Comets 
-  | DeepSky
-  | Simbad      
-  | Horizons
-  | NgcCatalog
-  | RecentTargets
-
-type target_info = {
-  name: string;
-  ra: float;
-  dec: float;
-  mag: float;
-  desc: string;
-  category: target_category;
-  debug: string;
-}
+open Xml
+open Geolocate
+open Target
 
 let accstr = ref "alt_calc > 30.0 & (az_calc > 300.0 | az_calc < 60.0)"
 let acceptance = ref (Calc.Bool false)
+let simbad_targets = ref []
+let recent_targets = ref []
+(*
+ let horizon_targets = ref []
+ *)
 
-let get_filtered_targets selected_category search_text =
+let get_filtered_targets update_target_list selected_category search_text =
   let debug_msg msg = 
     !set_debug_value ("Target selector: " ^ msg) in
+
+  let filt all_targets = 
+  (* Apply search filter *)
+  if search_text = "" then begin
+    debug_msg "No search filter applied";
+    all_targets
+  end else begin
+    let regexp' = Str.regexp (String.lowercase_ascii search_text) in
+    let filtered = List.filter (fun t -> 
+      Str.string_match regexp' (String.lowercase_ascii t.name) 0
+    ) all_targets in
+    debug_msg (sprintf "Found %d matches" (List.length filtered));
+    filtered
+  end in
   
-  let all_targets = match selected_category with
+  match selected_category with
   | SolarSystem -> 
       debug_msg "Loading solar system objects...";
       let objects = ["Sun"; "Moon"; "Mercury"; "Venus"; "Mars"; "Jupiter"; "Saturn"; "Uranus"; "Neptune"] in
@@ -45,7 +48,7 @@ let get_filtered_targets selected_category search_text =
         (ra, dec, mag)
       in
       
-      List.map (fun name ->
+      let lst = List.map (fun name ->
         let ra, dec, mag = get_body_pos name in
         {
           name = name;
@@ -56,7 +59,7 @@ let get_filtered_targets selected_category search_text =
           category = SolarSystem;
           debug = sprintf "Position from ephemeral calculation: ra=%.2f dec=%.2f" ra dec
         }
-      ) objects
+      ) objects in update_target_list (filt lst)
 
   | Comets ->
      debug_msg (sprintf "Loading %d comets..." (List.length Comets.comets));
@@ -66,7 +69,7 @@ let get_filtered_targets selected_category search_text =
         Str.string_match regexp' (String.lowercase_ascii fullname) 0
       ) Comets.comets in
      debug_msg (sprintf "Found %d matching comets" (List.length matching_comets));
-     List.map (fun (name, sequence, discoverer) -> 
+     let lst = List.map (fun (name, sequence, discoverer) -> 
         let fullname = sprintf "%s %s (%s)" name sequence discoverer in
         debug_msg (sprintf "Processing comet: %s" fullname);
 	let jd = jd_now() in
@@ -80,11 +83,11 @@ let get_filtered_targets selected_category search_text =
           category = Comets;
           debug = sprintf "From Comets.comets, calculated position: ra=%.2f dec=%.2f" ra dec
         }
-      ) matching_comets
+      ) matching_comets in update_target_list (filt lst)
 
   | DeepSky ->
       debug_msg "Loading Messier catalog...";
-      Array.to_list (Array.mapi (fun i (name, ra, dec, mag) -> 
+      let lst = Array.to_list (Array.mapi (fun i (name, ra, dec, mag) -> 
         debug_msg (sprintf "Processing M%d: %s" (i+1) name);
         {
           name = name;
@@ -95,16 +98,16 @@ let get_filtered_targets selected_category search_text =
           category = DeepSky;
           debug = sprintf "From Messier catalog: ra=%s dec=%s mag=%s" ra dec mag
         }
-      ) Messier_catalogue.messier_array)
+      ) Messier_catalogue.messier_array) in update_target_list (filt lst)
 
   | Simbad ->
-      let rslt = ref [] in
       debug_msg "Loading Simbad catalog...";
       let callback = function
         | Simbad.Error errmsg -> Utils.show_info ("SIMBAD: "^errmsg)
+        | Unmatched xml -> Simbad.dump show_info xml
         | Found (ident, ra_flt, dec_flt, mag_flt) ->
         Utils.show_info ("Found callback for: "^ident);
-        rslt := {
+        simbad_targets := {
           name = ident;
           ra = ra_flt;
           dec = dec_flt;
@@ -112,33 +115,36 @@ let get_filtered_targets selected_category search_text =
           desc = "Simbad" ^ search_text;
           category = DeepSky;
           debug = sprintf "From Simbad online catalog: ra=%f dec=%f mag=%f" ra_flt dec_flt mag_flt
-        } :: !rslt
+        } :: !simbad_targets;
+        update_target_list (List.sort_uniq compare !simbad_targets);
         | _ -> Utils.show_info "unhandled simbad response" in
-      Simbad.simbad_main callback search_text;
-      !rslt
-
+      Simbad.simbad_main show_info callback search_text;
+(*
   | Horizons ->
-      debug_msg "(not implemented)";
-      []      
+      show_info "Calling Horizons ...";
+      let jd = jd_now() in
+      let callback body rslt = let debug = String.concat " " (Array.to_list (Array.mapi (fun ix itm -> ("\""^(match ix with
+							 | 1 -> (Altaz.hms_of_float (float_of_string itm))
+                                                         | 2 -> (Altaz.dms_of_float (float_of_string itm))
+							 | 3 -> (Altaz.dms_of_float (float_of_string itm))
+                                                         | 4 -> (Altaz.dms_of_float (float_of_string itm))
+							 | 5 -> (Altaz.dms_of_float (float_of_string itm))
+							 | _ -> itm^"\" "))) rslt)) in
+        horizon_targets := {
+          name = body;
+          ra = float_of_string rslt.(1);
+          dec = float_of_string rslt.(2);
+          mag = float_of_string rslt.(6);
+          desc = "Horizons" ^ search_text;
+          category = DeepSky;
+          debug = "From Horizons online catalog: "^debug
+        } :: !horizon_targets in
+      let _ = Horizons.horizons' print_endline callback search_text jd in ()
   | NgcCatalog ->
-      debug_msg "(not implemented)";
-      []      
+      debug_msg "(not implemented)"
+*)
   | RecentTargets ->
-      debug_msg "(not implemented)";
-      [] in
-
-  (* Apply search filter *)
-  if search_text = "" then begin
-    debug_msg "No search filter applied";
-    all_targets
-  end else begin
-    let regexp' = Str.regexp (String.lowercase_ascii search_text) in
-    let filtered = List.filter (fun t -> 
-      Str.string_match regexp' (String.lowercase_ascii t.name) 0
-    ) all_targets in
-    debug_msg (sprintf "Found %d matches" (List.length filtered));
-    filtered
-  end
+        update_target_list (List.sort_uniq compare !recent_targets)
 
 let create_target_selector () =
   let currently_visible = ref true in
@@ -199,13 +205,14 @@ let create_target_item target =
 	  update_display_value "status-Target RA" (hms_of_float target.ra);
 	  update_display_value "status-Target DEC" (dms_of_float target.dec);
 	  update_display_value "status-Target Name" target.name;
+	  recent_targets := target :: !recent_targets;
           true)
       ] [txt "Select"]
     ]
   else
     div ~a:[] [] in
 
-  let update_target_list () =
+  let update_target_list filtered =
     (* Remove existing target list if present *)
     Option.iter (fun div ->
       let dom_div = Tyxml_js.To_dom.of_element div in
@@ -215,7 +222,7 @@ let create_target_item target =
     
     (* Create new target list *)
     let new_list = div ~a:[a_class ["target-list"]] (
-      List.map create_target_item (get_filtered_targets !selected_category !search_text)
+      List.map create_target_item filtered
     ) in
     target_list_div := Some new_list;
     
@@ -229,7 +236,7 @@ let create_target_item target =
       a_input_type `Checkbox;
       a_onclick (fun _ ->
         currently_visible := not !currently_visible;
-        update_target_list ();
+        get_filtered_targets update_target_list !selected_category !search_text;
         true)
     ] () in
     
@@ -249,8 +256,10 @@ let make_radio category label_text =
     | Comets -> "radio-comets"
     | DeepSky -> "radio-deep"
     | Simbad -> "radio-simbad"
+(*
     | Horizons -> "radio-horizons"
     | NgcCatalog -> "radio-ngc"
+*)    
     | RecentTargets -> "radio-recent" in
 
   let radio = input ~a:[
@@ -262,12 +271,14 @@ let make_radio category label_text =
       | Comets -> "comets"
       | DeepSky -> "deep"
       | Simbad -> "simbad"
+(*
       | Horizons -> "horizons"
       | NgcCatalog -> "ngc"
+*)
       | RecentTargets -> "recent");
     a_onclick (fun _ ->
       selected_category := category;
-      update_target_list ();
+      get_filtered_targets update_target_list !selected_category !search_text;
       true)
   ] () in
 
@@ -395,9 +406,11 @@ let make_radio category label_text =
         make_radio SolarSystem "Solar System";
         make_radio Comets "Comets";
         make_radio DeepSky "Messier Deep Sky Objects";
-        make_radio Simbad "simbad";
-        make_radio Horizons "horizons";
-        make_radio NgcCatalog "ngc";
+        make_radio Simbad "Simbad";
+(*
+        make_radio Horizons "Horizons";
+        make_radio NgcCatalog "NGC";
+*)
         make_radio RecentTargets "Recent Targets"
       ]
     ];
@@ -418,7 +431,7 @@ let make_radio category label_text =
 	    search_timeout := Some (Dom_html.window##setTimeout
 	      (Js.wrap_callback (fun () ->
 		search_text := Js.to_string t##.value;
-		update_target_list ();
+		get_filtered_targets update_target_list !selected_category !search_text;
 	      ))
 	      2000.  (* 2 second delay *)
 	    )
@@ -440,7 +453,7 @@ let make_radio category label_text =
 	      let equation = Js.to_string t##.value in
               accstr := equation;
 	      acceptance := Expr.simplify [] (Expr.expr equation);
-	      update_target_list();
+	      get_filtered_targets update_target_list !selected_category !search_text;
 	      t##.style##.backgroundColor := Js.string "#ffffff"
 	    with _ ->
 	      t##.style##.backgroundColor := Js.string "#ffeeee"

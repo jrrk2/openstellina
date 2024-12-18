@@ -1,6 +1,7 @@
 open Js_of_ocaml
 open Js_of_ocaml_tyxml
 open Tyxml_js.Html
+open Geolocate
 
 external _myFunction : int -> float = "_myFunction"
 external _myFloat : float -> float -> float -> float -> float -> float -> float -> unit = "_myFloat"

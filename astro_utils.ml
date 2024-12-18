@@ -1,8 +1,10 @@
 open Cohttp
+(*
+open Cohttp_lwt_unix
+*) 
 open Cohttp_lwt_jsoo
 open Altaz
 open Lwt.Infix
-open Geolocate
 
 let send_preflight_options_request uri callback =
   let headers = Header.init () in
@@ -55,9 +57,6 @@ let set_dialog_value (sel:sel') x = !set_dialog_value' sel x
 
 let set_environ_value' = ref (fun (env:env') (x:string) -> ())
 let set_environ_value (env:env') x = !set_environ_value' env x
-
-let latitude () = try (match Geo.get_cookie "latitude" with Some lat -> float_of_string lat | None -> 0.0) with _ -> 0.0
-let longitude () = try (match Geo.get_cookie "longitude" with Some long -> float_of_string long | None -> 0.0) with _ -> 0.0
 
 let split = List.map (fun itm -> let ix = String.index itm ':' in (String.sub itm 0 ix, String.sub itm (ix+2) (String.length itm - ix - 2)))
 
@@ -436,62 +435,4 @@ let show_ephem ix =
     show_entries "" jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang nan
     with _ -> 
     show_entries "" nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan
-
-let horizons' () =
-    let hdrs = ref [] in
-    let server =  "ssd.jpl.nasa.gov" in
-    let pth = "/api/horizons.api?format=text" in
-    let datum' = datum() in
-    let t = Unix.gmtime datum' in
-    let t' = Unix.gmtime (datum' +. 86400.0) in
-    let f = (fun s ->
-       let body = ref "" in
-       ephem_data_lst := List.filter (fun x' ->
-       let x = String.trim x' in
-       let str = if String.length x > 5 then String.sub x 0 4 else "" in
-       let trial = try (int_of_string str) with _ -> 0 in
-       let use = trial = t.tm_year+1900 in
-       let tok = Array.of_list (List.filter (function "" -> false | _ -> true) (String.split_on_char ' ' x)) in
-       if Array.length tok > 0 && tok.(0) = "Revised:" then
-          begin
-          let ix = ref (Array.length tok - 1) in
-          while (tok.(!ix).[0] >= '0' && tok.(!ix).[0] <= '9') || (tok.(!ix) = "/") do decr ix done;
-(* *)
-          print_endline ("last ix="^string_of_int !ix);
-          if !verbose then Array.iteri (fun ix itm -> print_endline (string_of_int ix^": \""^itm^"\"")) tok;
-(* *)
-          body := String.concat " " (Array.to_list (Array.sub tok 4 (!ix - 3)));
-          end
-       else if Array.length tok > 0 && tok.(0) = "JPL/HORIZONS" then
-          begin
-(* *)
-          if !verbose then Array.iteri (fun ix itm -> print_endline (string_of_int ix^": "^itm)) tok;
-(* *)
-          body := String.concat " " (Array.to_list (Array.sub tok 1 (Array.length tok - 3)));
-          end;
-       if !verbose then print_endline x;
-       use) (String.split_on_char '\n' s);
-       !set_debug_value ("horizons: "^ !body);
-       entry_nam_set_text !body;
-       ephem_set_active t.tm_hour;
-       show_ephem t.tm_hour) in
-    let lat_flt = latitude() in
-    let long_flt = longitude() in
-    let req = 
-    [("COMMAND", "'"^ (targ_entry'()) ^"'");
-     ("OBJ_DATA", "'YES'");
-     ("MAKE_EPHEM", "'YES'");
-     ("EPHEM_TYPE", "'OBS'");
-     ("CENTER", "'coord'");
-     ("APPARENT", "'REFRACTED'");
-     ("CAL_FORMAT", "'BOTH'");
-     ("ANG_FORMAT", "'DEG'");
-     ("SITE_COORD", Printf.sprintf "'%f,%f,%f'" long_flt lat_flt 0.0);
-     ("START_TIME", Printf.sprintf "%d-%d-%d" (t.tm_year+1900) (t.tm_mon+1) t.tm_mday);
-     ("STOP_TIME", Printf.sprintf "%d-%d-%d" (t'.tm_year+1900) (t'.tm_mon+1) t'.tm_mday);
-     ("STEP_SIZE", "'1 h'");
-     ("QUANTITIES", "'1,4,5,7,9,29,42");
-    ] in
-    if !verbose then List.iter (fun (k,x) -> print_endline (k^": "^x)) req;
-    get' "https://" server req [] pth f hdrs
 *)

@@ -3,6 +3,7 @@
 open Lwt
 open Version
 open Astro_utils
+open Geolocate
 
 let server = "10.0.0.1:"
 (*
@@ -158,8 +159,9 @@ let mos_id  = ref ""
 let xflip = ref "BOTH"
 
 let xgain = ref 200
-let ephem_data_lst = ref []
-
+(*
+ let ephem_data_lst = ref []
+*)
 let planet_lst = []
 let expos_us () = Astro_utils.expos_us()
 
@@ -456,7 +458,6 @@ let show_ephem ix =
     show_entries "" jd_calc ra_now dec_now alt_calc az_calc lst_calc hour_calc jd ra dec azi elev sidt apmag hour_ang nan
     with _ -> 
     show_entries "" nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan nan
-*)
 
 let horizons' () =
     let hdrs = ref [] in
@@ -511,6 +512,7 @@ let horizons' () =
     ] in
     if!verbose_flag then List.iter (fun (k,x) -> print_endline (k^": "^x)) req;
     Astro_utils.get' "https://" server req [] pth f hdrs
+*)
 
 type smdb = {
     jd: float;

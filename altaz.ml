@@ -23,7 +23,8 @@ let dms_of_float x' =
     if Float.is_nan x' then "nan" else Printf.sprintf "%c%.2d %.2d %.2d" (if neg then '-' else '+') (int_of_float d) (int_of_float m) (int_of_float s)
 
 let cnv_ra fmt =
-    try Scanf.sscanf fmt "%f %f %f" (fun a b c -> a *. 15.0 +. b /. 4.0 +. c /. 240.0) with _ -> 0.0
+    try Scanf.sscanf fmt "%f %f %f" (fun a b c -> a *. 15.0 +. b /. 4.0 +. c /. 240.0)
+    with _ -> try Scanf.sscanf fmt "%f %f" (fun a b -> a *. 15.0 +. b /. 4.0) with _ -> 0.0
 
 let cnv_hms fmt =
     try Scanf.sscanf fmt "%fh%fm%fs" (fun a b c -> a *. 15.0 +. b /. 4.0 +. c /. 240.0) with _ -> 0.0
@@ -31,7 +32,8 @@ let cnv_hms fmt =
 let cnv_dec fmt =
     let neg = fmt <> "" && fmt.[0] = '-' in
     try Scanf.sscanf fmt "%f %f %f" (fun a b c -> if neg then a -. b /. 60.0 -. c /. 3600.0 else a +. b /. 60.0 +. c /. 3600.0)
-    with _ -> try Scanf.sscanf fmt "%f %f" (fun a b -> if neg then a -. b /. 60.0 else a +. b /. 60.0) with _ -> 0.0
+    with _ -> try Scanf.sscanf fmt "%f %f" (fun a b -> if neg then a -. b /. 60.0 else a +. b /. 60.0)
+    with _ -> try float_of_string fmt with _ -> 0.0
 
 let (%.) = mod_float
 

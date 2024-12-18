@@ -75,20 +75,26 @@ description: string;
 classification: string;
 }
 
-let ngchash = Hashtbl.create 255
+let ngclst = ref []
 
-let process cnt lin = 
+let process cnt lin = let open Target in
   let (name,source_type,ra,dec,lii,bii,ref_revision,constellation,limit_ang_diameter,ang_diameter,app_mag,app_mag_flag,description,classification) =
   Scanf.sscanf lin "(\"%[^\"]\",\"%[^\"]\",\"%[^\"]\",\"%[^\"]\",\"%[^\"]\",\"%[^\"]\",\"%[^\"]\",\"%[^\"]\",\"%[^\"]\",\"%[^\"]\",\"%[^\"]\",\"%[^\"]\",\"%[^\"]\",\"%[^\"]\",\"\")" (fun name source_type ra dec lii bii ref_revision constellation limit_ang_diameter ang_diameter app_mag app_mag_flag description classification ->
   (name,source_type,ra,dec,lii,bii,ref_revision,constellation,limit_ang_diameter,ang_diameter,app_mag,app_mag_flag,description,classification)) in
 let ang = try float_of_string ang_diameter with _ -> print_endline ang_diameter; nan in
 let mag = try float_of_string app_mag with _ -> print_endline app_mag; nan in
-let contents = (float_of_string ra, float_of_string dec, constellation, ang, mag, description) in
+let contents = {name;
+  ra=float_of_string ra;
+  dec=float_of_string dec;
+  mag;
+  category=DeepSky;
+  desc=description;
+  debug=Printf.sprintf "From NGC catalog: ra=%s dec=%s mag=%f" ra dec mag} in
 ignore (lii,bii,ref_revision,limit_ang_diameter,app_mag_flag,classification);
-match source_type with "-" | "OC" -> () | _ -> Hashtbl.add ngchash name contents
+match source_type with "-" | "OC" -> () | _ -> ngclst := contents :: !ngclst
 
 let cache() =
-  let fil = "ngc2000.dat" in
+  let fil = "data/ngc2000.dat" in
   let fd = open_in fil in
   let cnt = ref 0 in
   (try while true do

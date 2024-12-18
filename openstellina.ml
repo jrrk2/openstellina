@@ -1521,7 +1521,8 @@ let create_control_panel () =
       div ~a:[a_class ["control-disabled-message"]] [
         txt "Control features are not available in HTTPS mode. ";
         txt "Please switch to HTTP mode using the Security tab to access controls."
-      ]
+      ];
+      create_message_panel ()
     ]
   else
     (* Original control panel implementation *)

@@ -173,6 +173,9 @@ let create_location_picker callback =
     ]
   ]
 
+let latitude () = try (match Geo.get_cookie "latitude" with Some lat -> float_of_string lat | None -> 0.0) with _ -> 0.0
+let longitude () = try (match Geo.get_cookie "longitude" with Some long -> float_of_string long | None -> 0.0) with _ -> 0.0
+
 (* Initialize application *)
 let init () =
   Geo.geo (fun _ -> ())
