@@ -50,7 +50,7 @@ jobs:
       uses: ocaml/setup-ocaml@v2
       with:
         ocaml-compiler: '5.2.1'
-        dune-cache: true
+        dune-cache: false
 
     - name: Install system dependencies
       run: |
