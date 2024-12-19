@@ -1,0 +1,110 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [ "github-actions", "lazy" ]  # Test on this branch and lazy
+  pull_request:
+    branches: [ "lazy" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      OPAM_VERSION: "2.1.5"
+      EM_VERSION: "3.1.45"
+      EM_CACHE_FOLDER: 'emsdk-cache'
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
+
+    - name: Setup emsdk cache
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.EM_CACHE_FOLDER }}
+        key: ${{ runner.os }}-emsdk-${{ env.EM_VERSION }}
+
+    - name: Setup emscripten
+      uses: mymindstorm/setup-emsdk@v12
+      with:
+        version: ${{ env.EM_VERSION }}
+        actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
+
+    - name: Verify emscripten
+      run: |
+        emcc --version
+        em++ --version
+
+    - name: Set up OCaml
+      uses: ocaml/setup-ocaml@v2
+      with:
+        ocaml-compiler: '4.14.x'
+        dune-cache: true
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libgmp-dev
+
+    - name: Install OCaml dependencies
+      run: |
+        opam install . --deps-only --with-test
+        opam install js_of_ocaml js_of_ocaml-ppx js_of_ocaml-lwt js_of_ocaml-tyxml cohttp-lwt-jsoo yojson base64 xml-light
+
+    # First build attempt - if GSL is already built
+    - name: Try initial build
+      continue-on-error: true
+      id: initial_build
+      run: |
+        opam exec -- dune build @build_js
+        opam exec -- dune build @deploy
+
+    # Build GSL if initial build failed
+    - name: Build GSL for emscripten
+      if: steps.initial_build.outcome == 'failure'
+      run: |
+        cd gsl-2.8
+        emconfigure ./configure
+        emmake make
+        cd ..
+
+    # Retry build after GSL compilation
+    - name: Rebuild after GSL
+      if: steps.initial_build.outcome == 'failure'
+      run: |
+        opam exec -- dune build @build_js
+        opam exec -- dune build @deploy
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v3
+        
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: './docs'
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+      
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
+
+
