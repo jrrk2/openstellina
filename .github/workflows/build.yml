@@ -2,7 +2,7 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [ "github-actions", "lazy" ]  # Test on this branch and lazy
+    branches: [ "github-actions", "lazy" ]
   pull_request:
     branches: [ "lazy" ]
   workflow_dispatch:
@@ -47,7 +47,7 @@ jobs:
         em++ --version
 
     - name: Set up OCaml
-      uses: ocaml/setup-ocaml@v3
+      uses: ocaml/setup-ocaml@v2
       with:
         ocaml-compiler: '5.2.1'
         dune-cache: false
