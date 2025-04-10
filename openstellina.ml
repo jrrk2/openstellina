@@ -1404,8 +1404,8 @@ let release_control () =
       show_info "Cannot release control - do not have control")
 
 let cnvauth s =
-  try let auth = Telescope.cnv s in let authstr = Yojson.Safe.Util.to_string ( Yojson.Safe.Util.member "authorization" auth ) in show_info ("auth "^String.sub authstr 16 64^" ..."); Telescope.authref := authstr; 
-  with _ -> Telescope.authref := "auth fail"
+  try let auth = Telescope.cnv s in let authstr = Yojson.Safe.Util.to_string ( Yojson.Safe.Util.member "authorizationHeader" auth ) in show_info ("auth "^String.sub authstr 16 64^" ..."); Telescope.authref := authstr; 
+  with _ -> Telescope.authref := "auth fail"; show_info "auth fail"
 
 let rec action_func pending = function
   | TakeControl -> 
@@ -1457,11 +1457,11 @@ let choose fn =
 
 let rec draw_things fn arg = 
   let context = canvas##getContext Dom_html._2d_ in
-  context##clearRect 0. 0. canvas_width canvas_height;
+  context##clearRect (Js.float 0.) (Js.float 0.) (Js.float canvas_width) (Js.float canvas_height);
   List.iter (function
     | Font str -> context##.font := Js.string str
-    | Fill (str,x,y) -> context##fillText (Js.string str) x y
-    | Stroke (x,y,w,h) -> context##strokeRect x y w h
+    | Fill (str,x,y) -> context##fillText (Js.string str) (Js.float x) (Js.float y)
+    | Stroke (x,y,w,h) -> context##strokeRect (Js.float x) (Js.float y) (Js.float w) (Js.float h)
     | Empty -> ()) (fn arg);
     let* () = (Js_of_ocaml_lwt.Lwt_js.sleep 0.1) in
   let* () = if !new_challenge then (new_challenge := false; Telescope.postauth' cnvauth) else (Js_of_ocaml_lwt.Lwt_js.sleep 0.1) in

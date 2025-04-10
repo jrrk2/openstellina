@@ -102,7 +102,7 @@ let add_message msg_type text =
       let dom_msg = Tyxml_js.To_dom.of_div message_element in
       Dom.appendChild panel dom_msg;
       (* Auto-scroll to bottom *)
-      panel##.scrollTop := panel##.scrollHeight
+      panel##.scrollTop := Js.number_of_float (float_of_int panel##.scrollHeight)
 
 (* Helper functions *)
 let show_error text = add_message "error" text

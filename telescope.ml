@@ -4,6 +4,8 @@ open Lwt
 open Version
 open Astro_utils
 open Geolocate
+open Lwt.Infix
+open Cohttp_lwt_jsoo
 
 let server = "10.0.0.1:"
 (*
@@ -122,27 +124,40 @@ let key_port = "49049"
 
 let handle_response body_text headers =
   preref := Printf.sprintf "Body: %s\nHeaders: %s\n" body_text
-    (String.concat ", " (List.map (fun (k, v) -> k ^ ": " ^ v) headers))
+    (String.concat ", " (List.map (fun (k, v) -> k ^ ": " ^ v) headers));
+  Utils.show_info !preref
 
-let preauth' () =
-  let uri = Uri.of_string ("http://"^key_server^":"^key_port^"/generate-authorization") in
-  Astro_utils.send_preflight_options_request uri handle_response
+let get_https url params headers f =
+  let uri = Uri.add_query_params' (Uri.of_string url) params in
+  let cohttp_headers = Cohttp.Header.of_list headers in
+  Client.get ~headers:cohttp_headers uri
+  >>= fun (resp, body) ->
+    let hdrs_list = Cohttp.Header.to_list (Cohttp.Response.headers resp) in
+    hdrs := hdrs_list;
+    Cohttp_lwt.Body.to_string body >|= f
 
 let postauth' cnvauth =
-    let server = key_server^":" in
-    let params = [ ] in
-    let headers = ["Content-Type", "application/json"] in
-    let f = (fun s -> cnvauth s) in
-    let (json:Yojson.Safe.t) = (`Assoc [
-      ("bootCount", `Int !bootCnt);
-      ("telescopeId", `String !telescopeId);
-      ("challenge", `String !challengeref)
-    ])
-  in
-    Astro_utils.post' proto server params headers (key_port^"/generate-authorization") ((Yojson.Safe.to_string json)) (cnv' f)
+  let url = "https://api.openstellina.uk/generateStellinaAuth" in
+  let params = [
+    "challenge", !challengeref;
+    "bootCount", string_of_int !bootCnt;
+    "telescopeId", !telescopeId
+  ] in
+  List.iter (fun (key, id) -> Utils.show_info (key^": "^id)) params;
+  let headers = [] in
+  let f body = handle_response body !hdrs in
+  get_https url params headers cnvauth    
 
 let auth' () = 
 let auth = !authref in
+(*
+let bootCount = !bootCnt in
+let telescopeId = !telescopeId in
+let challenge = !challengeref in
+let signed64' = Nacl.generateAuthorizationHeader challenge bootCount telescopeId in
+Utils.show_info signed64';
+Utils.show_info auth;
+*)
 Astro_utils.split (
 ("Authorization: "^ auth) ::
 "Content-Type: application/json; charset=UTF-8" ::

@@ -5,7 +5,10 @@
 ocamlfind ocamlmktop -package cohttp,lwt_ppx,unix,xml-light,cohttp-lwt-unix,cohttp -linkpkg -thread altaz.ml astro_utils.ml simbad.ml debugs.ml -o debugs
  *)
 
-open Cohttp_lwt_unix
+ (*
+  open Cohttp_lwt_unix
+  *)
+open Cohttp_lwt_jsoo
 open Altaz
 open Lwt.Infix
 open Simbad;;

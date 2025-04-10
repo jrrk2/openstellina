@@ -12,7 +12,7 @@
  (modes js)
  (modules_without_implementation calc target)
  (modules target horizons simbad search jsoo_alt_az error_dialog error_status target_selector version secure geolocate comets table_update utils location tabbed_dialog altaz astro_utils trans hidemsg msgs messier_catalogue calc mfcalc lexer expr abell_cnv telescope base_locations openstellina)
- (libraries js_of_ocaml-lwt js_of_ocaml-tyxml yojson base64 cohttp-lwt-jsoo xml-light js_of_ocaml unix str)
+ (libraries js_of_ocaml-lwt js_of_ocaml-tyxml yojson base64 xml-light unix str cohttp-lwt-jsoo lwt js_of_ocaml)
  (preprocess (pps lwt_ppx js_of_ocaml-ppx))
 )
 

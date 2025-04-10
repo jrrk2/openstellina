@@ -50,8 +50,8 @@ module Geo = struct
     if (Geolocation.is_supported()) then
       let success pos =
         let coords = pos##.coords in
-        let latitude' = coords##.latitude in
-        let longitude' = coords##.longitude in
+        let latitude' = Js.to_float coords##.latitude in
+        let longitude' = Js.to_float coords##.longitude in
         let city' = ref "" in
         let area' = ref "" in
         let tz' = ref "" in

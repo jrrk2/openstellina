@@ -433,7 +433,7 @@ let make_radio category label_text =
 		search_text := Js.to_string t##.value;
 		get_filtered_targets update_target_list !selected_category !search_text;
 	      ))
-	      2000.  (* 2 second delay *)
+	      (Js.number_of_float 2000.)  (* 2 second delay *)
 	    )
 	  );
 	  true)
