@@ -118,15 +118,6 @@ let senduser user =
       ("user", `String user)]] in
    jwrap json
 
-let preref = ref ""
-let key_server = "62.210.163.183"
-let key_port = "49049"
-
-let handle_response body_text headers =
-  preref := Printf.sprintf "Body: %s\nHeaders: %s\n" body_text
-    (String.concat ", " (List.map (fun (k, v) -> k ^ ": " ^ v) headers));
-  Utils.show_info !preref
-
 let get_https url params headers f =
   let uri = Uri.add_query_params' (Uri.of_string url) params in
   let cohttp_headers = Cohttp.Header.of_list headers in
@@ -145,7 +136,6 @@ let postauth' cnvauth =
   ] in
   List.iter (fun (key, id) -> Utils.show_info (key^": "^id)) params;
   let headers = [] in
-  let f body = handle_response body !hdrs in
   get_https url params headers cnvauth    
 
 let auth' () = 
